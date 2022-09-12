@@ -6,9 +6,8 @@ import ujson as json
 
 
 class DictLoader:
-    def __init__(self, dict_file: str, conf_threshold: float = 0.5):
+    def __init__(self, dict_file: str):
         self.dict_file = dict_file
-        self.conf_threshold = conf_threshold
 
     def process_boxes(self, gt_dict: dict, pred_dict: dict) -> Tuple[torch.Tensor]:
         pred_bboxes = (
@@ -30,7 +29,9 @@ class DictLoader:
             gt_labels,
         )
 
-    def load(self, evaluation_cls: Type, evaluator_cls: Type):
+    def load(
+        self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
+    ):
         results_dict = torch.load(self.dict_file)
         targets_dict = results_dict["targets"]
         predictions_dict = results_dict["predictions"]
@@ -52,7 +53,7 @@ class DictLoader:
                 pred_labels=pred_labels,
                 gt_bboxes=gt_bboxes,
                 gt_labels=gt_labels,
-                conf_threshold=self.conf_threshold,
+                conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
 
@@ -61,13 +62,16 @@ class DictLoader:
 
 class COCOLoader:
     def __init__(
-        self, annotations_file: str, predictions_file: str, conf_threshold: float = 0.5
+        self,
+        annotations_file: str,
+        predictions_file: str,
     ):
         self.annotations_file = annotations_file
         self.predictions_file = predictions_file
-        self.conf_threshold = conf_threshold
 
-    def load(self, evaluation_cls: Type, evaluator_cls: Type):
+    def load(
+        self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
+    ):
         with open(self.annotations_file, "r") as f:
             j = json.load(f)
             target_annotations = pd.DataFrame(j["annotations"])
@@ -125,7 +129,7 @@ class COCOLoader:
                 pred_labels=pred_labels,
                 gt_bboxes=gt_bboxes,
                 gt_labels=gt_labels,
-                conf_threshold=self.conf_threshold,
+                conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
 
