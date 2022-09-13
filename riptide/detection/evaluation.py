@@ -594,13 +594,33 @@ class Evaluator:
         return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
 
     @classmethod
-    def from_dict(cls, dict_file: str, conf_threshold: float = 0.5) -> Evaluator:
+    def from_dict(
+        cls, dict_file: str, image_dir: str, conf_threshold: float = 0.5
+    ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
             evaluator_cls = ObjectDetectionEvaluator
         else:
             raise NotImplementedError("Evaluator class not implemented")
-        loader = DictLoader(dict_file)
+        loader = DictLoader(dict_file, image_dir)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
+
+    @classmethod
+    def from_dicts(
+        cls,
+        targets_dict_file: str,
+        predictions_dict_file: str,
+        image_dir: str,
+        conf_threshold: float = 0.5,
+    ) -> Evaluator:
+        if cls == ObjectDetectionEvaluator:
+            evaluation_cls = ObjectDetectionEvaluation
+            evaluator_cls = ObjectDetectionEvaluator
+        else:
+            raise NotImplementedError("Evaluator class not implemented")
+        loader = DictLoader.from_dict_files(
+            targets_dict_file, predictions_dict_file, image_dir
+        )
         return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
 
 

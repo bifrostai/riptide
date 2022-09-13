@@ -1,13 +1,29 @@
-from typing import Dict, Tuple, Type
+from typing import Tuple, Type
 
+import os
 import pandas as pd
 import torch
 import ujson as json
 
 
 class DictLoader:
-    def __init__(self, dict_file: str):
+    def __init__(self, dict_file: str, image_dir: str):
         self.dict_file = dict_file
+        self.image_dir = image_dir
+        self.targets_dict_file = None
+        self.predictions_dict_file = None
+
+    @classmethod
+    def from_dict_files(
+        cls,
+        targets_dict_file: str,
+        predictions_dict_file: str,
+        image_dir: str,
+    ) -> "DictLoader":
+        loader = cls(targets_dict_file, image_dir)
+        loader.targets_dict_file = targets_dict_file
+        loader.predictions_dict_file = predictions_dict_file
+        return loader
 
     def process_boxes(self, gt_dict: dict, pred_dict: dict) -> Tuple[torch.Tensor]:
         pred_bboxes = (
@@ -32,9 +48,13 @@ class DictLoader:
     def load(
         self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
     ):
-        results_dict = torch.load(self.dict_file)
-        targets_dict = results_dict["targets"]
-        predictions_dict = results_dict["predictions"]
+        if self.targets_dict_file is None and self.predictions_dict_file is None:
+            results_dict = torch.load(self.dict_file)
+            targets_dict = results_dict["targets"]
+            predictions_dict = results_dict["predictions"]
+        else:
+            targets_dict = torch.load(self.targets_dict_file)
+            predictions_dict = torch.load(self.predictions_dict_file)
         evaluations = []
         for file_name, targets in targets_dict.items():
             pred = predictions_dict[file_name]
@@ -47,7 +67,7 @@ class DictLoader:
                 gt_labels,
             ) = self.process_boxes(gt, pred)
             evaluation = evaluation_cls(
-                image_path=file_name,
+                image_path=os.path.join(self.image_dir, file_name),
                 pred_bboxes=pred_bboxes,
                 pred_scores=pred_scores,
                 pred_labels=pred_labels,
