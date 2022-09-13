@@ -625,6 +625,15 @@ class Evaluator:
 
 
 class ObjectDetectionEvaluator(Evaluator):
+    """Object Detection Evaluator class.
+
+    Creates an Evaluator from:
+        (1) Regular instantiation: a list of ObjectDetectionEvaluations,
+        (2) ``from_coco()``: from COCO predictions and targets JSON files, or
+        (3) ``from_dict()`` and ``from_dicts()``: using from a single or separate
+            dictionary of predictions and targets.
+    """
+
     def __init__(
         self,
         evaluations: List[ObjectDetectionEvaluation],
