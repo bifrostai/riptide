@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8">
+ <title>{{ title }}</title>
+ <link href='http://fonts.googleapis.com/css?family=Lato:100,300,400,700,900' rel='stylesheet' type='text/css'>
+ <link href='http://fonts.googleapis.com/css?family=Fira+Code:400' rel='stylesheet' type='text/css'>
+ <link rel="stylesheet" href="../static/style.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="title"><span class="gradient">Riptide</span><span class="light">Report</span></h1>
+            <span class="subtitle">v0.1 | <a href="https://gitlab.com/bifrost-core/ai-team/riptide">source</a></span>
+        </div>
+        <div class="sidebar-items">
+        {% for name in section_names %}
+            <a class="sidebar-button" href="#{{ name }}">{{ name }}</a>
+        {% endfor %}
+        </div>
+    </div>
+    <div class="main">
+        <div id="Overview">
+            <h1>Overview</h1>
+            <div class="summary-container">
+                {% for metric, value in summary.items() %}
+                    <div class="summary-item">
+                        <div class="summary-metric-title gradient">{{ metric }}</div>
+                        <div class="summary-metric-value">{{ value }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div id="BackgroundError">
+            <h1>BackgroundError</h1>
+            <p>List of all the false positive detections that are above the <span class="code">conf_threshold</span> (default 0.5) but do not pass the <span class="code">bg_iou_threshold</span> (default 0.1).</p>
+            <div class="class-images">
+            {% for class_int, image_list in background_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Predicted: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | {{ image_dict["class"] }} | {{ image_dict["confidence"] }} | {{ image_dict["bbox_area"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+        <div id="ClassificationError">
+            <h1>ClassificationError</h1>
+            <div class="class-images">
+            {% for class_int, image_list in classification_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | {{ image_dict["pred_class"] }} | {{ image_dict["confidence"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+            {% if classification_error_plot is not none %}
+            <div class="plot">
+                <img class="plot-image" src="data:image/png;base64,{{ classification_error_plot | safe}}">
+            </div>
+            {% endif %}
+        </div>
+        <div id="LocalizationError">
+            <h1>LocalizationError</h1>
+        </div>
+        <div id="ClassificationAndLocalizationError">
+            <h1>ClassificationAndLocalizationError</h1>
+        </div>
+        <div id="DuplicateError">
+            <h1>DuplicateError</h1>
+        </div>
+        <div id="MissedError">
+            <h1>MissedError</h1>
+        </div>
+    </div>
+    <div class="right-panel">
+        panel
+    </div>
+</body>
+</html>
