@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Type, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 from termcolor import colored
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
-from torchvision.transforms.functional import to_pil_image, to_tensor
-from torchvision.utils import draw_bounding_boxes, make_grid
+from torchvision.transforms.functional import to_pil_image
+from torchvision.utils import draw_bounding_boxes
 
 from riptide.detection.confusions import Confusion, Confusions
 from riptide.detection.errors import (
@@ -21,7 +21,6 @@ from riptide.detection.errors import (
     LocalizationError,
     MissedError,
 )
-
 from riptide.io.loaders import COCOLoader, DictLoader
 
 
@@ -653,42 +652,6 @@ class ObjectDetectionEvaluator(Evaluator):
             "MissedError": 0,
             "BackgroundError": 0,
         }
-
-    def inspect_error(
-        self,
-        error_type: Type[Error],
-        output_dir: str,
-    ) -> None:
-        output_dir = os.path.join(output_dir, "all")
-        os.makedirs(output_dir, exist_ok=True)
-        error_images = list()
-        for evaluation in self.evaluations:
-            for error in evaluation.instances:
-                if isinstance(error, error_type):
-                    x1, y1, x2, y2 = [int(x.item()) for x in error.gt_bbox]
-                    image_tensor = read_image(evaluation.image_path)
-                    image_tensor = image_tensor[:, y1:y2, x1:x2]
-                    image = to_pil_image(image_tensor)
-                    if not isinstance(error, MissedError):
-                        from PIL import ImageDraw
-
-                        draw = ImageDraw.Draw(image)
-                        draw.text(
-                            (4, 4),
-                            f"{int(error.pred_label.item()), round(error.confidence.item(), 2)}",
-                            (255, 255, 255),
-                        )
-                    image = image.resize((96, 96))
-                    image = to_tensor(image)
-                    error_images.append(image)
-        error_image = make_grid(error_images)
-        error_image = to_pil_image(error_image)
-        output_name = f"{error_type.__name__}.png"
-        error_image.save(os.path.join(output_dir, output_name))
-        print(
-            f"Saved {len(error_images)} errors to "
-            f"{os.path.join(output_dir, output_name)}"
-        )
 
     def summarize(self) -> Dict[str, Union[int, float]]:
         summary = self._initialize_error_dict()

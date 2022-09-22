@@ -1,9 +1,7 @@
-import torch
-
-from torchvision.ops.boxes import box_iou
-
 from typing import List, Union
 
+import torch
+from torchvision.ops.boxes import box_iou
 
 """Error types as defined in TIDE (https://arxiv.org/pdf/2008.08115.pdf).
 

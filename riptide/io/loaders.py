@@ -1,6 +1,6 @@
+import os
 from typing import Tuple, Type
 
-import os
 import pandas as pd
 import torch
 import ujson as json

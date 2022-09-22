@@ -4,10 +4,6 @@
 import torch
 from torchvision.ops import box_iou
 
-from riptide.detection.evaluation import (
-    ObjectDetectionEvaluation,
-    ObjectDetectionEvaluator,
-)
 from riptide.detection.errors import (
     BackgroundError,
     ClassificationAndLocalizationError,
@@ -15,6 +11,10 @@ from riptide.detection.errors import (
     DuplicateError,
     LocalizationError,
     MissedError,
+)
+from riptide.detection.evaluation import (
+    ObjectDetectionEvaluation,
+    ObjectDetectionEvaluator,
 )
 
 
