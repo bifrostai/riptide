@@ -83,7 +83,7 @@ class HtmlReport:
 
         # MissedError data - classwise false negatives
         # TODO: Visual grouping using MeP
-        missed_error_figs = inspect_missed_error(self.evaluator)
+        missed_error_figs, missed_error_plot = inspect_missed_error(self.evaluator)
 
         missed_error_figs = dict(
             sorted(
@@ -102,6 +102,7 @@ class HtmlReport:
             classification_error_figs=classification_error_figs,
             classification_error_plot=classification_error_plot,
             missed_error_figs=missed_error_figs,
+            missed_error_plot=missed_error_plot,
         )
         os.makedirs("output", exist_ok=True)
         with open("output/report.html", "w") as f:

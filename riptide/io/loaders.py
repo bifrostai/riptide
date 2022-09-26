@@ -48,13 +48,16 @@ class DictLoader:
     def load(
         self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
     ):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if self.targets_dict_file is None and self.predictions_dict_file is None:
-            results_dict = torch.load(self.dict_file)
+            results_dict = torch.load(self.dict_file, map_location=device)
             targets_dict = results_dict["targets"]
             predictions_dict = results_dict["predictions"]
         else:
-            targets_dict = torch.load(self.targets_dict_file)
-            predictions_dict = torch.load(self.predictions_dict_file)
+            targets_dict = torch.load(self.targets_dict_file, map_location=device)
+            predictions_dict = torch.load(
+                self.predictions_dict_file, map_location=device
+            )
         evaluations = []
         for file_name, targets in targets_dict.items():
             pred = predictions_dict[file_name]

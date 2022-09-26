@@ -20,20 +20,39 @@ from riptide.detection.errors import (
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
 
-plt.rcParams["text.color"] = "#FFEECC"
-plt.rcParams["xtick.color"] = "#FFEECC"
-plt.rcParams["ytick.color"] = "#FFEECC"
-plt.rcParams["axes.facecolor"] = "#2C3333"
-plt.rcParams["axes.labelcolor"] = "#FFEECC"
-plt.rcParams["axes.edgecolor"] = "#222222"
-plt.rcParams["figure.facecolor"] = "#00000000"
-plt.rcParams["figure.edgecolor"] = "#FFEECC"
-plt.rcParams["savefig.facecolor"] = "#00000000"
-plt.rcParams["savefig.edgecolor"] = "#FFEECC"
+PALETTE_DARKER = "#222222"
+PALETTE_LIGHT = "#FFEECC"
+PALETTE_DARK = "#2C3333"
+PALETTE_GREEN = "#00FFD9"
+PALETTE_BLUE = "#00B3FF"
+TRANSPARENT = colors.to_hex((0, 0, 0, 0), keep_alpha=True)
 
 
-GRADIENT_GREEN = "#00ffd9"
-GRADIENT_BLUE = "#00b3ff"
+plt.rcParams["text.color"] = PALETTE_LIGHT
+plt.rcParams["xtick.color"] = PALETTE_LIGHT
+plt.rcParams["ytick.color"] = PALETTE_LIGHT
+plt.rcParams["axes.facecolor"] = PALETTE_DARK
+plt.rcParams["axes.labelcolor"] = PALETTE_LIGHT
+plt.rcParams["axes.edgecolor"] = PALETTE_DARKER
+plt.rcParams["figure.facecolor"] = TRANSPARENT
+plt.rcParams["figure.edgecolor"] = PALETTE_LIGHT
+plt.rcParams["savefig.facecolor"] = TRANSPARENT
+plt.rcParams["savefig.edgecolor"] = PALETTE_LIGHT
+
+
+def add_alpha(color: str, alpha: float) -> str:
+    """Adds an alpha value to a color.
+
+    Args:
+        color (str): The color to add alpha to.
+        alpha (float): The alpha value to add.
+
+    Returns:
+        str: The color with alpha.
+    """
+    rgb = colors.to_rgb(color)
+    rgba = (*rgb, alpha)
+    return colors.to_hex(rgba)
 
 
 def gradient(c1: str, c2: str, step: float, output_rgb=False):
@@ -83,8 +102,8 @@ def inspect_error_confidence(
     for patch in patches:
         patch.set_facecolor(
             gradient(
-                GRADIENT_GREEN,
-                GRADIENT_BLUE,
+                PALETTE_GREEN,
+                PALETTE_BLUE,
                 1 - (patch.get_x() / max(confidence_list)),
             )
         )
@@ -198,7 +217,7 @@ def inspect_classification_error(
         width=confusion_dict.values(),
         color=[
             gradient(
-                GRADIENT_GREEN, GRADIENT_BLUE, 1 - (x / max(confusion_dict.values()))
+                PALETTE_GREEN, PALETTE_BLUE, 1 - (x / max(confusion_dict.values()))
             )
             for x in confusion_dict.values()
         ],
@@ -281,7 +300,7 @@ def inspect_localization_error(
 def inspect_missed_error(
     evaluator: ObjectDetectionEvaluator,
     crop_size: int = 192,
-) -> Dict[int, dict]:
+) -> Tuple[Dict[int, dict], bytes]:
     """Saves the MissedErrors (false negatives) of the evaluator to the given
     output directory.
 
@@ -317,10 +336,34 @@ def inspect_missed_error(
                     "bbox_area": bbox_area,
                 }
             )
-    return classwise_dict
 
+    # Plot the barplots of the classwise area
+    fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
+    missed_areas = []
+    for idx, (class_int, missed) in enumerate(classwise_dict.items()):
+        areas = [m["bbox_area"] for m in missed]
+        mean, std = np.mean(areas), np.std(areas)
+        scatter_colors = [
+            gradient(
+                PALETTE_BLUE,
+                PALETTE_GREEN,
+                np.abs(mean - a) / (2 * std),
+            )
+            for a in areas
+        ]
+        ax.scatter(np.full_like(areas, idx + 1), areas, color=scatter_colors)
+        missed_areas.append(areas)
 
-def inspect_missed_error_size_distribution(
-    evaluator: ObjectDetectionEvaluator,
-) -> bytes:
-    pass
+    boxplot = ax.boxplot(missed_areas, patch_artist=True)
+    for cap in boxplot["caps"]:
+        cap.set_color(PALETTE_LIGHT)
+    for whisker in boxplot["whiskers"]:
+        whisker.set_color(PALETTE_LIGHT)
+    for median in boxplot["medians"]:
+        median.set_color(PALETTE_GREEN)
+        median.set_linewidth(2)
+    for box in boxplot["boxes"]:
+        box.set(color=PALETTE_LIGHT, facecolor=TRANSPARENT)
+
+    fig = encode_base64(fig)
+    return classwise_dict, fig

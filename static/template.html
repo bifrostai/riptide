@@ -88,6 +88,17 @@
         </div>
         <div id="MissedError">
             <h1>MissedError</h1>
+            {% if missed_error_plot is not none %}
+            <h2>MissedError ranking</h2>
+            <p>
+                The following plot shows the size (area) distribution of missed errors for each class.
+                The presence of outliers in this plot indicates the misses may be caused by extreme object sizes.
+            </p>
+            <div class="plot">
+                <img class="plot-image" src="data:image/png;base64,{{ missed_error_plot | safe}}">
+            </div>
+            {% endif %}
+            <h2>MissedError visualization</h2>
             <p>List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> that had IoU above <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span> (otherwise it would be considered a LocalizationError).</p>
             <div class="class-images">
             {% for class_int, image_list in missed_error_figs.items() %}
