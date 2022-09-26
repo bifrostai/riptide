@@ -33,7 +33,7 @@
         </div>
         <div id="BackgroundError">
             <h1>BackgroundError</h1>
-            <p>List of all the false positive detections that are above the <span class="code">conf_threshold</span> (default 0.5) but do not pass the <span class="code">bg_iou_threshold</span> (default 0.1).</p>
+            <p>List of all the false positive detections that are above the <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> but do not pass the <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span>.</p>
             <div class="class-images">
             {% for class_int, image_list in background_error_figs.items() %}
                 <div class="class-images-container">
@@ -52,6 +52,15 @@
         </div>
         <div id="ClassificationError">
             <h1>ClassificationError</h1>
+            {% if classification_error_plot is not none %}
+            <h2>ClassificationError ranking</h2>
+            <p>
+                The following plot shows the distribution of classification errors.
+            </p>
+            <div class="plot">
+                <img class="plot-image" src="data:image/png;base64,{{ classification_error_plot | safe}}">
+            </div>
+            {% endif %}
             <div class="class-images">
             {% for class_int, image_list in classification_error_figs.items() %}
                 <div class="class-images-container">
@@ -67,11 +76,6 @@
                 </div>
             {% endfor %}
             </div>
-            {% if classification_error_plot is not none %}
-            <div class="plot">
-                <img class="plot-image" src="data:image/png;base64,{{ classification_error_plot | safe}}">
-            </div>
-            {% endif %}
         </div>
         <div id="LocalizationError">
             <h1>LocalizationError</h1>
@@ -84,10 +88,42 @@
         </div>
         <div id="MissedError">
             <h1>MissedError</h1>
+            <p>List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> that had IoU above <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span> (otherwise it would be considered a LocalizationError).</p>
+            <div class="class-images">
+            {% for class_int, image_list in missed_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Missed: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | {{ image_dict["class"] }} | {{ image_dict["bbox_area"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
         </div>
     </div>
-    <div class="right-panel">
-        panel
+    <div class="info-panel">
+        <div class="info-panel-header">
+            <h2>Error Info</h2>
+        </div>
+        <div class="info-panel-content">
+            {% for error_type, info in error_info.items() %}
+                <div class="info-panel-content-summary">
+                    <div class="info-panel-content-summary-title">
+                        {{ error_type }}
+                    </div>
+                    {% for info_type, info_value in info.items() %}
+                        {% if info_value is not none %}
+                        <img class="info-panel-content-summary-image" src="data:image/png;base64,{{ info_value | safe }}">
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
     </div>
 </body>
 </html>

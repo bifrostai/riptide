@@ -108,10 +108,6 @@ body {
     display: none;
 }
 
-.right-panel {
-    width: 40%;
-}
-
 .class-images {
     background-color: #2C3333;
     border-radius: 0.6em;
@@ -164,7 +160,7 @@ body {
 }
 
 .plot-image {
-    width: 1000px;
+    width: 500px;
 }
 
 .summary-container {
@@ -184,4 +180,19 @@ body {
     padding: 0.5vh;
     font-size: 1.5em;
     font-weight: 700;
+}
+
+.info-panel {
+    display: flex;
+    flex-direction: column;
+    scroll-behavior: smooth;
+    overflow-y: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    padding: 3vh 3vh;
+    width: 40%;
+}
+
+.info-panel-content-summary-image {
+    width: 100%;
 }
