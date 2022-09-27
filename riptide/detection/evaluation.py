@@ -669,6 +669,7 @@ class ObjectDetectionEvaluator(Evaluator):
         summary["precision"] = precision
         summary["recall"] = recall
         summary["f1"] = f1
+        summary["total_count"] = tp + fn
         return summary
 
     def classwise_summarize(self) -> Dict[int, Dict[str, Union[int, float]]]:
@@ -733,6 +734,7 @@ class ObjectDetectionEvaluator(Evaluator):
             summary["precision"] = precision
             summary["recall"] = recall
             summary["f1"] = f1
+            summary["total_count"] = tp + fn
 
         return classwise_summary
 
