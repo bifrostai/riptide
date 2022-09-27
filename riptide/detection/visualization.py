@@ -28,16 +28,17 @@ PALETTE_BLUE = "#00B3FF"
 TRANSPARENT = colors.to_hex((0, 0, 0, 0), keep_alpha=True)
 
 
-plt.rcParams["text.color"] = PALETTE_LIGHT
-plt.rcParams["xtick.color"] = PALETTE_LIGHT
-plt.rcParams["ytick.color"] = PALETTE_LIGHT
-plt.rcParams["axes.facecolor"] = PALETTE_DARK
-plt.rcParams["axes.labelcolor"] = PALETTE_LIGHT
-plt.rcParams["axes.edgecolor"] = PALETTE_DARKER
-plt.rcParams["figure.facecolor"] = TRANSPARENT
-plt.rcParams["figure.edgecolor"] = PALETTE_LIGHT
-plt.rcParams["savefig.facecolor"] = TRANSPARENT
-plt.rcParams["savefig.edgecolor"] = PALETTE_LIGHT
+def setup_mpl_params():
+    plt.rcParams["text.color"] = PALETTE_LIGHT
+    plt.rcParams["xtick.color"] = PALETTE_LIGHT
+    plt.rcParams["ytick.color"] = PALETTE_LIGHT
+    plt.rcParams["axes.facecolor"] = PALETTE_DARK
+    plt.rcParams["axes.labelcolor"] = PALETTE_LIGHT
+    plt.rcParams["axes.edgecolor"] = PALETTE_DARKER
+    plt.rcParams["figure.facecolor"] = TRANSPARENT
+    plt.rcParams["figure.edgecolor"] = PALETTE_LIGHT
+    plt.rcParams["savefig.facecolor"] = TRANSPARENT
+    plt.rcParams["savefig.edgecolor"] = PALETTE_LIGHT
 
 
 def add_alpha(color: str, alpha: float) -> str:
@@ -97,6 +98,7 @@ def inspect_error_confidence(
     if len(confidence_list) == 0:
         return None
 
+    setup_mpl_params()
     fig, ax = plt.subplots(figsize=(6, 3), dpi=150, constrained_layout=True)
     _, _, patches = ax.hist(confidence_list, bins=41)
     for patch in patches:
@@ -207,6 +209,8 @@ def inspect_classification_error(
 
     ranked_idxs = sorted(confusion_dict, key=confusion_dict.get, reverse=True)
     confusion_dict = {k: confusion_dict[k] for k in ranked_idxs}
+
+    setup_mpl_params()
     fig, ax = plt.subplots(
         figsize=(4, np.ceil(len(confusion_dict) * 0.4)),
         dpi=150,
@@ -281,6 +285,8 @@ def inspect_localization_error(
 
     ranked_idxs = sorted(confusion_dict, key=confusion_dict.get, reverse=True)
     confusion_dict = {k: confusion_dict[k] for k in ranked_idxs}
+
+    setup_mpl_params()
     fig, ax = plt.subplots(
         figsize=(6, np.ceil(len(confusion_dict) * 0.6)),
         dpi=200,
@@ -338,6 +344,7 @@ def inspect_missed_error(
             )
 
     # Plot the barplots of the classwise area
+    setup_mpl_params()
     fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
     missed_areas = []
     for idx, (class_int, missed) in enumerate(classwise_dict.items()):
