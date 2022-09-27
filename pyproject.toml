@@ -5,9 +5,10 @@ description = "Bifrost Object Detection Evaluation Suite"
 authors = ["huangjoel <joel@bifrost.ai>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 numpy = "^1.19"
-torch = "^1.11"
+torch = "^1.12"
+torchvision = "^0.13.0"
 pandas = "^1.4"
 
 [tool.poetry.dev-dependencies]
