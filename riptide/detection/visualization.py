@@ -201,7 +201,7 @@ def inspect_classification_error(
             gt_class_int = int(error.gt_label.item())
             gt_list.append(gt_class_int)
             pred_list.append(pred_class_int)
-            if pred_class_int not in classwise_dict:
+            if gt_class_int not in classwise_dict:
                 classwise_dict[gt_class_int] = []
             classwise_dict[gt_class_int].append(
                 {

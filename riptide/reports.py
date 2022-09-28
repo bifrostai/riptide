@@ -2,6 +2,10 @@ import os
 
 from jinja2 import Environment, FileSystemLoader
 
+from riptide.detection.characterization import (
+    compute_aspect_variance,
+    compute_size_variance,
+)
 from riptide.detection.errors import (
     BackgroundError,
     ClassificationAndLocalizationError,
@@ -63,6 +67,11 @@ class HtmlReport:
         }
         summary.update({k: round(v, 3) for k, v in self.evaluator.summarize().items()})
 
+        classwise_summary = self.evaluator.classwise_summarize()
+        for _, individual_summary in classwise_summary.items():
+            for _, value in individual_summary.items():
+                value = round(value, 3)
+
         # BackgroundError data - classwise false positives
         # TODO: Visual grouping using MeP
         background_error_figs = inspect_background_error(self.evaluator)
@@ -83,6 +92,9 @@ class HtmlReport:
 
         # MissedError data - classwise false negatives
         # TODO: Visual grouping using MeP
+        missed_size_var = compute_size_variance(self.evaluator)
+        missed_aspect_var = compute_aspect_variance(self.evaluator)
+
         missed_error_figs, missed_error_plot = inspect_missed_error(self.evaluator)
 
         missed_error_figs = dict(
@@ -97,12 +109,15 @@ class HtmlReport:
             title="Riptide",
             section_names=section_names,
             summary=summary,
+            classwise_summary=classwise_summary,
             error_info=self.get_error_info(),
             background_error_figs=background_error_figs,
             classification_error_figs=classification_error_figs,
             classification_error_plot=classification_error_plot,
             missed_error_figs=missed_error_figs,
             missed_error_plot=missed_error_plot,
+            missed_size_var=missed_size_var,
+            missed_aspect_var=missed_aspect_var,
         )
         os.makedirs("output", exist_ok=True)
         with open("output/report.html", "w") as f:

@@ -88,6 +88,48 @@
         </div>
         <div id="MissedError">
             <h1>MissedError</h1>
+            <h2>Classwise MissedErrors and recall</h2>
+            <div class="summary-container">
+                {% for class_idx, individual_summary in classwise_summary.items() %}
+                    {% for metric, value in individual_summary.items() %}
+                        {% if metric == "MissedError" %}
+                            <div class="summary-item">
+                                <div class="summary-metric-title gradient">Class {{ class_idx }} {{ metric }}</div>
+                                <div class="summary-metric-value">{{ value }}</div>
+                            </div>
+                        {% endif %}
+                        {% if metric == "recall" %}
+                            <div class="summary-item">
+                                <div class="summary-metric-title gradient">Class {{ class_idx }} {{ metric }}</div>
+                                <div class="summary-metric-value">{{ value }}</div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+            <h2>Aspect ratio and size variance</h2>
+            <p>
+                Variance of aspect ratios across MissedErrors
+            </p>
+            <div class="summary-container">
+                {% for class_idx, aspect_var in missed_aspect_var.items() %}
+                <div class="summary-item">
+                    <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+                    <div class="summary-metric-value">{{ aspect_var }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <p>
+                Variance of object size (area) across MissedErrors
+            </p>
+            <div class="summary-container">
+                {% for class_idx, size_var in missed_size_var.items() %}
+                <div class="summary-item">
+                    <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+                    <div class="summary-metric-value">{{ size_var }}</div>
+                </div>
+                {% endfor %}
+            </div>
             {% if missed_error_plot is not none %}
             <h2>MissedError ranking</h2>
             <p>
