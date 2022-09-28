@@ -5,10 +5,10 @@ from riptide.reports import HtmlReport
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-targets", "-t", type=str)
-    parser.add_argument("-predictions", "-p", type=str)
-    parser.add_argument("-image_dir", "-i", type=str)
-    parser.add_argument("-conf_threshold", "-c", type=float, default=0.5)
+    parser.add_argument("-targets", "-t", type=str, required=True)
+    parser.add_argument("-predictions", "-p", type=str, required=True)
+    parser.add_argument("-image_dir", "-i", type=str, required=True)
+    parser.add_argument("-conf_threshold", "-c", type=float, default=0.5, required=True)
 
     args = parser.parse_args()
 

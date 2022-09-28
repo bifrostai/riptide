@@ -75,6 +75,10 @@ body {
     background-clip: text;
 }
 
+.text-dark {
+    color: #395B64;
+}
+
 .light {
     font-weight: 300;
 }

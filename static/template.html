@@ -89,23 +89,30 @@
         <div id="MissedError">
             <h1>MissedError</h1>
             <h2>Classwise MissedErrors and recall</h2>
+            <p>
+                Number of MissedErrors per class | number of total objects per class
+            </p>
             <div class="summary-container">
                 {% for class_idx, individual_summary in classwise_summary.items() %}
-                    {% for metric, value in individual_summary.items() %}
-                        {% if metric == "MissedError" %}
-                            <div class="summary-item">
-                                <div class="summary-metric-title gradient">Class {{ class_idx }} {{ metric }}</div>
-                                <div class="summary-metric-value">{{ value }}</div>
-                            </div>
-                        {% endif %}
-                        {% if metric == "recall" %}
-                            <div class="summary-item">
-                                <div class="summary-metric-title gradient">Class {{ class_idx }} {{ metric }}</div>
-                                <div class="summary-metric-value">{{ value }}</div>
-                            </div>
-                        {% endif %}
-                    {% endfor %}
+                    {% set missed_error = individual_summary["MissedError"] %}
+                    {% set total_count = individual_summary["total_count"] %}
+                    <div class="summary-item">
+                        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+                        <div class="summary-metric-value">{{ missed_error }} <span class="text-dark">| {{ total_count }}</span></div>
+                    </div>
                 {% endfor %}
+            </div>
+            <p>
+                Recall per class
+            </p>
+            <div class="summary-container">
+                {% for class_idx, individual_summary in classwise_summary.items() %}
+                    <div class="summary-item">
+                        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+                        <div class="summary-metric-value">{{ individual_summary['recall'] }}</span></div>
+                    </div>
+                {% endfor %}
+            </div>
             </div>
             <h2>Aspect ratio and size variance</h2>
             <p>

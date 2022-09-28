@@ -68,9 +68,9 @@ class HtmlReport:
         summary.update({k: round(v, 3) for k, v in self.evaluator.summarize().items()})
 
         classwise_summary = self.evaluator.classwise_summarize()
-        for _, individual_summary in classwise_summary.items():
-            for _, value in individual_summary.items():
-                value = round(value, 3)
+        for class_idx, individual_summary in classwise_summary.items():
+            for metric, value in individual_summary.items():
+                classwise_summary[class_idx][metric] = round(value, 3)
 
         # BackgroundError data - classwise false positives
         # TODO: Visual grouping using MeP
