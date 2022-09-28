@@ -1,13 +1,26 @@
 import base64
 import io
-from typing import Any, Dict, Tuple, Union
+import os
+from typing import Any, Dict, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
 from PIL import Image
+import torch
 from torchvision.io import read_image
-from torchvision.transforms.functional import to_pil_image
+from torchvision.transforms.functional import crop, to_pil_image
+from torchvision.transforms import Compose, ToTensor
+from torchvision.transforms.functional import crop
+from tqdm import tqdm
+
+from sklearn.cluster import DBSCAN
+from sklearn.decomposition import PCA
+
+from mise_en_place.encoders import VariableLayerEncoder
+from mise_en_place.transforms import normalize, inverse_normalize
+
+from riptide.detection.evaluation import ObjectDetectionEvaluator
 
 from riptide.detection.errors import (
     BackgroundError,
@@ -19,6 +32,7 @@ from riptide.detection.errors import (
     MissedError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
+
 
 PALETTE_DARKER = "#222222"
 PALETTE_LIGHT = "#FFEECC"
@@ -374,3 +388,91 @@ def inspect_missed_error(
 
     fig = encode_base64(fig)
     return classwise_dict, fig
+
+
+def group_errors(
+    evaluator: ObjectDetectionEvaluator,
+    error_type: Type[Error],
+    device: torch.device = torch.device("cuda"),
+    use_cached_embeddings: bool = True,
+) -> Dict[str, int]:
+    """Group error instances across error type using perceptual similarity. Embeddings
+    are first created using early layers of a pre-trained neural network. They are then
+    normalized, dimension-reduced using PCA, and clustered using DBSCAN.
+
+    Args:
+        evaluator (ObjectDetectionEvaluator): Object detection evaluator.
+        error_type (Type[Error]): Error type to group.
+        device (torch.device, optional): Device to use. Defaults to torch.device("cuda").
+        use_cached_embeddings (bool, optional): Use cached embeddings if available.
+            Defaults to True.
+
+    Returns:
+        Dict[str, int]: Dictionary mapping evaluation image_path to cluster index.
+    """
+
+    if use_cached_embeddings:
+        if not os.path.exists("embeddings_cache"):
+            os.mkdir("embeddings_cache")
+
+        embeddings_path = os.path.join("embeddings_cache", "embeddings.pt")
+
+        if not os.path.exists(embeddings_path):
+            encoder = VariableLayerEncoder("preconv")
+            transform = Compose([ToTensor(), normalize()])
+
+            filtered_errors = []
+            embeddings = []
+
+            for evaluation in tqdm(evaluator.evaluations):
+                image = Image.open(evaluation.image_path)
+                image = transform(image)
+
+                specific_errors = evaluation.errors.get_errors(error_type)
+
+                for error in specific_errors:
+                    bbox = (
+                        error.gt_bbox
+                        if isinstance(error, MissedError)
+                        else error.pred_bbox
+                    )
+                    x, y, h, w = [int(c) for c in bbox]
+
+                    padding = 10
+                    x = x - padding
+                    y = y - padding
+                    h = h + (2 * padding)
+                    w = w + (2 * padding)
+
+                    instance = crop(image, y, x, w, h).unsqueeze(0)
+
+                    filtered_errors.append((evaluation.image_path, error))
+
+                    with torch.no_grad():
+                        embeddings.append(encoder(instance.to(device)).squeeze(0))
+
+            embeddings = torch.stack(embeddings)
+            embeddings = torch.nan_to_num(
+                (embeddings - embeddings.min(dim=0)[0])
+                / (embeddings.max(dim=0)[0] - embeddings.min(dim=0)[0])
+            )
+            torch.save(embeddings, embeddings_path)
+
+        else:
+            embeddings = torch.load(embeddings_path)
+
+    # Dimension reduction using PCA
+    pca = PCA(n_components=10)
+    embeddings = pca.fit_transform(embeddings)
+
+    # Clustering reduced embeddings using DBSCAN
+    dbscan = DBSCAN()
+    labels = dbscan.fit_predict(embeddings)
+    filtered_errors = np.array(filtered_errors)
+    cluster_dict = {}
+    for label, errors in zip(labels, filtered_errors):
+        if label not in cluster_dict:
+            cluster_dict[label] = []
+        cluster_dict[label].append(errors)
+
+    return cluster_dict

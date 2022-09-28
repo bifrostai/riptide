@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Type, Union
 
 import torch
 from torchvision.ops.boxes import box_iou
@@ -359,3 +359,10 @@ class Errors:
 
     def get_gt_errors(self) -> List[Error]:
         return [error for error in self.gt_errors if error]
+
+    def get_errors(self, error_type: Type[Error]) -> List[Error]:
+        return [
+            error
+            for error in self.pred_errors + self.gt_errors
+            if isinstance(error, error_type)
+        ]

@@ -25,7 +25,8 @@ from riptide.io.loaders import COCOLoader, DictLoader
 
 
 class ObjectDetectionEvaluation:
-    """An object that creates and stores Errors and Confusions for a particular image."""
+    """An object that creates and stores Errors and Confusions for a particular image.
+    """
 
     def __init__(
         self,
@@ -532,8 +533,10 @@ class ObjectDetectionEvaluation:
                     boxes = torch.stack([err.gt_bbox, err.pred_bbox])
                     labels = [
                         f"gt ({err.gt_label})",
-                        f"p{err.pred_idx} ClassificationError"
-                        f" ({err.gt_label}->{err.pred_label})",
+                        (
+                            f"p{err.pred_idx} ClassificationError"
+                            f" ({err.gt_label}->{err.pred_label})"
+                        ),
                     ]
                     colors = ["white", "crimson"]
                 elif isinstance(err, LocalizationError):
@@ -544,8 +547,10 @@ class ObjectDetectionEvaluation:
                     boxes = torch.stack([err.gt_bbox, err.pred_bbox])
                     labels = [
                         f"gt ({err.gt_label})",
-                        f"p{err.pred_idx} ClsLocError"
-                        f" ({err.gt_label}->{err.pred_label})",
+                        (
+                            f"p{err.pred_idx} ClsLocError"
+                            f" ({err.gt_label}->{err.pred_label})"
+                        ),
                     ]
                     colors = ["white", "darkorange"]
                 elif isinstance(err, DuplicateError):
