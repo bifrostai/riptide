@@ -31,6 +31,12 @@
                 {% endfor %}
             </div>
         </div>
+        {% for infobox in infoboxes %}
+        <div class="infobox">
+            <div class="infobox-title">{{ infobox['title'] }}</div>
+            <div class="infobox-content">{{ infobox['content'] }}</div>
+        </div>
+        {% endfor %}
         <div id="BackgroundError">
             <h1>BackgroundError</h1>
             <p>List of all the false positive detections that are above the <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> but do not pass the <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span>.</p>

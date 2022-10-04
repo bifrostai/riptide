@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -37,6 +38,29 @@ class HtmlReport:
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
         self.template = self.env.get_template("template.html")
 
+    def get_suggestions(
+        self, overall_summary: dict, classwise_summary: dict, **kwargs
+    ) -> List[dict]:
+        suggestions = []
+        overall_errors = {
+            k: v for k, v in overall_summary.items() if k.endswith("Error")
+        }
+        worst_error, worst_error_value = max(overall_errors.items(), key=lambda x: x[1])
+        if worst_error == "MissedError":
+            worst_class_idx, classwise_errors = max(
+                classwise_summary.items(), key=lambda x: x[1]["MissedError"]
+            )
+            suggestions.append(
+                {
+                    "title": f"Top Error: MissedError ({worst_error_value})",
+                    "content": (
+                        "You have a lot of missed detections in class"
+                        f" {worst_class_idx} ({classwise_errors['MissedError']})."
+                    ),
+                }
+            )
+        return suggestions
+
     def get_error_info(self) -> dict:
         error_info = {}
         for error_type in ERROR_TYPES:
@@ -59,13 +83,15 @@ class HtmlReport:
         ]
 
         # Summary data
-        summary = {
+        print("Creating summaries...")
+        evaluator_summary = self.evaluator.summarize()
+        overall_summary = {
             "num_images": self.evaluator.num_images,
             "conf_threshold": self.evaluator.evaluations[0].conf_threshold,
             "bg_iou_threshold": self.evaluator.evaluations[0].bg_iou_threshold,
             "fg_iou_threshold": self.evaluator.evaluations[0].fg_iou_threshold,
         }
-        summary.update({k: round(v, 3) for k, v in self.evaluator.summarize().items()})
+        overall_summary.update({k: round(v, 3) for k, v in evaluator_summary.items()})
 
         classwise_summary = self.evaluator.classwise_summarize()
         for class_idx, individual_summary in classwise_summary.items():
@@ -74,6 +100,7 @@ class HtmlReport:
 
         # BackgroundError data - classwise false positives
         # TODO: Visual grouping using MeP
+        print("Visualizing BackgroundErrors...")
         background_error_figs = inspect_background_error(self.evaluator)
 
         background_error_figs = dict(
@@ -85,6 +112,7 @@ class HtmlReport:
         )
 
         # ClassificationError data - classwise confusion
+        print("Visualizing ClassificationErrors...")
         (
             classification_error_figs,
             classification_error_plot,
@@ -92,6 +120,7 @@ class HtmlReport:
 
         # MissedError data - classwise false negatives
         # TODO: Visual grouping using MeP
+        print("Visualizing MissedErrors...")
         missed_size_var = compute_size_variance(self.evaluator)
         missed_aspect_var = compute_aspect_variance(self.evaluator)
 
@@ -105,11 +134,21 @@ class HtmlReport:
             )
         )
 
+        # Infobox suggestions
+        infoboxes = self.get_suggestions(
+            overall_summary,
+            classwise_summary,
+            missed_size_var=missed_size_var,
+            missed_aspect_var=missed_aspect_var,
+        )
+
+        print("Rendering output...")
         output = self.template.render(
             title="Riptide",
             section_names=section_names,
-            summary=summary,
+            summary=overall_summary,
             classwise_summary=classwise_summary,
+            infoboxes=infoboxes,
             error_info=self.get_error_info(),
             background_error_figs=background_error_figs,
             classification_error_figs=classification_error_figs,

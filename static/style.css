@@ -67,9 +67,9 @@ body {
 
 .gradient, .sidebar-button:hover {
     background: #00b3ff; 
-    background: -moz-linear-gradient(45deg, #00ffd9 0%, #00b3ff 100%);
-    background: -webkit-linear-gradient(45deg, #00ffd9 0%, #00b3ff 100%);
-    background: linear-gradient(45deg, #00ffd9 0%, #00b3ff 100%);
+    background: -moz-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    background: -webkit-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    background: linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
     color: transparent;
     -webkit-background-clip: text;
     background-clip: text;
@@ -81,6 +81,21 @@ body {
 
 .light {
     font-weight: 300;
+}
+
+.infobox {
+    margin: 2vh 0;
+    color: #2C3333;
+    background: #00b3ff;
+    background: -moz-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    background: -webkit-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    background: linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    border-radius: 0.4em;
+    padding: 2vh;
+}
+
+.infobox-title {
+    font-weight: 700;
 }
 
 .sidebar-header {

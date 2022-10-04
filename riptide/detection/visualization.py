@@ -360,22 +360,24 @@ def inspect_missed_error(
     # Plot the barplots of the classwise area
     setup_mpl_params()
     fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
-    missed_areas = []
-    for idx, (class_int, missed) in enumerate(classwise_dict.items()):
+    missed_areas = {}
+    for class_idx, missed in classwise_dict.items():
         areas = [m["bbox_area"] for m in missed]
-        mean, std = np.mean(areas), np.std(areas)
-        scatter_colors = [
-            gradient(
-                PALETTE_BLUE,
-                PALETTE_GREEN,
-                np.abs(mean - a) / (2 * std),
-            )
-            for a in areas
-        ]
-        ax.scatter(np.full_like(areas, idx + 1), areas, color=scatter_colors)
-        missed_areas.append(areas)
+        missed_areas[class_idx] = areas
 
-    boxplot = ax.boxplot(missed_areas, patch_artist=True)
+    for class_idx, area in missed_areas.items():
+        ax.scatter(
+            np.full_like(area, class_idx),
+            area,
+            color=[gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(area)) for a in area],
+            edgecolors="none",
+        )
+    boxplot = ax.boxplot(
+        missed_areas.values(),
+        positions=list(missed_areas.keys()),
+        patch_artist=True,
+    )
+
     for cap in boxplot["caps"]:
         cap.set_color(PALETTE_LIGHT)
     for whisker in boxplot["whiskers"]:
