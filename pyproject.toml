@@ -9,7 +9,6 @@ python = "^3.8"
 numpy = "^1.19"
 torch = "^1.12"
 pandas = "^1.4"
-mise_en_place = {git = "https://gitlab.com/bifrost-core/ai-team/mise-en-place.git", rev = "master"}
 torchvision = "^0.13.0"
 
 [tool.poetry.dev-dependencies]
