@@ -18,6 +18,7 @@ from riptide.detection.errors import (
     ClassificationAndLocalizationError,
     ClassificationError,
     DuplicateError,
+    Error,
     Errors,
     LocalizationError,
     MissedError,

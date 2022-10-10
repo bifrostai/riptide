@@ -1,4 +1,5 @@
 import os
+import shutil
 from typing import List
 
 from jinja2 import Environment, FileSystemLoader
@@ -161,3 +162,4 @@ class HtmlReport:
         os.makedirs(output_dir, exist_ok=True)
         with open(f"{output_dir}/report.html", "w") as f:
             f.writelines(output)
+        shutil.copy("static/style.css", f"{output_dir}/style.css")
