@@ -5,22 +5,17 @@ from typing import Any, Dict, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import colors
-from PIL import Image
 import torch
-from torchvision.io import read_image
-from torchvision.transforms.functional import crop, to_pil_image
-from torchvision.transforms import Compose, ToTensor
-from torchvision.transforms.functional import crop
-from tqdm import tqdm
-
+from matplotlib import colors
+from mise_en_place.encoders import VariableLayerEncoder
+from mise_en_place.transforms import normalize
+from PIL import Image
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
-
-from mise_en_place.encoders import VariableLayerEncoder
-from mise_en_place.transforms import normalize, inverse_normalize
-
-from riptide.detection.evaluation import ObjectDetectionEvaluator
+from torchvision.io import read_image
+from torchvision.transforms import Compose, ToTensor
+from torchvision.transforms.functional import crop, to_pil_image
+from tqdm import tqdm
 
 from riptide.detection.errors import (
     BackgroundError,
@@ -32,7 +27,6 @@ from riptide.detection.errors import (
     MissedError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
-
 
 PALETTE_DARKER = "#222222"
 PALETTE_LIGHT = "#FFEECC"
