@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from typing import Dict, List, Optional, Union
+from warnings import warn
 
 import torch
 from termcolor import colored
@@ -22,6 +23,7 @@ from riptide.detection.errors import (
     MissedError,
 )
 from riptide.io.loaders import COCOLoader, DictLoader
+import ujson as json
 
 
 class ObjectDetectionEvaluation:
@@ -610,7 +612,8 @@ class Evaluator:
         targets_dict_file: str,
         predictions_dict_file: str,
         image_dir: str,
-        conf_threshold: float = 0.5,
+        conf_threshold: Optional[float],
+        summary_file: Optional[str],
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -620,7 +623,16 @@ class Evaluator:
         loader = DictLoader.from_dict_files(
             targets_dict_file, predictions_dict_file, image_dir
         )
-        return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
+        # get conf_threshold
+        if conf_threshold is None and summary_file is None:
+            raise ValueError("Provide either conf_threshold or summary_file")
+        if summary_file is not None:
+            best_conf_threshold: float = json.load(open(summary_file))["best_conf_threshold"]
+            if conf_threshold is not None:
+                warn("conf_threshold argument is ignored over summary_file argument", SyntaxWarning)
+        else:
+            best_conf_threshold = conf_threshold
+        return loader.load(evaluation_cls, evaluator_cls, best_conf_threshold)
 
 
 class ObjectDetectionEvaluator(Evaluator):
