@@ -62,6 +62,7 @@ def compute_aspect_variance(evaluator: ObjectDetectionEvaluator) -> dict:
                     aspect_ratios[class_idx] = []
                 aspect_ratios[class_idx].append(w / h)
     for class_idx, aspect_ratio_list in aspect_ratios.items():
+        aspect_ratio_list = [_.item() for _ in aspect_ratio_list]
         aspect_ratios[class_idx] = round(np.var(aspect_ratio_list), 2)
     return aspect_ratios
 
@@ -81,5 +82,6 @@ def compute_size_variance(evaluator: ObjectDetectionEvaluator) -> dict:
                     areas[class_idx] = []
                 areas[class_idx].append(area)
     for class_idx, area_list in areas.items():
+        area_list = [_.item() for _ in area_list]
         areas[class_idx] = round(np.var(area_list), 2)
     return areas
