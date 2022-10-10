@@ -71,7 +71,7 @@ class HtmlReport:
             )
         return error_info
 
-    def render(self):
+    def render(self, output_dir: str):
         section_names = [
             "Overview",
             "BackgroundError",
@@ -158,6 +158,6 @@ class HtmlReport:
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
         )
-        os.makedirs("output", exist_ok=True)
-        with open("output/report.html", "w") as f:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(f"{output_dir}/report.html", "w") as f:
             f.writelines(output)

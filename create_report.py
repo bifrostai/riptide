@@ -11,6 +11,8 @@ if __name__ == "__main__":
     parser.add_argument("-conf_threshold", "-c", type=float, required=False)
     # summary.json file to retrieve best_conf_threshold
     parser.add_argument("-summary_file", "-s", type=str, required=False)
+    # path to output report.html and style.css
+    parser.add_argument("-output_dir", "-o", type=str, default="output", required=False)
 
     args = parser.parse_args()
 
@@ -22,4 +24,4 @@ if __name__ == "__main__":
         summary_file=args.summary_file,
     )
 
-    HtmlReport(evaluator).render()
+    HtmlReport(evaluator).render(args.output_dir)
