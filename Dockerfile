@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 RUN apt-get update
-RUN apt-get -y install python3-pip curl tree gnupg software-properties-common
+RUN apt-get -y install python3-pip curl jq gnupg software-properties-common
 
 RUN add-apt-repository ppa:rmescandon/yq
 RUN apt-get -y install yq
