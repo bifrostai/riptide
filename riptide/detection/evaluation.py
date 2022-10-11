@@ -17,6 +17,7 @@ from riptide.detection.errors import (
     ClassificationAndLocalizationError,
     ClassificationError,
     DuplicateError,
+    Error,
     Errors,
     LocalizationError,
     MissedError,
@@ -610,7 +611,7 @@ class Evaluator:
         targets_dict_file: str,
         predictions_dict_file: str,
         image_dir: str,
-        conf_threshold: float = 0.5,
+        conf_threshold: float,
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
