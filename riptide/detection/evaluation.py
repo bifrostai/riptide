@@ -613,8 +613,7 @@ class Evaluator:
         targets_dict_file: str,
         predictions_dict_file: str,
         image_dir: str,
-        conf_threshold: Optional[float],
-        summary_file: Optional[str],
+        conf_threshold: float,
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -624,16 +623,7 @@ class Evaluator:
         loader = DictLoader.from_dict_files(
             targets_dict_file, predictions_dict_file, image_dir
         )
-        # get conf_threshold
-        if conf_threshold is None and summary_file is None:
-            raise ValueError("Provide either conf_threshold or summary_file")
-        if summary_file is not None:
-            best_conf_threshold: float = json.load(open(summary_file))["best_conf_threshold"]
-            if conf_threshold is not None:
-                warn("conf_threshold argument is ignored over summary_file argument", SyntaxWarning)
-        else:
-            best_conf_threshold = conf_threshold
-        return loader.load(evaluation_cls, evaluator_cls, best_conf_threshold)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
 
 
 class ObjectDetectionEvaluator(Evaluator):
