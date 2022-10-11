@@ -23,7 +23,6 @@ from riptide.detection.errors import (
     MissedError,
 )
 from riptide.io.loaders import COCOLoader, DictLoader
-import ujson as json
 
 
 class ObjectDetectionEvaluation:
