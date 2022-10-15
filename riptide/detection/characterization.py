@@ -83,5 +83,5 @@ def compute_size_variance(evaluator: ObjectDetectionEvaluator) -> dict:
                 areas[class_idx].append(area)
     for class_idx, area_list in areas.items():
         area_list = [_.item() for _ in area_list]
-        areas[class_idx] = round(np.var(area_list), 2)
+        areas[class_idx] = f"{np.var(area_list):.2E}"
     return areas

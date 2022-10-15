@@ -9,6 +9,7 @@ from PIL import Image
 import torch
 from torchvision.io import read_image
 from torchvision.transforms.functional import crop, to_pil_image
+from torchvision.utils import draw_bounding_boxes
 
 from riptide.detection.errors import (
     BackgroundError,
@@ -69,24 +70,39 @@ def gradient(c1: str, c2: str, step: float, output_rgb=False):
     return colors.to_hex(rgb)
 
 
-def crop_preview(image_tensor: torch.Tensor, bbox: torch.Tensor) -> torch.Tensor:
+def crop_preview(
+    image_tensor: torch.Tensor, bbox: torch.Tensor, color: str
+) -> torch.Tensor:
     bbox = bbox.long()
     x1, y1, x2, y2 = bbox
-    x1 = max(x1 - PREVIEW_PADDING, 0)
-    y1 = max(y1 - PREVIEW_PADDING, 0)
-    x2 = min(x2 + PREVIEW_PADDING, image_tensor.shape[2])
-    y2 = min(y2 + PREVIEW_PADDING, image_tensor.shape[1])
+    image_tensor = draw_bounding_boxes(image_tensor, bbox.unsqueeze(0), colors=color)
+    long_edge = torch.argmax(bbox[2:] - bbox[:2])  # 0 is w, 1 is h
+    if long_edge == 0:
+        x1 -= PREVIEW_PADDING
+        x2 += PREVIEW_PADDING
+        short_edge_padding = ((x2 - x1) - (y2 - y1)) // 2
+        y1 = max(0, y1 - short_edge_padding)
+        y2 = min(image_tensor.size(1), y2 + short_edge_padding)
+    else:
+        y1 -= PREVIEW_PADDING
+        y2 += PREVIEW_PADDING
+        short_edge_padding = ((y2 - y1) - (x2 - x1)) // 2
+        x1 = max(0, x1 - short_edge_padding)
+        x2 = min(image_tensor.size(2), x2 + short_edge_padding)
     return crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
 
 
-def get_bbox_area(bbox: torch.Tensor) -> int:
-    return ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).item()
+def get_bbox_stats(bbox: torch.Tensor) -> Tuple[int]:
+    area = round(((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).item(), 2)
+    width = int((bbox[2] - bbox[0]).item())
+    height = int((bbox[3] - bbox[1]).item())
+    return width, height, area
 
 
 def encode_base64(input: Any) -> bytes:
     bytesio = io.BytesIO()
     if isinstance(input, Image.Image):
-        input.save(bytesio, format="jpeg")
+        input.save(bytesio, format="jpeg", quality=100)
     elif isinstance(input, plt.Figure):
         input.savefig(bytesio, format="png")
     else:
@@ -153,9 +169,9 @@ def inspect_background_error(
         for error in evaluation.instances:
             if not isinstance(error, BackgroundError):
                 continue
-            bbox_area = get_bbox_area(error.pred_bbox)
+            width, height, area = get_bbox_stats(error.pred_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.pred_bbox)
+            image_tensor = crop_preview(image_tensor, error.pred_bbox, "magenta")
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -168,7 +184,9 @@ def inspect_background_error(
                     "image_base64": encode_base64(image),
                     "class": pred_class_int,
                     "confidence": round(error.confidence.item(), 2),
-                    "bbox_area": bbox_area,
+                    "bbox_width": width,
+                    "bbox_height": height,
+                    "bbox_area": area,
                 }
             )
     return classwise_dict
@@ -190,7 +208,7 @@ def inspect_classification_error(
             if not isinstance(error, ClassificationError):
                 continue
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.pred_bbox)
+            image_tensor = crop_preview(image_tensor, error.pred_bbox, "crimson")
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -265,7 +283,7 @@ def inspect_localization_error(
             if not isinstance(error, ClassificationError):
                 continue
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.pred_bbox)
+            image_tensor = crop_preview(image_tensor, error.pred_bbox, "gold")
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -332,9 +350,9 @@ def inspect_missed_error(
         for error in evaluation.instances:
             if not isinstance(error, MissedError):
                 continue
-            bbox_area = get_bbox_area(error.gt_bbox)
+            width, height, area = get_bbox_stats(error.gt_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.gt_bbox)
+            image_tensor = crop_preview(image_tensor, error.gt_bbox, "yellowgreen")
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -346,7 +364,9 @@ def inspect_missed_error(
                     "image_name": image_name,
                     "image_base64": encode_base64(image),
                     "class": gt_class_int,
-                    "bbox_area": bbox_area,
+                    "bbox_width": width,
+                    "bbox_height": height,
+                    "bbox_area": area,
                 }
             )
 
