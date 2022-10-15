@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
 from PIL import Image
+import torch
 from torchvision.io import read_image
-from torchvision.transforms.functional import to_pil_image
+from torchvision.transforms.functional import crop, to_pil_image
 
 from riptide.detection.errors import (
     BackgroundError,
@@ -26,6 +27,8 @@ PALETTE_DARK = "#2C3333"
 PALETTE_GREEN = "#00FFD9"
 PALETTE_BLUE = "#00B3FF"
 TRANSPARENT = colors.to_hex((0, 0, 0, 0), keep_alpha=True)
+PREVIEW_PADDING = 48
+PREVIEW_SIZE = 128
 
 
 def setup_mpl_params():
@@ -64,6 +67,20 @@ def gradient(c1: str, c2: str, step: float, output_rgb=False):
     if output_rgb:
         return rgb
     return colors.to_hex(rgb)
+
+
+def crop_preview(image_tensor: torch.Tensor, bbox: torch.Tensor) -> torch.Tensor:
+    bbox = bbox.long()
+    x1, y1, x2, y2 = bbox
+    x1 = max(x1 - PREVIEW_PADDING, 0)
+    y1 = max(y1 - PREVIEW_PADDING, 0)
+    x2 = min(x2 + PREVIEW_PADDING, image_tensor.shape[2])
+    y2 = min(y2 + PREVIEW_PADDING, image_tensor.shape[1])
+    return crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
+
+
+def get_bbox_area(bbox: torch.Tensor) -> int:
+    return ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).item()
 
 
 def encode_base64(input: Any) -> bytes:
@@ -119,14 +136,12 @@ def inspect_error_confidence(
 
 def inspect_background_error(
     evaluator: ObjectDetectionEvaluator,
-    crop_size: int = 192,
 ) -> Dict[int, dict]:
     """Saves the BackgroundErrors (false positives) of the evaluator to the given
     output directory.
 
     Args:
         evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
-        crop_size (int, optional): The size of the cropped images. Defaults to 192.
 
     Returns:
         Dict[int, list]: A dictionary mapping the class id to a list of dictionaries
@@ -138,12 +153,11 @@ def inspect_background_error(
         for error in evaluation.instances:
             if not isinstance(error, BackgroundError):
                 continue
-            x1, y1, x2, y2 = [int(x.item()) for x in error.pred_bbox]
-            bbox_area = (x2 - x1) * (y2 - y1)
+            bbox_area = get_bbox_area(error.pred_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = image_tensor[:, y1:y2, x1:x2]
+            image_tensor = crop_preview(image_tensor, error.pred_bbox)
             image = to_pil_image(image_tensor)
-            image = image.resize((crop_size, crop_size))
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
             pred_class_int = int(error.pred_label.item())
             if pred_class_int not in classwise_dict:
@@ -162,13 +176,11 @@ def inspect_background_error(
 
 def inspect_classification_error(
     evaluator: ObjectDetectionEvaluator,
-    crop_size: int = 192,
 ) -> Tuple[Dict[int, dict], bytes]:
     """Saves the ClassificationErrors of the evaluator to the given output directory.
 
     Args:
         evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
-        crop_size (int, optional): The size of the cropped images. Defaults to 192.
     """
 
     classwise_dict = {}
@@ -177,11 +189,10 @@ def inspect_classification_error(
         for error in evaluation.instances:
             if not isinstance(error, ClassificationError):
                 continue
-            x1, y1, x2, y2 = [int(x.item()) for x in error.pred_bbox]
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = image_tensor[:, y1:y2, x1:x2]
+            image_tensor = crop_preview(image_tensor, error.pred_bbox)
             image = to_pil_image(image_tensor)
-            image = image.resize((crop_size, crop_size))
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
             pred_class_int = int(error.pred_label.item())
             gt_class_int = int(error.gt_label.item())
@@ -238,13 +249,13 @@ def inspect_classification_error(
 
 def inspect_localization_error(
     evaluator: ObjectDetectionEvaluator,
-    crop_size: int = 192,
+    PREVIEW_SIZE: int = 192,
 ) -> None:
     """Saves the LocalizationErrors of the evaluator to the given output directory.
 
     Args:
         evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
-        crop_size (int, optional): The size of the cropped images. Defaults to 192.
+        PREVIEW_SIZE (int, optional): The size of the cropped images. Defaults to 192.
     """
 
     classwise_dict = {}
@@ -253,11 +264,10 @@ def inspect_localization_error(
         for error in evaluation.instances:
             if not isinstance(error, ClassificationError):
                 continue
-            x1, y1, x2, y2 = [int(x.item()) for x in error.pred_bbox]
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = image_tensor[:, y1:y2, x1:x2]
+            image_tensor = crop_preview(image_tensor, error.pred_bbox)
             image = to_pil_image(image_tensor)
-            image = image.resize((crop_size, crop_size))
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
             pred_class_int = int(error.pred_label.item())
             gt_class_int = int(error.gt_label.item())
@@ -305,14 +315,12 @@ def inspect_localization_error(
 
 def inspect_missed_error(
     evaluator: ObjectDetectionEvaluator,
-    crop_size: int = 192,
 ) -> Tuple[Dict[int, dict], bytes]:
     """Saves the MissedErrors (false negatives) of the evaluator to the given
     output directory.
 
     Args:
         evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
-        crop_size (int, optional): The size of the cropped images. Defaults to 192.
 
     Returns:
         Dict[int, list]: A dictionary mapping the class id to a list of dictionaries
@@ -324,12 +332,11 @@ def inspect_missed_error(
         for error in evaluation.instances:
             if not isinstance(error, MissedError):
                 continue
-            x1, y1, x2, y2 = [int(x.item()) for x in error.gt_bbox]
-            bbox_area = (x2 - x1) * (y2 - y1)
+            bbox_area = get_bbox_area(error.gt_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = image_tensor[:, y1:y2, x1:x2]
+            image_tensor = crop_preview(image_tensor, error.gt_bbox)
             image = to_pil_image(image_tensor)
-            image = image.resize((crop_size, crop_size))
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
             gt_class_int = int(error.gt_label.item())
             if gt_class_int not in classwise_dict:
