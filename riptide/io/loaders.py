@@ -121,7 +121,7 @@ class COCOLoader:
             if file_name not in results_dict:
                 results_dict[file_name] = {
                     "targets": {"boxes": [], "labels": []},
-                    "predictions": {"boxes": [], "labels": []},
+                    "predictions": {"boxes": [], "scores": [], "labels": []},
                 }
             results_dict[file_name]["targets"]["boxes"].append(bbox)
             results_dict[file_name]["targets"]["labels"].append(category_id)
@@ -131,7 +131,7 @@ class COCOLoader:
         ].values:
             if file_name not in results_dict:
                 results_dict[file_name] = {
-                    "targets": {"boxes": [], "scores": [], "labels": []},
+                    "targets": {"boxes": [], "labels": []},
                     "predictions": {"boxes": [], "scores": [], "labels": []},
                 }
             results_dict[file_name]["predictions"]["boxes"].append(bbox)
