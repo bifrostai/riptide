@@ -71,11 +71,11 @@ class DictLoader:
             ) = self.process_boxes(gt, pred)
             evaluation = evaluation_cls(
                 image_path=os.path.join(self.image_dir, file_name),
-                pred_bboxes=pred_bboxes,
-                pred_scores=pred_scores,
-                pred_labels=pred_labels,
-                gt_bboxes=gt_bboxes,
-                gt_labels=gt_labels,
+                pred_bboxes=pred_bboxes.cpu(),
+                pred_scores=pred_scores.cpu(),
+                pred_labels=pred_labels.cpu(),
+                gt_bboxes=gt_bboxes.cpu(),
+                gt_labels=gt_labels.cpu(),
                 conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
