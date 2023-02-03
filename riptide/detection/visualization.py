@@ -80,13 +80,13 @@ def crop_preview(
     if long_edge == 0:
         x1 -= PREVIEW_PADDING
         x2 += PREVIEW_PADDING
-        short_edge_padding = ((x2 - x1) - (y2 - y1)) // 2
+        short_edge_padding = torch.div((x2 - x1) - (y2 - y1), 2, rounding_mode="floor")
         y1 = max(0, y1 - short_edge_padding)
         y2 = min(image_tensor.size(1), y2 + short_edge_padding)
     else:
         y1 -= PREVIEW_PADDING
         y2 += PREVIEW_PADDING
-        short_edge_padding = ((y2 - y1) - (x2 - x1)) // 2
+        short_edge_padding = torch.div((y2 - y1) - (x2 - x1), 2, rounding_mode="floor")
         x1 = max(0, x1 - short_edge_padding)
         x2 = min(image_tensor.size(2), x2 + short_edge_padding)
     return crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
