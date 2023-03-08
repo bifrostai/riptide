@@ -88,9 +88,11 @@ class COCOLoader:
         self,
         annotations_file: str,
         predictions_file: str,
+        image_dir: str,
     ):
         self.annotations_file = annotations_file
         self.predictions_file = predictions_file
+        self.image_dir = image_dir
 
     def load(
         self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
@@ -141,12 +143,21 @@ class COCOLoader:
         evaluations = []
         for file_name, pred_gt_dict in results_dict.items():
             gt_bboxes = torch.tensor(pred_gt_dict["targets"]["boxes"])
+            if len(gt_bboxes) == 0:
+                gt_bboxes = torch.empty((0, 4))
+            gt_bboxes[:, 2:] = gt_bboxes[:, :2] + gt_bboxes[:, 2:]
+
             gt_labels = torch.tensor(pred_gt_dict["targets"]["labels"])
+
             pred_bboxes = torch.tensor(pred_gt_dict["predictions"]["boxes"])
+            if len(pred_bboxes) == 0:
+                pred_bboxes = torch.empty((0, 4))
+            pred_bboxes[:, 2:] = pred_bboxes[:, :2] + pred_bboxes[:, 2:]
+
             pred_scores = torch.tensor(pred_gt_dict["predictions"]["scores"])
             pred_labels = torch.tensor(pred_gt_dict["predictions"]["labels"])
             evaluation = evaluation_cls(
-                image_path=file_name,
+                image_path=os.path.join(self.image_dir, file_name),
                 pred_bboxes=pred_bboxes,
                 pred_scores=pred_scores,
                 pred_labels=pred_labels,

@@ -578,14 +578,22 @@ class ObjectDetectionEvaluation:
 class Evaluator:
     @classmethod
     def from_coco(
-        cls, predictions_file: str, targets_file: str, conf_threshold: float = 0.5
+        cls,
+        predictions_file: str,
+        targets_file: str,
+        image_dir: str,
+        conf_threshold: float = 0.5,
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
             evaluator_cls = ObjectDetectionEvaluator
         else:
             raise NotImplementedError("Evaluator class not implemented")
-        loader = COCOLoader(predictions_file, targets_file)
+        loader = COCOLoader(
+            annotations_file=targets_file,
+            predictions_file=predictions_file,
+            image_dir=image_dir,
+        )
         return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
 
     @classmethod
