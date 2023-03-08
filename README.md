@@ -32,7 +32,7 @@ evaluator = ObjectDetectionEvaluator.from_dicts(
     conf_threshold=0.5,
 )
 print(evaluator.summarize())
-report = HtmlReport(evaluator).render()
+report = HtmlReport(evaluator).render("path/to/output/folder")
 ```
 
 ## Understanding Evaluations
