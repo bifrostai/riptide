@@ -23,6 +23,7 @@ from riptide.detection.visualization import (
     inspect_error_confidence,
     inspect_localization_error,
     inspect_missed_error,
+    inspect_true_positives,
 )
 
 ERROR_TYPES = [
@@ -83,6 +84,7 @@ class HtmlReport:
             "ClassificationAndLocalizationError",
             "DuplicateError",
             "MissedError",
+            "TruePositive",
         ]
 
         # Summary data
@@ -151,6 +153,13 @@ class HtmlReport:
             )
         )
 
+        # True Positives data - to bring a balanced and unbiased view to the dataset
+        print("Visualizing TruePositives...")
+        (
+            true_positive_figs,
+            true_positive_plot,
+        ) = inspect_true_positives(self.evaluator)
+
         # Infobox suggestions
         infoboxes = self.get_suggestions(
             overall_summary,
@@ -178,6 +187,8 @@ class HtmlReport:
             missed_error_plot=missed_error_plot,
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
+            true_positive_figs=true_positive_figs,
+            true_positive_plot=true_positive_plot,
         )
         os.makedirs(output_dir, exist_ok=True)
         with open(f"{output_dir}/report.html", "w") as f:

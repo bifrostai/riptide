@@ -11,6 +11,7 @@ from torchvision.io import read_image
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
+from riptide.detection.confusions import Confusion, Confusions
 from riptide.detection.errors import (
     BackgroundError,
     ClassificationAndLocalizationError,
@@ -541,6 +542,99 @@ def inspect_missed_error(
                     "image_name": image_name,
                     "image_base64": encode_base64(image),
                     "class": gt_class_int,
+                    "bbox_width": width,
+                    "bbox_height": height,
+                    "bbox_area": area,
+                }
+            )
+
+    # Plot the barplots of the classwise area
+    setup_mpl_params()
+    fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
+    missed_areas = {}
+    for class_idx, missed in classwise_dict.items():
+        areas = [m["bbox_area"] for m in missed]
+        missed_areas[class_idx] = areas
+
+    for class_idx, area in missed_areas.items():
+        ax.scatter(
+            np.full_like(area, class_idx),
+            area,
+            color=[gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(area)) for a in area],
+            edgecolors="none",
+        )
+    boxplot = ax.boxplot(
+        missed_areas.values(),
+        positions=list(missed_areas.keys()),
+        patch_artist=True,
+    )
+
+    for cap in boxplot["caps"]:
+        cap.set_color(PALETTE_LIGHT)
+    for whisker in boxplot["whiskers"]:
+        whisker.set_color(PALETTE_LIGHT)
+    for median in boxplot["medians"]:
+        median.set_color(PALETTE_GREEN)
+        median.set_linewidth(2)
+    for box in boxplot["boxes"]:
+        box.set(color=PALETTE_LIGHT, facecolor=TRANSPARENT)
+
+    fig = encode_base64(fig)
+    return classwise_dict, fig
+
+
+def inspect_true_positives(
+    evaluator: ObjectDetectionEvaluator,
+) -> Tuple[Dict[int, dict], bytes]:
+    """Saves the TruePositives of the evaluator to the given output directory.
+    Probably should create some Factory method for this shagload of inspecting functions lol
+    another day i guess TODO
+
+    Args:
+        evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
+        PREVIEW_SIZE (int, optional): The size of the cropped images. Defaults to 192.
+    """
+    classwise_dict = {}
+    for evaluation in evaluator.evaluations:
+        ## get the array of predictions
+        ## get the array of indexes in the predictions array
+        ## get all other information using the index
+        pred_conf_array = evaluation.confusions.pred_confusions
+        pred_tp_idxs = [
+            i
+            for i in range(len(pred_conf_array))
+            if pred_conf_array[i] is Confusion.TRUE_POSITIVE
+        ]
+        selected_pred_ious = [
+            evaluation.ious[pred_idx]
+            for pred_idx in range(len(pred_conf_array))
+            if pred_idx in pred_tp_idxs
+        ]
+        gt_idxs = []
+
+        for pred_iou in selected_pred_ious:
+            ## this is the corresponding gt_idx given the pred_tp_idx
+            idx_of_best_gt_match = pred_iou.argmax()
+            gt_idxs.append(idx_of_best_gt_match)
+
+        for tp_idx, gt_idx in zip(pred_tp_idxs, gt_idxs):
+            width, height, area = get_bbox_stats(evaluation.pred_bboxes[tp_idx])
+            image_tensor = read_image(evaluation.image_path)
+            bboxes = torch.stack(
+                [evaluation.pred_bboxes[tp_idx], evaluation.gt_bboxes[gt_idx]]
+            )
+            image_tensor = crop_preview(image_tensor, bboxes, ["white", "lime"])
+            image = to_pil_image(image_tensor)
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
+            image_name = evaluation.image_path.split("/")[-1]
+            pred_class_int = int(evaluation.pred_labels[tp_idx].item())
+            if pred_class_int not in classwise_dict:
+                classwise_dict[pred_class_int] = []
+            classwise_dict[pred_class_int].append(
+                {
+                    "image_name": image_name,
+                    "image_base64": encode_base64(image),
+                    "class": pred_class_int,
                     "bbox_width": width,
                     "bbox_height": height,
                     "bbox_area": area,
