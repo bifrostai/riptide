@@ -4,9 +4,9 @@ from typing import Any, Dict, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from matplotlib import colors
 from PIL import Image
-import torch
 from torchvision.io import read_image
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
@@ -71,12 +71,87 @@ def gradient(c1: str, c2: str, step: float, output_rgb=False):
 
 
 def crop_preview(
-    image_tensor: torch.Tensor, bbox: torch.Tensor, color: str
+    image_tensor: torch.Tensor,
+    bbox: torch.Tensor,
+    colors: Union[list[Union[str, Tuple[int, int, int]]], str, Tuple[int, int, int]],
 ) -> torch.Tensor:
+    """Crop a preview of the bounding box
+
+    Parameters
+    ----------
+    image_tensor : torch.Tensor
+        Image tensor
+    bbox : torch.Tensor
+        Bounding box(es) in xyxy format
+    color : str
+        Color of bounding box
+
+    Returns
+    -------
+    torch.Tensor
+        Cropped image tensor
+    """
     bbox = bbox.long()
-    x1, y1, x2, y2 = bbox
-    image_tensor = draw_bounding_boxes(image_tensor, bbox.unsqueeze(0), colors=color)
-    long_edge = torch.argmax(bbox[2:] - bbox[:2])  # 0 is w, 1 is h
+    image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors)
+    image_tensor, translation = get_padded_bbox_crop(image_tensor, bbox)
+
+    return image_tensor
+
+
+def convex_hull(
+    bboxes: torch.Tensor, format: str = "xyxy"
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Get the convex hull of a set of bounding boxes
+
+    Parameters
+    ----------
+    bboxes : torch.Tensor
+        Bounding boxes
+    format : str, optional. One of "xyxy" or "xywh"
+        Format of bounding boxes, by default "xyxy"
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor]
+        Convex hull and indices of bounding boxes that make up the convex hull
+    """
+    bboxes = bboxes.long().clone()
+    if format == "xywh":
+        bboxes[:, 2:] = bboxes[:, :2] + bboxes[:, 2:]
+    t_max = torch.max(bboxes, dim=0)
+    t_min = torch.min(bboxes, dim=0)
+    values = torch.concat([t_min.values[:2], t_max.values[2:]])
+    indices = torch.concat([t_min.indices[:2], t_max.indices[2:]])
+    if format == "xywh":
+        values[2:] = values[2:] - values[:2]
+    return values, indices
+
+
+def get_padded_bbox_crop(
+    image_tensor: torch.Tensor,
+    bbox: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Get a padded crop of the bounding box(es)
+
+    Parameters
+    ----------
+    image_tensor : torch.Tensor
+        Image tensor
+    bbox : torch.Tensor
+        Bounding box(es) in xyxy format
+    pad : int, optional
+        Padding around bounding box, by default 48
+    size : int, optional
+        Size of output image, by default 224
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor]
+        Cropped image and translation tensor to apply to bounding boxes
+    """
+    hull, _ = convex_hull(bbox)
+    x1, y1, x2, y2 = hull
+    long_edge = torch.argmax(hull[2:] - hull[:2])  # 0 is w, 1 is h
     if long_edge == 0:
         x1 -= PREVIEW_PADDING
         x2 += PREVIEW_PADDING
@@ -86,10 +161,16 @@ def crop_preview(
     else:
         y1 -= PREVIEW_PADDING
         y2 += PREVIEW_PADDING
-        short_edge_padding = torch.div((y2 - y1) - (x2 - x1), 2, rounding_mode="floor")
+        short_edge_padding = torch.div(
+            ((y2 - y1) - (x2 - x1)), 2, rounding_mode="floor"
+        )
         x1 = max(0, x1 - short_edge_padding)
         x2 = min(image_tensor.size(2), x2 + short_edge_padding)
-    return crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
+
+    return (
+        crop(image_tensor, y1, x1, y2 - y1, x2 - x1),
+        torch.tensor([x1, y1, x2, y2]) - hull,
+    )
 
 
 def get_bbox_stats(bbox: torch.Tensor) -> Tuple[int]:
@@ -171,7 +252,9 @@ def inspect_background_error(
                 continue
             width, height, area = get_bbox_stats(error.pred_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.pred_bbox, "magenta")
+            image_tensor = crop_preview(
+                image_tensor, error.pred_bbox.unsqueeze(0), "magenta"
+            )
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -208,7 +291,9 @@ def inspect_classification_error(
             if not isinstance(error, ClassificationError):
                 continue
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.pred_bbox, "crimson")
+            image_tensor = crop_preview(
+                image_tensor, error.pred_bbox.unsqueeze(0), "crimson"
+            )
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -280,10 +365,12 @@ def inspect_localization_error(
     gt_list, pred_list = [], []
     for evaluation in evaluator.evaluations:
         for error in evaluation.instances:
-            if not isinstance(error, ClassificationError):
+            if not isinstance(error, LocalizationError):
                 continue
+            width, height, area = get_bbox_stats(error.gt_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.pred_bbox, "gold")
+            bboxes = torch.stack([error.gt_bbox, error.pred_bbox])
+            image_tensor = crop_preview(image_tensor, bboxes, ["white", "gold"])
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
@@ -293,12 +380,18 @@ def inspect_localization_error(
             pred_list.append(pred_class_int)
             if pred_class_int not in classwise_dict:
                 classwise_dict[gt_class_int] = []
+            # breakpoint()
             classwise_dict[gt_class_int].append(
                 {
                     "image_name": image_name,
                     "image_base64": encode_base64(image),
-                    "pred_class": pred_class_int,
-                    "confidence": round(error.confidence.item(), 2),
+                    "class": gt_class_int,
+                    "bbox_width": width,
+                    "bbox_height": height,
+                    "bbox_area": area,
+                    "iou": round(
+                        evaluation.ious[error.pred_idx][error.gt_idx].item(), 3
+                    ),
                 }
             )
     confusion_dict = {}
@@ -331,6 +424,88 @@ def inspect_localization_error(
     return classwise_dict, fig
 
 
+def inspect_classification_and_localization_error(
+    evaluator: ObjectDetectionEvaluator,
+    PREVIEW_SIZE: int = 192,
+) -> None:
+    """Saves the ClassificationAndLocalizationError of the evaluator to the given output directory.
+
+    Args:
+        evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
+        PREVIEW_SIZE (int, optional): The size of the cropped images. Defaults to 192.
+    """
+
+    classwise_dict = {}
+    gt_list, pred_list = [], []
+    for evaluation in evaluator.evaluations:
+        for error in evaluation.instances:
+            if not isinstance(error, ClassificationAndLocalizationError):
+                continue
+            width, height, area = get_bbox_stats(error.gt_bbox)
+            image_tensor = read_image(evaluation.image_path)
+            bboxes = torch.stack([error.gt_bbox, error.pred_bbox])
+            image_tensor = crop_preview(image_tensor, bboxes, ["white", "darkorange"])
+            image = to_pil_image(image_tensor)
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
+            image_name = evaluation.image_path.split("/")[-1]
+            pred_class_int = int(error.pred_label.item())
+            gt_class_int = int(error.gt_label.item())
+            gt_list.append(gt_class_int)
+            pred_list.append(pred_class_int)
+            if gt_class_int not in classwise_dict:
+                classwise_dict[gt_class_int] = []
+            classwise_dict[gt_class_int].append(
+                {
+                    "image_name": image_name,
+                    "image_base64": encode_base64(image),
+                    "class": gt_class_int,
+                    "bbox_width": width,
+                    "bbox_height": height,
+                    "bbox_area": area,
+                    "iou": round(
+                        evaluation.ious[error.pred_idx][error.gt_idx].item(), 3
+                    ),
+                }
+            )
+    confusion_dict = {}
+
+    if len(gt_list) == 0:
+        return classwise_dict, None
+    for gt_class_int, pred_class_int in zip(gt_list, pred_list):
+        confusion = (gt_class_int, pred_class_int)
+        if confusion not in confusion_dict:
+            confusion_dict[confusion] = 0
+        confusion_dict[confusion] += 1
+
+    ranked_idxs = sorted(confusion_dict, key=confusion_dict.get, reverse=True)
+    confusion_dict = {k: confusion_dict[k] for k in ranked_idxs}
+
+    setup_mpl_params()
+    fig, ax = plt.subplots(
+        figsize=(6, np.ceil(len(confusion_dict) * 0.6)),
+        dpi=200,
+        constrained_layout=True,
+    )
+    ax.barh(
+        range(len(confusion_dict)),
+        width=confusion_dict.values(),
+        color=[
+            gradient(
+                PALETTE_GREEN, PALETTE_BLUE, 1 - (x / max(confusion_dict.values()))
+            )
+            for x in confusion_dict.values()
+        ],
+    )
+    ax.set_yticks(range(len(confusion_dict)))
+    ax.set_yticklabels(
+        [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
+    )
+    ax.set_title("Classification and Localization Error Ranking")
+    ax.set_xlabel("Number of Occurences")
+    fig = encode_base64(fig)
+    return classwise_dict, fig
+
+
 def inspect_missed_error(
     evaluator: ObjectDetectionEvaluator,
 ) -> Tuple[Dict[int, dict], bytes]:
@@ -352,7 +527,9 @@ def inspect_missed_error(
                 continue
             width, height, area = get_bbox_stats(error.gt_bbox)
             image_tensor = read_image(evaluation.image_path)
-            image_tensor = crop_preview(image_tensor, error.gt_bbox, "yellowgreen")
+            image_tensor = crop_preview(
+                image_tensor, error.gt_bbox.unsqueeze(0), "yellowgreen"
+            )
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]

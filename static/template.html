@@ -87,9 +87,59 @@
         </div>
         <div id="LocalizationError">
             <h1>LocalizationError</h1>
+
+            <h2>LocalizationError visualization</h2>
+            <p>
+                The following is a montage of the localization errors.
+            </p>
+            <div class="class-images">
+            {% for class_int, image_list in localization_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+
         </div>
         <div id="ClassificationAndLocalizationError">
             <h1>ClassificationAndLocalizationError</h1>
+            {% if classification_and_localization_error_plot is not none %}
+            <h2>ClassificationAndLocalizationError ranking</h2>
+            <p>
+                The following plot shows the distribution of classification and localization errors.
+            </p>
+            <div class="plot">
+                <img class="plot-image" src="data:image/png;base64,{{ classification_and_localization_error_plot | safe}}">
+            </div>
+            {% endif %}
+            <h2>ClassificationAndLocalizationError visualization</h2>
+            <p>
+                The following is a montage of the classification and localization errors.
+            </p>
+            <div class="class-images">
+            {% for class_int, image_list in classification_and_localization_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+
         </div>
         <div id="DuplicateError">
             <h1>DuplicateError</h1>

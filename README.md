@@ -61,7 +61,7 @@ pred0   3       0.94    [TP]     ---    0.98
 pred1   3       0.47    [UN]     ---    0.43
 ================================================
         cfu     [TP]
-        err      --- 
+        err      ---
 ```
 This indicates that in this image, there was one ground truth (`gt0`), two predictions (`pred0` and `pred1`). There was one true positive (TP), and one **unused prediction** (UN), since its score (0.43) is below the confidence threshold above which predictions are considered (default: 0.5). If this were to be lowered, then `pred1` would be considered a false positive (FP), and further classified into one of the error types (in this case, a LocalizationError):
 ```
@@ -73,7 +73,7 @@ pred0   3       0.94    [TP]     ---    0.98
 pred1   3       0.47    [FP]    [LOC]   0.43
 ================================================
         cfu     [TP]
-        err      --- 
+        err      ---
 ```
 
 ## Understanding Error Types
