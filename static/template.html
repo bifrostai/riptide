@@ -171,7 +171,6 @@
                     </div>
                 {% endfor %}
             </div>
-            </div>
             <h2>Aspect ratio and size variance</h2>
             <p>
                 Variance of aspect ratios across MissedErrors
@@ -211,6 +210,40 @@
             {% for class_int, image_list in missed_error_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">Missed: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+        <div id="TruePositive">
+            <h1>True Positives</h1>
+            <h2>Classwise True Positives</h2>
+            <p>
+                Number of True Positives per class | number of total objects per class
+            </p>
+            <div class="summary-container">
+                {% for class_idx, individual_summary in classwise_summary.items() %}
+                    {% set true_positives = individual_summary.get("true_positives", 0) %}
+                    {% set total_count = individual_summary.get("total_count", 0) %}
+                    <div class="summary-item">
+                        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+                        <div class="summary-metric-value">{{ true_positives }} <span class="text-dark">| {{ total_count }}</span></div>
+                    </div>
+                {% endfor %}
+            </div>
+            <h2>True Positives visualization</h2>
+            <p>List of all the True Positives detections. No prediction was made below <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span>.</p>
+            <div class="class-images">
+            {% for class_int, image_list in true_positive_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">True Positives: Class {{ class_int }}</div>
                     <div class="class-image-container">
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
