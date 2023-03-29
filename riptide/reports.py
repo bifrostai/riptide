@@ -20,6 +20,7 @@ from riptide.detection.visualization import (
     inspect_background_error,
     inspect_classification_and_localization_error,
     inspect_classification_error,
+    inspect_duplicate_error,
     inspect_error_confidence,
     inspect_localization_error,
     inspect_missed_error,
@@ -137,6 +138,13 @@ class HtmlReport:
             classification_and_localization_error_plot,
         ) = inspect_classification_and_localization_error(self.evaluator)
 
+        # DuplicateError data - classwise confusion
+        print("Visualizing DuplicateErrors...")
+        (
+            duplicate_error_figs,
+            duplicate_error_plot,
+        ) = inspect_duplicate_error(self.evaluator)
+
         # MissedError data - classwise false negatives
         # TODO: Visual grouping using MeP
         print("Visualizing MissedErrors...")
@@ -183,6 +191,8 @@ class HtmlReport:
             localization_error_plot=localization_error_plot,
             classification_and_localization_error_figs=classification_and_localization_error_figs,
             classification_and_localization_error_plot=classification_and_localization_error_plot,
+            duplicate_error_figs=duplicate_error_figs,
+            # duplicate_error_plot=duplicate_error_plot,
             missed_error_figs=missed_error_figs,
             missed_error_plot=missed_error_plot,
             missed_size_var=missed_size_var,
