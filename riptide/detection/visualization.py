@@ -93,7 +93,7 @@ def crop_preview(
         Cropped image tensor
     """
     bbox = bbox.long()
-    image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors)
+    image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors, width=2)
     image_tensor, translation = get_padded_bbox_crop(image_tensor, bbox)
 
     return image_tensor
@@ -459,7 +459,7 @@ def inspect_classification_and_localization_error(
                 {
                     "image_name": image_name,
                     "image_base64": encode_base64(image),
-                    "class": gt_class_int,
+                    "class": pred_class_int,
                     "bbox_width": width,
                     "bbox_height": height,
                     "bbox_area": area,
@@ -502,6 +502,85 @@ def inspect_classification_and_localization_error(
         [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
     )
     ax.set_title("Classification and Localization Error Ranking")
+    ax.set_xlabel("Number of Occurences")
+    fig = encode_base64(fig)
+    return classwise_dict, fig
+
+
+def inspect_duplicate_error(
+    evaluator: ObjectDetectionEvaluator,
+    PREVIEW_SIZE: int = 192,
+) -> None:
+    """Saves the DuplicateError of the evaluator to the given output directory.
+
+    Args:
+        evaluator (ObjectDetectionEvaluator): The evaluator to inspect.
+        PREVIEW_SIZE (int, optional): The size of the cropped images. Defaults to 192.
+    """
+
+    classwise_dict = {}
+    gt_list, pred_list = [], []
+    for evaluation in evaluator.evaluations:
+        for error in evaluation.instances:
+            if not isinstance(error, DuplicateError):
+                continue
+            width, height, area = get_bbox_stats(error.gt_bbox)
+            image_tensor = read_image(evaluation.image_path)
+            bboxes = torch.stack([error.gt_bbox, error.best_pred_bbox, error.pred_bbox])
+            image_tensor = crop_preview(image_tensor, bboxes, ["white", "lime", "red"])
+            image = to_pil_image(image_tensor)
+            image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
+            image_name = evaluation.image_path.split("/")[-1]
+            pred_class_int = int(error.pred_label.item())
+            gt_class_int = int(error.gt_label.item())
+            gt_list.append(gt_class_int)
+            pred_list.append(pred_class_int)
+            if pred_class_int not in classwise_dict:
+                classwise_dict[gt_class_int] = []
+            # breakpoint()
+            classwise_dict[gt_class_int].append(
+                {
+                    "image_name": image_name,
+                    "image_base64": encode_base64(image),
+                    "class": gt_class_int,
+                    "bbox_width": width,
+                    "bbox_height": height,
+                    "bbox_area": area,
+                    "iou": round(
+                        evaluation.ious[error.pred_idx][error.gt_idx].item(), 3
+                    ),
+                    "best_iou": round(
+                        evaluation.ious[error.best_pred_idx][error.gt_idx].item(), 3
+                    ),
+                    "conf": round(error.confidence.item(), 2),
+                    "best_conf": round(error.best_confidence.item(), 2),
+                }
+            )
+    confusion_dict = {}
+
+    if len(gt_list) == 0:
+        return classwise_dict, None
+    for gt_class_int, pred_class_int in zip(gt_list, pred_list):
+        confusion = (gt_class_int, pred_class_int)
+        if confusion not in confusion_dict:
+            confusion_dict[confusion] = 0
+        confusion_dict[confusion] += 1
+
+    ranked_idxs = sorted(confusion_dict, key=confusion_dict.get, reverse=True)
+    confusion_dict = {k: confusion_dict[k] for k in ranked_idxs}
+
+    setup_mpl_params()
+    fig, ax = plt.subplots(
+        figsize=(6, np.ceil(len(confusion_dict) * 0.6)),
+        dpi=200,
+        constrained_layout=True,
+    )
+    ax.barh(range(len(confusion_dict)), width=confusion_dict.values())
+    ax.set_yticks(range(len(confusion_dict)))
+    ax.set_yticklabels(
+        [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
+    )
+    ax.set_title("Duplicate Error Ranking")
     ax.set_xlabel("Number of Occurences")
     fig = encode_base64(fig)
     return classwise_dict, fig
@@ -638,6 +717,8 @@ def inspect_true_positives(
                     "bbox_width": width,
                     "bbox_height": height,
                     "bbox_area": area,
+                    "conf": round(evaluation.pred_scores[tp_idx].item(), 2),
+                    "iou": round(evaluation.ious[tp_idx][gt_idx].item(), 2),
                 }
             )
 
