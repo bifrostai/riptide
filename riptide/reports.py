@@ -1,6 +1,6 @@
 import os
 import shutil
-from typing import List
+from typing import Dict, List
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -44,7 +44,7 @@ class HtmlReport:
         self.template = self.env.get_template("template.html")
 
     def get_suggestions(
-        self, overall_summary: dict, classwise_summary: dict, **kwargs
+        self, overall_summary: Dict, classwise_summary: Dict, **kwargs
     ) -> List[dict]:
         suggestions = []
         overall_errors = {
@@ -66,7 +66,7 @@ class HtmlReport:
             )
         return suggestions
 
-    def get_error_info(self) -> dict:
+    def get_error_info(self) -> Dict:
         error_info = {}
         for error_type in ERROR_TYPES:
             error_name = error_type.__name__

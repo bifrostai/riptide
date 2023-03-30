@@ -1,6 +1,6 @@
 import base64
 import io
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -74,7 +74,7 @@ def gradient(c1: str, c2: str, step: float, output_rgb=False):
 def crop_preview(
     image_tensor: torch.Tensor,
     bbox: torch.Tensor,
-    colors: Union[list[Union[str, Tuple[int, int, int]]], str, Tuple[int, int, int]],
+    colors: Union[List[Union[str, Tuple[int, int, int]]], str, Tuple[int, int, int]],
 ) -> torch.Tensor:
     """Crop a preview of the bounding box
 
@@ -101,7 +101,7 @@ def crop_preview(
 
 def convex_hull(
     bboxes: torch.Tensor, format: str = "xyxy"
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """Get the convex hull of a set of bounding boxes
 
     Parameters
@@ -131,7 +131,7 @@ def convex_hull(
 def get_padded_bbox_crop(
     image_tensor: torch.Tensor,
     bbox: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """Get a padded crop of the bounding box(es)
 
     Parameters
@@ -234,7 +234,7 @@ def inspect_error_confidence(
 
 def inspect_background_error(
     evaluator: ObjectDetectionEvaluator,
-) -> Dict[int, dict]:
+) -> Dict[int, Dict]:
     """Saves the BackgroundErrors (false positives) of the evaluator to the given
     output directory.
 
@@ -278,7 +278,7 @@ def inspect_background_error(
 
 def inspect_classification_error(
     evaluator: ObjectDetectionEvaluator,
-) -> Tuple[Dict[int, dict], bytes]:
+) -> Tuple[Dict[int, Dict], bytes]:
     """Saves the ClassificationErrors of the evaluator to the given output directory.
 
     Args:
@@ -664,7 +664,7 @@ def inspect_missed_error(
 
 def inspect_true_positives(
     evaluator: ObjectDetectionEvaluator,
-) -> Tuple[Dict[int, dict], bytes]:
+) -> Tuple[Dict[int, Dict], bytes]:
     """Saves the TruePositives of the evaluator to the given output directory.
     Probably should create some Factory method for this shagload of inspecting functions lol
     another day i guess TODO
