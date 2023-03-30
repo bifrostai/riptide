@@ -1,3 +1,5 @@
+from typing import Dict
+
 import numpy as np
 import torch
 
@@ -27,7 +29,7 @@ def distance_size_score(
     return score
 
 
-def sort_by_crowding(evaluator: ObjectDetectionEvaluator) -> dict:
+def sort_by_crowding(evaluator: ObjectDetectionEvaluator) -> Dict:
     scores = []
     for evaluation in evaluator.evaluations:
         missed_gt_idxs = [
@@ -67,7 +69,7 @@ def compute_aspect_variance(evaluator: ObjectDetectionEvaluator) -> dict:
     return aspect_ratios
 
 
-def compute_size_variance(evaluator: ObjectDetectionEvaluator) -> dict:
+def compute_size_variance(evaluator: ObjectDetectionEvaluator) -> Dict:
     """Compute object size variance for MissedErrors."""
     areas = {}
     for evaluation in evaluator.evaluations:

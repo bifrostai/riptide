@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Type
+from typing import Dict, Tuple, Type
 
 import pandas as pd
 import torch
@@ -25,7 +25,7 @@ class DictLoader:
         loader.predictions_dict_file = predictions_dict_file
         return loader
 
-    def process_boxes(self, gt_dict: dict, pred_dict: dict) -> Tuple[torch.Tensor]:
+    def process_boxes(self, gt_dict: Dict, pred_dict: Dict) -> Tuple[torch.Tensor]:
         pred_bboxes = (
             pred_dict["boxes"] if len(pred_dict["boxes"]) > 0 else torch.empty((0, 4))
         )
