@@ -8,18 +8,28 @@ class Confusion(Enum):
     FALSE_POSITIVE = 2
     UNUSED = 3
 
+    @property
+    def code(self):
+        mapping = {
+            Confusion.FALSE_NEGATIVE: "FN",
+            Confusion.TRUE_POSITIVE: "TP",
+            Confusion.FALSE_POSITIVE: "FP",
+            Confusion.UNUSED: "UN",
+        }
+        return mapping[self]
+
 
 class Confusions:
     """Confusions assigned to predictions or ground truths."""
 
     def __init__(
-        self, evaluation: "ImageEvaluation", num_preds: int, num_gt: int
+        self, evaluation: "ImageEvaluation", num_preds: int, num_gts: int
     ) -> None:
         self.evaluation = evaluation
         self.num_preds = num_preds
-        self.num_gt = num_gt
+        self.num_gts = num_gts
         self.pred_confusions = [None] * num_preds
-        self.gt_confusions = [None] * num_gt
+        self.gt_confusions = [None] * num_gts
 
     @property
     def is_complete(self) -> bool:
@@ -92,7 +102,7 @@ class Confusions:
         assert (
             len([c for c in self.gt_confusions if c is Confusion.TRUE_POSITIVE])
             + len([c for c in self.gt_confusions if c is Confusion.FALSE_NEGATIVE])
-            == self.num_gt
+            == self.num_gts
         ), (
             self.evaluation,
             self.gt_confusions,
