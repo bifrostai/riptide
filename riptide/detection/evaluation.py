@@ -8,7 +8,7 @@ import torch
 from termcolor import colored
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
-from torchvision.transforms.functional import to_pil_image
+from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
 from riptide.detection.confusions import Confusion, Confusions
@@ -870,9 +870,11 @@ class ObjectDetectionEvaluator(Evaluator):
     def __init__(
         self,
         evaluations: List[ObjectDetectionEvaluation],
+        image_dir: str = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(evaluations, **kwargs)
+        self.image_dir = image_dir
         self.num_images = len(evaluations)
         self.num_errors = sum([len(e.instances) for e in evaluations])
 
@@ -1002,3 +1004,34 @@ class ObjectDetectionEvaluator(Evaluator):
 
     def get_f1(self, precision: float, recall: float):
         return (2 * precision * recall) / (precision + recall + 1e-7)
+
+    def crop_objects(self, pad: int = 0, axis: str = "pred") -> List[torch.Tensor]:
+        images: List[torch.Tensor] = [None] * len(self.evaluations)
+        num_bboxes: torch.Tensor = torch.zeros(len(self.evaluations)).long()
+        bboxes: List[torch.Tensor] = []
+        for i, e in enumerate(self.evaluations):
+            img_bboxes = e.gt_bboxes if axis == "gt" else e.pred_bboxes
+            num_bboxes[i] = img_bboxes.shape[0]
+            bboxes.append(img_bboxes)
+            images[i] = read_image(e.image_path)
+
+        combined_bboxes = torch.concat(bboxes, dim=0).long()
+        combined_bboxes[:, 2:] = (
+            combined_bboxes[:, 2:] - combined_bboxes[:, :2] + 2 * pad
+        )
+        combined_bboxes[:, :2] = combined_bboxes[:, :2] - pad
+
+        crops: List[torch.Tensor] = [None] * combined_bboxes.shape[0]
+        idx = 0
+        for i, image in enumerate(images):
+            for _ in range(num_bboxes[i]):
+                crops[idx] = crop(
+                    image,
+                    combined_bboxes[idx, 1],
+                    combined_bboxes[idx, 0],
+                    combined_bboxes[idx, 2],
+                    combined_bboxes[idx, 3],
+                )
+                idx += 1
+
+        return crops
