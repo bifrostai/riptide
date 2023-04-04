@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from termcolor import colored
@@ -21,11 +21,208 @@ from riptide.detection.errors import (
     Errors,
     LocalizationError,
     MissedError,
+    NonError,
 )
 from riptide.io.loaders import COCOLoader, DictLoader
 
 
-class ObjectDetectionEvaluation:
+class Status:
+    """A status for a prediction or ground truth."""
+
+    def __init__(
+        self,
+        state: Union[Error, Confusion],
+        score: float,
+        gt_label: Optional[int] = None,
+        pred_label: Optional[int] = None,
+        iou: Optional[float] = None,
+    ) -> None:
+        self.state = state
+        self.gt_label = gt_label
+        self.pred_label = pred_label
+        self.score = score
+        self.iou = iou or 0
+
+    @property
+    def code(self) -> str:
+        return self.state.code
+
+    def __str__(self) -> str:
+        return str(self.state.code)
+
+    def __repr__(self) -> str:
+        return (
+            f"Status(state={self.code}, gt_label={self.gt_label},"
+            f" pred_label={self.pred_label}, score={self.score}, iou={self.iou})"
+        )
+
+    def __eq__(self, other: Status) -> bool:
+        return (
+            self.state == other.state
+            and self.gt_label == other.gt_label
+            and self.pred_label == other.pred_label
+            and self.score == other.score
+            and self.iou == other.iou
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.state, self.gt_label, self.pred_label, self.score, self.iou))
+
+    def todict(self) -> Dict[str, Any]:
+        return {
+            "state": self.state.code,
+            "gt_label": self.gt_label,
+            "pred_label": self.pred_label,
+            "score": self.score,
+            "iou": self.iou,
+        }
+
+    def copy(self) -> Status:
+        return Status(
+            state=self.state,
+            score=self.score,
+            gt_label=self.gt_label,
+            pred_label=self.pred_label,
+            iou=self.iou,
+        )
+
+
+class Evaluation:
+
+    pred_errors: List[Error] = []
+    gt_errors: List[Error] = []
+
+    def __init__(
+        self,
+        idx: Union[str, int],
+        /,
+        pred_scores: torch.Tensor,
+        pred_labels: torch.Tensor,
+        gt_ids: torch.Tensor,
+        gt_labels: torch.Tensor,
+        conf_threshold: float = 0.5,
+    ) -> None:
+        self.idx = idx
+
+        self.num_preds = len(pred_labels)
+        self.num_gts = len(gt_labels)
+
+        self.pred_scores = pred_scores
+        self.pred_labels = pred_labels
+        self.gt_ids = gt_ids
+        self.gt_labels = gt_labels
+        self.conf_threshold = conf_threshold
+
+        used_mask = pred_scores >= conf_threshold
+        unused_mask = ~used_mask
+
+        pred_idxs = torch.arange(self.num_preds)
+        self.used_pred_idxs = pred_idxs[used_mask]
+        self.unused_pred_idxs = pred_idxs[unused_mask]
+
+        self.errors = Errors(
+            num_preds=self.num_preds,
+            num_gts=self.num_gts,
+        )
+
+        self.confusions = Confusions(
+            evaluation=self,
+            num_preds=self.num_preds,
+            num_gts=self.num_gts,
+        )
+
+    @property
+    def instances(self) -> List[Error]:
+        return self.pred_errors + self.gt_errors
+
+    def get_gt_status(self) -> Dict[int, Status]:
+        """Returns the statuses for the ground truths.
+
+        Returns
+        -------
+        Dict[Any, Union[Confusion, Error]]
+            A dictionary with the ground truth IDs as keys and the status as values.
+        """
+        statuses: Dict[Any, Status] = dict()
+        for idx, confusion in enumerate(self.confusions.get_gt_confusions()):
+            gt_id = self.gt_ids[idx].item()
+            gt_label = self.gt_labels[idx].item()
+            pred_label = None
+            error = self.errors.check_gt_error(idx)
+            if error is None:
+                error = confusion
+
+            statuses[gt_id] = Status(
+                state=error, gt_label=gt_label, pred_label=pred_label, score=0
+            )
+
+        return statuses
+
+    def get_pred_status(self) -> Dict[Any, List[Status]]:
+        """Returns the statuses for the predictions."""
+        statuses: Dict[Any, List[Status]] = {None: []}
+        for idx, confusion in enumerate(self.confusions.get_prediction_confusions()):
+            gt_id = None
+            pred_label = self.pred_labels[idx].item()
+            gt_label = None
+            error = self.errors.check_prediction_error(idx)
+            if error is not None:
+                gt_id = (
+                    self.gt_ids[error.gt_idx].item()
+                    if error.gt_idx is not None
+                    else None
+                )
+                gt_label = error.gt_label
+                iou = (
+                    self.ious[idx, error.gt_idx].item()
+                    if self.__class__ is ObjectDetectionEvaluation
+                    and error.gt_idx is not None
+                    else None
+                )
+            else:
+                error = confusion
+                iou = None
+
+            value = Status(
+                state=error,
+                gt_label=gt_label,
+                pred_label=pred_label,
+                score=self.pred_scores[idx].item(),
+                iou=iou,
+            )
+            if gt_id not in statuses:
+                statuses[gt_id] = [value]
+            else:
+                statuses[gt_id].append(value)
+
+        for status_list in statuses.values():
+            status_list.sort(key=lambda x: (x.iou or 0, x.score), reverse=True)
+
+        return statuses
+
+    def get_status(self) -> Dict[Any, List[Status]]:
+        """Returns the statuses for the predictions and ground truths.
+
+        Returns
+        -------
+        Dict[Any, Union[Confusion, Error]]
+            A dictionary with the ground truth IDs as keys and the status as values.
+        """
+        statuses = self.get_pred_status()
+
+        for gt_idx, status in self.get_gt_status().items():
+            if status.state is Confusion.TRUE_POSITIVE:
+                continue
+
+            if gt_idx not in statuses:
+                statuses[gt_idx] = [status]
+            else:
+                statuses[gt_idx].append(status)
+
+        return statuses
+
+
+class ObjectDetectionEvaluation(Evaluation):
     """An object that creates and stores Errors and Confusions for a particular image."""
 
     def __init__(
@@ -34,43 +231,28 @@ class ObjectDetectionEvaluation:
         pred_bboxes: torch.Tensor,
         pred_scores: torch.Tensor,
         pred_labels: torch.Tensor,
+        gt_ids: torch.Tensor,
         gt_bboxes: torch.Tensor,
         gt_labels: torch.Tensor,
         bg_iou_threshold: float = 0.1,
         fg_iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
     ) -> None:
-        self.image_path = image_path
-
+        super().__init__(
+            image_path,
+            pred_scores=pred_scores,
+            pred_labels=pred_labels,
+            gt_ids=gt_ids,
+            gt_labels=gt_labels,
+            conf_threshold=conf_threshold,
+        )
         self.bg_iou_threshold = bg_iou_threshold
         self.fg_iou_threshold = fg_iou_threshold
-        self.conf_threshold = conf_threshold
-
-        used_mask = pred_scores >= conf_threshold
-        unused_mask = ~used_mask
-
-        pred_idxs = torch.arange(len(pred_bboxes))
-        self.used_pred_idxs = pred_idxs[used_mask]
-        self.unused_pred_idxs = pred_idxs[unused_mask]
 
         self.pred_bboxes = pred_bboxes
-        self.pred_scores = pred_scores
-        self.pred_labels = pred_labels
         self.gt_bboxes = gt_bboxes
-        self.gt_labels = gt_labels
 
         self.ious = box_iou(pred_bboxes, gt_bboxes)
-
-        self.errors = Errors(
-            num_preds=len(pred_bboxes),
-            num_gt=len(gt_bboxes),
-        )
-
-        self.confusions = Confusions(
-            evaluation=self,
-            num_preds=len(pred_bboxes),
-            num_gt=len(gt_bboxes),
-        )
 
         # There are no ground truths in the image
         if len(gt_bboxes) == 0:
@@ -128,6 +310,20 @@ class ObjectDetectionEvaluation:
                     idx_of_best_gt_match,
                     label_of_best_gt_match,
                 ):
+                    true_positive = NonError(
+                        pred_idx=pred_idx,
+                        gt_idx=idx_of_best_gt_match,
+                        pred_label=pred_label,
+                        pred_bbox=pred_bbox,
+                        confidence=pred_conf,
+                        gt_label=label_of_best_gt_match,
+                        gt_bbox=gt_bboxes[idx_of_best_gt_match],
+                        iou_threshold=self.fg_iou_threshold,
+                        conf_threshold=self.conf_threshold,
+                        code="TP",
+                        confusion=Confusion.TRUE_POSITIVE,
+                    )
+                    self.errors.assign_prediction_error(true_positive)
                     self.confusions.assign_prediction_confusion(
                         pred_idx, Confusion.TRUE_POSITIVE
                     )
@@ -337,6 +533,10 @@ class ObjectDetectionEvaluation:
         # Final checks
         self.confusions.assert_valid_confusions()
 
+    @property
+    def image_path(self) -> str:
+        return self.idx
+
     def is_true_positive(
         self,
         pred_label: torch.Tensor,
@@ -416,11 +616,21 @@ class ObjectDetectionEvaluation:
             <= self.ious[:, idx_of_best_gt_match][self.used_pred_idxs].max()
         )
 
+    _pred_errors = None
+
     @property
-    def instances(self) -> List[Error]:
-        pred_errors = [error for error in self.errors.get_prediction_errors() if error]
-        gt_errors = [error for error in self.errors.get_gt_errors() if error]
-        return pred_errors + gt_errors
+    def pred_errors(self) -> List[Error]:
+        if self._pred_errors is None:
+            self._pred_errors = self.errors.get_prediction_errors()
+        return self._pred_errors
+
+    _gt_errors = None
+
+    @property
+    def gt_errors(self) -> List[Error]:
+        if self._gt_errors is None:
+            self._gt_errors = self.errors.get_gt_errors()
+        return self._gt_errors
 
     def _get_iou_color(self, value: float) -> str:
         if value < self.bg_iou_threshold:
@@ -576,6 +786,12 @@ class ObjectDetectionEvaluation:
 
 
 class Evaluator:
+    def __init__(self, evaluations: list[Evaluation], name: str = "Model") -> None:
+        self.created_datetime = datetime.now()
+        self.updated_datetime = self.created_datetime
+        self.evaluations = evaluations
+        self.name = name
+
     @classmethod
     def from_coco(
         cls,
@@ -583,6 +799,7 @@ class Evaluator:
         targets_file: str,
         image_dir: str,
         conf_threshold: float = 0.5,
+        name: str = "Model",
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -594,11 +811,15 @@ class Evaluator:
             predictions_file=predictions_file,
             image_dir=image_dir,
         )
-        return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name)
 
     @classmethod
     def from_dict(
-        cls, dict_file: str, image_dir: str, conf_threshold: float = 0.5
+        cls,
+        dict_file: str,
+        image_dir: str,
+        conf_threshold: float = 0.5,
+        name: str = "Model",
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -606,7 +827,7 @@ class Evaluator:
         else:
             raise NotImplementedError("Evaluator class not implemented")
         loader = DictLoader(dict_file, image_dir)
-        return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name)
 
     @classmethod
     def from_dicts(
@@ -615,6 +836,7 @@ class Evaluator:
         predictions_dict_file: str,
         image_dir: str,
         conf_threshold: float,
+        name: str = "Model",
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -624,7 +846,13 @@ class Evaluator:
         loader = DictLoader.from_dict_files(
             targets_dict_file, predictions_dict_file, image_dir
         )
-        return loader.load(evaluation_cls, evaluator_cls, conf_threshold)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name)
+
+    def summarize(self) -> Dict[str, any]:
+        raise NotImplementedError()
+
+    def classwise_summarize(self) -> Dict[str, any]:
+        raise NotImplementedError()
 
 
 class ObjectDetectionEvaluator(Evaluator):
@@ -637,13 +865,14 @@ class ObjectDetectionEvaluator(Evaluator):
             dictionary of predictions and targets.
     """
 
+    evaluations: List[ObjectDetectionEvaluation]
+
     def __init__(
         self,
         evaluations: List[ObjectDetectionEvaluation],
+        **kwargs: Any,
     ) -> None:
-        self.created_datetime = datetime.now()
-        self.updated_datetime = self.created_datetime
-        self.evaluations = evaluations
+        super().__init__(evaluations, **kwargs)
         self.num_images = len(evaluations)
         self.num_errors = sum([len(e.instances) for e in evaluations])
 
@@ -686,10 +915,10 @@ class ObjectDetectionEvaluator(Evaluator):
         for evaluation in self.evaluations:
             for error in evaluation.instances:
                 error_name = error.__class__.__name__
-                if hasattr(error, "gt_label"):
-                    category = getattr(error, "gt_label").item()
-                elif hasattr(error, "pred_label"):
-                    category = getattr(error, "pred_label").item()
+                if error.gt_label is not None:
+                    category = error.gt_label
+                elif error.pred_label is not None:
+                    category = error.pred_label
                 if category not in classwise_summary:
                     classwise_summary[category] = self._initialize_error_dict()
                 classwise_summary[category][error_name] += 1

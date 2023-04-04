@@ -93,7 +93,8 @@ def crop_preview(
         Cropped image tensor
     """
     bbox = bbox.long()
-    image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors, width=2)
+    if colors is not None:
+        image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors, width=2)
     image_tensor, translation = get_padded_bbox_crop(image_tensor, bbox)
 
     return image_tensor
@@ -113,7 +114,7 @@ def convex_hull(
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor]
+    Tuple[torch.Tensor, torch.Tensor]
         Convex hull and indices of bounding boxes that make up the convex hull
     """
     bboxes = bboxes.long().clone()
@@ -147,7 +148,7 @@ def get_padded_bbox_crop(
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor]
+    Tuple[torch.Tensor, torch.Tensor]
         Cropped image and translation tensor to apply to bounding boxes
     """
     hull, _ = convex_hull(bbox)
@@ -208,7 +209,7 @@ def inspect_error_confidence(
         for error in evaluation.instances:
             if not type(error) == error_type:
                 continue
-            confidence_list.append(error.confidence.item())
+            confidence_list.append(error.confidence)
 
     if len(confidence_list) == 0:
         return None
@@ -259,7 +260,7 @@ def inspect_background_error(
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
-            pred_class_int = int(error.pred_label.item())
+            pred_class_int = int(error.pred_label)
             if pred_class_int not in classwise_dict:
                 classwise_dict[pred_class_int] = []
             classwise_dict[pred_class_int].append(
@@ -267,7 +268,7 @@ def inspect_background_error(
                     "image_name": image_name,
                     "image_base64": encode_base64(image),
                     "class": pred_class_int,
-                    "confidence": round(error.confidence.item(), 2),
+                    "confidence": round(error.confidence, 2),
                     "bbox_width": width,
                     "bbox_height": height,
                     "bbox_area": area,
@@ -298,8 +299,8 @@ def inspect_classification_error(
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
-            pred_class_int = int(error.pred_label.item())
-            gt_class_int = int(error.gt_label.item())
+            pred_class_int = error.pred_label
+            gt_class_int = error.gt_label
             gt_list.append(gt_class_int)
             pred_list.append(pred_class_int)
             if gt_class_int not in classwise_dict:
@@ -309,7 +310,7 @@ def inspect_classification_error(
                     "image_name": image_name,
                     "image_base64": encode_base64(image),
                     "pred_class": pred_class_int,
-                    "confidence": round(error.confidence.item(), 2),
+                    "confidence": round(error.confidence, 2),
                 }
             )
     confusion_dict = {}
@@ -362,7 +363,7 @@ def inspect_localization_error(
         PREVIEW_SIZE (int, optional): The size of the cropped images. Defaults to 192.
     """
 
-    classwise_dict = {}
+    classwise_dict: Dict[int, List[Dict]] = {}
     gt_list, pred_list = [], []
     for evaluation in evaluator.evaluations:
         for error in evaluation.instances:
@@ -375,8 +376,8 @@ def inspect_localization_error(
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
-            pred_class_int = int(error.pred_label.item())
-            gt_class_int = int(error.gt_label.item())
+            pred_class_int = int(error.pred_label)
+            gt_class_int = int(error.gt_label)
             gt_list.append(gt_class_int)
             pred_list.append(pred_class_int)
             if pred_class_int not in classwise_dict:
@@ -395,7 +396,7 @@ def inspect_localization_error(
                     ),
                 }
             )
-    confusion_dict = {}
+    confusion_dict: Dict[Tuple[int, int], int] = {}
 
     if len(gt_list) == 0:
         return classwise_dict, None
@@ -449,8 +450,8 @@ def inspect_classification_and_localization_error(
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
-            pred_class_int = int(error.pred_label.item())
-            gt_class_int = int(error.gt_label.item())
+            pred_class_int = int(error.pred_label)
+            gt_class_int = int(error.gt_label)
             gt_list.append(gt_class_int)
             pred_list.append(pred_class_int)
             if gt_class_int not in classwise_dict:
@@ -531,8 +532,8 @@ def inspect_duplicate_error(
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
-            pred_class_int = int(error.pred_label.item())
-            gt_class_int = int(error.gt_label.item())
+            pred_class_int = int(error.pred_label)
+            gt_class_int = int(error.gt_label)
             gt_list.append(gt_class_int)
             pred_list.append(pred_class_int)
             if pred_class_int not in classwise_dict:
@@ -552,8 +553,8 @@ def inspect_duplicate_error(
                     "best_iou": round(
                         evaluation.ious[error.best_pred_idx][error.gt_idx].item(), 3
                     ),
-                    "conf": round(error.confidence.item(), 2),
-                    "best_conf": round(error.best_confidence.item(), 2),
+                    "conf": round(error.confidence, 2),
+                    "best_conf": round(error.best_confidence, 2),
                 }
             )
     confusion_dict = {}
@@ -613,7 +614,7 @@ def inspect_missed_error(
             image = to_pil_image(image_tensor)
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
-            gt_class_int = int(error.gt_label.item())
+            gt_class_int = int(error.gt_label)
             if gt_class_int not in classwise_dict:
                 classwise_dict[gt_class_int] = []
             classwise_dict[gt_class_int].append(
