@@ -77,55 +77,26 @@ pred1   3       0.47    [FP]    [LOC]   0.43
 ```
 
 ## Inspecting the changes in status of Ground Truths across different models
-To evaluate if the changes made to the model (e.g. changing model hyperparameters, changing the training datset) were successful in solving the problem (e.g. Did changing XXX help to resolve these Localization Errors? What are their status now?), we can use the `models_gt_flow` functions to identify the change in state of ground truth across two different models (note that both models need to use the same ground truth images and annotations).
+To evaluate if the changes made to the model (e.g. changing model hyperparameters, changing the training datset) were successful in solving the problem (e.g. Did changing XXX help to resolve these Localization Errors? What are their status now?), we can use the module `riptide.flow` to identify the change in state of ground truth across two different models. (Note that both models need to use the same ground truth images and annotations)
 
 The magnitude of the change in status of ground truths can be visualized overall in terms of a sankey diagram, and the individual ground truth in a specific flow (e.g. LOC to TP) can be visualized in terms of a montage.
 
-### NOTE
-
-Note that the localization error of each model as reported by the gt_flow class will be less than or equal to the actual number of localization errors. This is because the same ground truth can have both a localization error and a True Positive box drawn for it. However, in the current implementation, a ground truth bounding box can only be of a single state at any time. Therefore, if a ground truth bounding box only has a localization error drawn around the ground truth, then it obviously has a status of 'LOC', but if has both a localization error and True Positive drawn around it, then it will be considered a 'TP' by virtue of that correct bounding box drawn around it.
-
-This has implications in the visualization of the flows -- there may have been a great decrease in the LOC errors, but it may not show up in the flow as those ground truths that have a LOC error and a TP is already considered a TP, therefore no new change in status is observed by gt_flow class
-
 Below is an example of how the sankey diagram and montage of a flow can be created. Currently this code has only been tested to work for Single Class GT flows; more functionalities should be added if we want to analyse gt flows within a single class in multi class models
 
-```
-from riptide.models_gt_flow import *
+```python
+from riptide.detection.evaluation import Evaluator
+from riptide.flow import FlowVisualizer
 
-## define the relevant paths and thresholds here
+## Instantiate Evaluator instances for each model and define paths to target coco annotations and image directory
+evaluators: list[Evaluator]
+COCO_PATH: str = "/path/to/coco_annotations.json"
+IMAGE_DIR: str = "/path/to/images"
 
-print("Instantiate gt_flow class...")
-flow = gt_flow(
-    INITIAL_PRED_PATH,
-    INITIAL_PRED_CONF_THRESHOLD,
-    SECOND_PRED_PATH,
-    SECOND_PRED_CONF_THRESHOLD,
-    TARGET_PATH,
-    IMG_DIR,
-    COCO_ANNOTATIONS)
+## Instantiate FlowVisualizer
+flow = FlowVisualizer(evaluators, COCO_PATH, IMAGE_DIR)
 
-print("Instantiate Sankey Diagram...")
-flow.instantiate_sankey_diagram(
-    title_text= "Ground Truth Sankey Diagram for Single Class")
-
-print("Showing Sankey Diagram...")
-flow.sankey.show()
-
-print("Saving Sankey Diagram...")
-flow.save_sankey_diagram(
-    output_path= "sankey.png")
-
-possible_statuses = ["LOC", "MIS", "TP"]
-
-for i in range(len(possible_statuses)):
-    for j in range(len(possible_statuses)):
-        m1_status = possible_statuses[i]
-        m2_status = possible_statuses[j]
-        print(f"Saving Flow Montage for Model 1 {m1_status} to Model 2 {m2_status}...")
-        flow.save_flow(
-            m1_status= m1_status,
-            m2_status= m2_status,
-            output_path= f"{m1_status}_{m2_status}.png")
+## Show Plotly figure
+flow.visualize().show()
 ```
 
 ## Understanding Error Types
