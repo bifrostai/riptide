@@ -93,7 +93,7 @@ class DictLoader:
             )
             evaluations.append(evaluation)
 
-        return evaluator_cls(evaluations, **kwargs)
+        return evaluator_cls(evaluations, image_dir=self.image_dir, **kwargs)
 
 
 class COCOLoader:
@@ -187,4 +187,4 @@ class COCOLoader:
             )
             evaluations.append(evaluation)
 
-        return evaluator_cls(evaluations, **kwargs)
+        return evaluator_cls(evaluations, image_dir=self.image_dir, **kwargs)
