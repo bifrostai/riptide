@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union
 
 import PIL.Image as Image
 import torch
@@ -7,6 +7,7 @@ from mise_en_place.encoders import VariableLayerEncoder
 from mise_en_place.objects import COCOObjects
 from mise_en_place.projector import _Projector
 from mise_en_place.transforms import inverse_normalize, normalize
+from sklearn.cluster import DBSCAN
 from torch.nn.functional import interpolate
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
@@ -28,6 +29,7 @@ class CropProjector(_Projector):
         self.inverse_transform = inverse_normalize()
         transform = Compose([normalize()])
         self.images = images
+        self._embeddings: torch.Tensor = None
         super().__init__(
             name=name,
             output_dir=output_dir,
@@ -36,12 +38,10 @@ class CropProjector(_Projector):
             num_categories=1,
             transform=transform,
             device=device,
-            write_previews=True,
+            write_previews=False,
         )
 
     def _build_dataset(self) -> Dataset:
-        preview_size = self.preview_size
-
         class CropDataset(Dataset):
             def __init__(
                 self,
@@ -82,30 +82,21 @@ class CropProjector(_Projector):
 
         return embeddings, preview, None
 
-    def project(self, write: bool = False) -> None:
-
-        for idx in range(self.num_categories):
-            if self.write_previews:
-                embeddings, preview, labels = self._get_embeddings(idx=idx)
-            else:
-                embeddings, labels = self._get_embeddings(idx=idx)
-                preview = None
+    def get_embeddings(self) -> torch.Tensor:
+        if self._embeddings is None:
+            embeddings, _, _ = self._get_embeddings()
 
             if self.normalize_embeddings:
                 embeddings = torch.nan_to_num(
                     (embeddings - embeddings.min(dim=0)[0])
                     / (embeddings.max(dim=0)[0] - embeddings.min(dim=0)[0])
                 )
-            if write:
-                self.writer.add_embedding(
-                    embeddings,
-                    metadata=labels,
-                    label_img=preview,
-                    global_step=idx,
-                    tag=str(idx),
-                )
+            self._embeddings = embeddings
 
-        if write:
-            self.writer.close()
-        else:
-            return embeddings, preview, labels
+        return self._embeddings
+
+    def cluster(self, eps: float = 0.5, min_samples: int = 5) -> torch.Tensor:
+        embeddings = self.get_embeddings()
+        return torch.tensor(
+            DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
+        )
