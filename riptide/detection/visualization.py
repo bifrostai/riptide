@@ -12,6 +12,7 @@ from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
 from riptide.detection.confusions import Confusion, Confusions
+from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
     ClassificationAndLocalizationError,
@@ -246,8 +247,23 @@ def inspect_background_error(
         Dict[int, list]: A dictionary mapping the class id to a list of dictionaries
         containing the images and metadata of the false positives.
     """
+    crops, errors = evaluator.crop_objects()
+
+    projector = CropProjector(
+        name="smd",
+        images=crops,
+        output_dir="/home/ubuntu/sean/riptide/outputs/objects",
+        encoder_mode="preconv",
+        normalize_embeddings=True,
+        labels=[error.code if error is not None else "NON" for error in errors],
+        device=torch.device("cpu"),
+    )
+
+    clusters = projector.cluster(by_labels="BKG")
 
     classwise_dict = {}
+    pred_labels = set()
+    idx = 0
     for evaluation in evaluator.evaluations:
         for error in evaluation.instances:
             if not isinstance(error, BackgroundError):
@@ -261,6 +277,7 @@ def inspect_background_error(
             image = image.resize((PREVIEW_SIZE, PREVIEW_SIZE))
             image_name = evaluation.image_path.split("/")[-1]
             pred_class_int = int(error.pred_label)
+            pred_labels.add(pred_class_int)
             if pred_class_int not in classwise_dict:
                 classwise_dict[pred_class_int] = []
             classwise_dict[pred_class_int].append(
@@ -272,8 +289,15 @@ def inspect_background_error(
                     "bbox_width": width,
                     "bbox_height": height,
                     "bbox_area": area,
+                    "cluster": clusters[idx],
                 }
             )
+            idx += 1
+
+    for class_int in pred_labels:
+        classwise_dict[class_int] = sorted(
+            classwise_dict[class_int], key=lambda x: x["cluster"], reverse=True
+        )
     return classwise_dict
 
 

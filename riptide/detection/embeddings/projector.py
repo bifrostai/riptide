@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Tuple, Union
+from typing import Any, Iterable, List, Tuple, Union
 
 import PIL.Image as Image
 import torch
@@ -24,11 +24,15 @@ class CropProjector(_Projector):
         output_dir: str,
         encoder_mode: str,
         normalize_embeddings: bool,
+        labels: List[Any] = None,
         device: torch.device = torch.device("cpu"),
     ) -> None:
+        if labels is not None:
+            assert len(images) == len(labels), "Number of images and labels must match"
         self.inverse_transform = inverse_normalize()
         transform = Compose([normalize()])
         self.images = images
+        self.labels = labels
         self._embeddings: torch.Tensor = None
         super().__init__(
             name=name,
@@ -40,28 +44,6 @@ class CropProjector(_Projector):
             device=device,
             write_previews=False,
         )
-
-    def _build_dataset(self) -> Dataset:
-        class CropDataset(Dataset):
-            def __init__(
-                self,
-                images: List[torch.Tensor],
-                transform: Compose,
-            ) -> None:
-                self.images = images
-                self.transform = transform
-
-            def __len__(self) -> int:
-                return len(self.images)
-
-            def __getitem__(self, idx: int) -> Any:
-                return self.images[idx]
-
-            def _collate_fn(self, batch: Tuple[torch.Tensor, ...]) -> torch.Tensor:
-                thumbnails, inputs = zip(*batch)
-                return torch.stack(thumbnails, dim=0), torch.cat(inputs, dim=0)
-
-        return CropDataset(self.images, self.transform)
 
     def _get_embeddings(self, *args, **kwargs) -> tuple:
         embeddings = list()
@@ -82,7 +64,7 @@ class CropProjector(_Projector):
 
         return embeddings, preview, None
 
-    def get_embeddings(self) -> torch.Tensor:
+    def get_embeddings(self, labels: Iterable = None) -> torch.Tensor:
         if self._embeddings is None:
             embeddings, _, _ = self._get_embeddings()
 
@@ -93,10 +75,18 @@ class CropProjector(_Projector):
                 )
             self._embeddings = embeddings
 
+        if labels is not None:
+            if not isinstance(labels, Iterable):
+                labels = [labels]
+            mask = [label in labels for label in self.labels]
+            return self._embeddings[mask]
+
         return self._embeddings
 
-    def cluster(self, eps: float = 0.5, min_samples: int = 5) -> torch.Tensor:
-        embeddings = self.get_embeddings()
+    def cluster(
+        self, eps: float = 0.5, min_samples: int = 5, by_labels: List = None
+    ) -> torch.Tensor:
+        embeddings = self.get_embeddings(by_labels)
         return torch.tensor(
             DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
         )
