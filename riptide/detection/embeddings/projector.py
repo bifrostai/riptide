@@ -1,17 +1,17 @@
 import os
-from typing import Any, Iterable, List, Tuple, Union
+from typing import Any, Iterable, List
 
 import torch
-from mise_en_place.encoders import VariableLayerEncoder
-from mise_en_place.projector import _Projector
-from mise_en_place.transforms import inverse_normalize, normalize
 from sklearn.cluster import DBSCAN
 from torchvision.transforms import Compose
-from torchvision.transforms.functional import crop, pad, resize, to_tensor
+from torchvision.transforms.functional import resize
 from tqdm import tqdm
 
+from riptide.detection.embeddings.mep.encoders import VariableLayerEncoder
+from riptide.detection.embeddings.mep.transforms import inverse_normalize, normalize
 
-class CropProjector(_Projector):
+
+class CropProjector:
     def __init__(
         self,
         name: str,
