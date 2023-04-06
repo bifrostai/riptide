@@ -17,16 +17,6 @@ from riptide.detection.errors import (
     MissedError,
 )
 from riptide.detection.inspection import Inspector
-from riptide.detection.visualization import (
-    inspect_background_error,
-    inspect_classification_and_localization_error,
-    inspect_classification_error,
-    inspect_duplicate_error,
-    inspect_error_confidence,
-    inspect_localization_error,
-    inspect_missed_error,
-    inspect_true_positives,
-)
 
 ERROR_TYPES = [
     BackgroundError,

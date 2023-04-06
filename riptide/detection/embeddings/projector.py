@@ -90,6 +90,8 @@ class CropProjector(_Projector):
         self, eps: float = 0.5, min_samples: int = 5, by_labels: List = None
     ) -> torch.Tensor:
         embeddings = self.get_embeddings(by_labels)
+        if len(embeddings) == 0:
+            return torch.zeros(0, dtype=torch.long)
 
         return torch.tensor(
             DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
