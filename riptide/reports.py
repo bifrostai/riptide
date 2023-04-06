@@ -1,6 +1,6 @@
 import os
 import shutil
-from typing import List
+from typing import Dict, List
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -16,12 +16,7 @@ from riptide.detection.errors import (
     LocalizationError,
     MissedError,
 )
-from riptide.detection.visualization import (
-    inspect_background_error,
-    inspect_classification_error,
-    inspect_error_confidence,
-    inspect_missed_error,
-)
+from riptide.detection.visualization import Inspector
 
 ERROR_TYPES = [
     BackgroundError,
@@ -38,9 +33,10 @@ class HtmlReport:
         self.evaluator = evaluator
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
         self.template = self.env.get_template("template.html")
+        self.inspector = Inspector(evaluator)
 
     def get_suggestions(
-        self, overall_summary: dict, classwise_summary: dict, **kwargs
+        self, overall_summary: Dict, classwise_summary: Dict, **kwargs
     ) -> List[dict]:
         suggestions = []
         overall_errors = {
@@ -62,17 +58,17 @@ class HtmlReport:
             )
         return suggestions
 
-    def get_error_info(self) -> dict:
-        error_info = {}
-        for error_type in ERROR_TYPES:
-            error_name = error_type.__name__
-            error_info[error_name] = {}
-            error_info[error_name]["confidence_hist"] = inspect_error_confidence(
-                self.evaluator, error_type
-            )
-        return error_info
+    def get_error_info(self) -> Dict:
+        confidence_hists: Dict[str, bytes] = self.inspector.error_confidence(
+            ERROR_TYPES
+        )
+        return {
+            error_name: {"confidence_hist": confidence_hist}
+            for error_name, confidence_hist in confidence_hists.items()
+        }
 
     def render(self, output_dir: str):
+        inspector = self.inspector
         section_names = [
             "Overview",
             "BackgroundError",
@@ -81,6 +77,7 @@ class HtmlReport:
             "ClassificationAndLocalizationError",
             "DuplicateError",
             "MissedError",
+            "TruePositive",
         ]
 
         # Summary data
@@ -102,38 +99,43 @@ class HtmlReport:
         # BackgroundError data - classwise false positives
         # TODO: Visual grouping using MeP
         print("Visualizing BackgroundErrors...")
-        background_error_figs = inspect_background_error(self.evaluator)
-
-        background_error_figs = dict(
-            sorted(
-                background_error_figs.items(),
-                key=lambda x: len(x[1]),
-                reverse=True,
-            )
-        )
+        background_error_figs = inspector.background_error()
 
         # ClassificationError data - classwise confusion
         print("Visualizing ClassificationErrors...")
         (
             classification_error_figs,
             classification_error_plot,
-        ) = inspect_classification_error(self.evaluator)
+        ) = inspector.classification_error()
+
+        # LocalizationError data - classwise confusion
+        print("Visualizing LocalizationErrors...")
+        (
+            localization_error_figs,
+            localization_error_plot,
+        ) = inspector.localization_error()
+
+        # ClassificationAndLocalizationError data - classwise confusion
+        print("Visualizing ClassificationAndLocalizationError...")
+        (
+            classification_and_localization_error_figs,
+            classification_and_localization_error_plot,
+        ) = inspector.classification_and_localization_error()
+
+        # DuplicateError data - classwise confusion
+        print("Visualizing DuplicateErrors...")
+        duplicate_error_figs, duplicate_error_plot = inspector.duplicate_error()
 
         # MissedError data - classwise false negatives
-        # TODO: Visual grouping using MeP
         print("Visualizing MissedErrors...")
         missed_size_var = compute_size_variance(self.evaluator)
         missed_aspect_var = compute_aspect_variance(self.evaluator)
 
-        missed_error_figs, missed_error_plot = inspect_missed_error(self.evaluator)
+        missed_error_figs, missed_error_plot = inspector.missed_error()
 
-        missed_error_figs = dict(
-            sorted(
-                missed_error_figs.items(),
-                key=lambda x: len(x[1]),
-                reverse=True,
-            )
-        )
+        # True Positives data - to bring a balanced and unbiased view to the dataset
+        print("Visualizing TruePositives...")
+        true_positive_figs, true_positive_plot = inspector.true_positives()
 
         # Infobox suggestions
         infoboxes = self.get_suggestions(
@@ -154,10 +156,18 @@ class HtmlReport:
             background_error_figs=background_error_figs,
             classification_error_figs=classification_error_figs,
             classification_error_plot=classification_error_plot,
+            localization_error_figs=localization_error_figs,
+            localization_error_plot=localization_error_plot,
+            classification_and_localization_error_figs=classification_and_localization_error_figs,
+            classification_and_localization_error_plot=classification_and_localization_error_plot,
+            duplicate_error_figs=duplicate_error_figs,
+            # duplicate_error_plot=duplicate_error_plot,
             missed_error_figs=missed_error_figs,
             missed_error_plot=missed_error_plot,
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
+            true_positive_figs=true_positive_figs,
+            true_positive_plot=true_positive_plot,
         )
         os.makedirs(output_dir, exist_ok=True)
         with open(f"{output_dir}/report.html", "w") as f:

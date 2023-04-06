@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Type
+from typing import Dict, Tuple, Type
 
 import pandas as pd
 import torch
@@ -25,7 +25,9 @@ class DictLoader:
         loader.predictions_dict_file = predictions_dict_file
         return loader
 
-    def process_boxes(self, gt_dict: dict, pred_dict: dict) -> Tuple[torch.Tensor]:
+    def process_boxes(
+        self, gt_dict: Dict, pred_dict: Dict, start: int = 0
+    ) -> Tuple[torch.Tensor, ...]:
         pred_bboxes = (
             pred_dict["boxes"] if len(pred_dict["boxes"]) > 0 else torch.empty((0, 4))
         )
@@ -37,16 +39,24 @@ class DictLoader:
         )
         gt_bboxes = gt_dict["boxes"]
         gt_labels = gt_dict["labels"]
+        end = start + len(gt_labels)
+        gt_ids = torch.arange(start, end)
         return (
             pred_bboxes,
             pred_scores,
             pred_labels,
             gt_bboxes,
             gt_labels,
+            gt_ids,
+            end,
         )
 
     def load(
-        self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
+        self,
+        evaluation_cls: Type,
+        evaluator_cls: Type,
+        conf_threshold: float = 0.5,
+        **kwargs
     ):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if self.targets_dict_file is None and self.predictions_dict_file is None:
@@ -59,28 +69,31 @@ class DictLoader:
                 self.predictions_dict_file, map_location=device
             )
         evaluations = []
-        for file_name, targets in targets_dict.items():
+        start = 0
+        for file_name, gt in targets_dict.items():
             pred = predictions_dict[file_name]
-            gt = targets_dict[file_name]
             (
                 pred_bboxes,
                 pred_scores,
                 pred_labels,
                 gt_bboxes,
                 gt_labels,
-            ) = self.process_boxes(gt, pred)
+                gt_ids,
+                start,
+            ) = self.process_boxes(gt, pred, start)
             evaluation = evaluation_cls(
                 image_path=os.path.join(self.image_dir, file_name),
                 pred_bboxes=pred_bboxes.cpu(),
                 pred_scores=pred_scores.cpu(),
                 pred_labels=pred_labels.cpu(),
+                gt_ids=gt_ids.cpu(),
                 gt_bboxes=gt_bboxes.cpu(),
                 gt_labels=gt_labels.cpu(),
                 conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
 
-        return evaluator_cls(evaluations)
+        return evaluator_cls(evaluations, image_dir=self.image_dir, **kwargs)
 
 
 class COCOLoader:
@@ -95,7 +108,11 @@ class COCOLoader:
         self.image_dir = image_dir
 
     def load(
-        self, evaluation_cls: Type, evaluator_cls: Type, conf_threshold: float = 0.5
+        self,
+        evaluation_cls: Type,
+        evaluator_cls: Type,
+        conf_threshold: float = 0.5,
+        **kwargs
     ):
         with open(self.annotations_file, "r") as f:
             j = json.load(f)
@@ -117,14 +134,15 @@ class COCOLoader:
         )
 
         results_dict = {}
-        for file_name, bbox, category_id in target_annotations[
-            ["file_name", "bbox", "category_id"]
+        for id, file_name, bbox, category_id in target_annotations[
+            ["id", "file_name", "bbox", "category_id"]
         ].values:
             if file_name not in results_dict:
                 results_dict[file_name] = {
-                    "targets": {"boxes": [], "labels": []},
+                    "targets": {"ids": [], "boxes": [], "labels": []},
                     "predictions": {"boxes": [], "scores": [], "labels": []},
                 }
+            results_dict[file_name]["targets"]["ids"].append(id)
             results_dict[file_name]["targets"]["boxes"].append(bbox)
             results_dict[file_name]["targets"]["labels"].append(category_id)
 
@@ -133,7 +151,7 @@ class COCOLoader:
         ].values:
             if file_name not in results_dict:
                 results_dict[file_name] = {
-                    "targets": {"boxes": [], "labels": []},
+                    "targets": {"ids": [], "boxes": [], "labels": []},
                     "predictions": {"boxes": [], "scores": [], "labels": []},
                 }
             results_dict[file_name]["predictions"]["boxes"].append(bbox)
@@ -142,6 +160,7 @@ class COCOLoader:
 
         evaluations = []
         for file_name, pred_gt_dict in results_dict.items():
+            gt_ids = torch.tensor(pred_gt_dict["targets"]["ids"])
             gt_bboxes = torch.tensor(pred_gt_dict["targets"]["boxes"])
             if len(gt_bboxes) == 0:
                 gt_bboxes = torch.empty((0, 4))
@@ -161,10 +180,11 @@ class COCOLoader:
                 pred_bboxes=pred_bboxes,
                 pred_scores=pred_scores,
                 pred_labels=pred_labels,
+                gt_ids=gt_ids,
                 gt_bboxes=gt_bboxes,
                 gt_labels=gt_labels,
                 conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
 
-        return evaluator_cls(evaluations)
+        return evaluator_cls(evaluations, image_dir=self.image_dir, **kwargs)

@@ -50,7 +50,7 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -87,12 +87,81 @@
         </div>
         <div id="LocalizationError">
             <h1>LocalizationError</h1>
+
+            <h2>LocalizationError visualization</h2>
+            <p>
+                The following is a montage of the localization errors.
+            </p>
+            <div class="class-images">
+            {% for class_int, image_list in localization_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+
         </div>
         <div id="ClassificationAndLocalizationError">
             <h1>ClassificationAndLocalizationError</h1>
+            {% if classification_and_localization_error_plot is not none %}
+            <h2>ClassificationAndLocalizationError ranking</h2>
+            <p>
+                The following plot shows the distribution of classification and localization errors.
+            </p>
+            <div class="plot">
+                <img class="plot-image" src="data:image/png;base64,{{ classification_and_localization_error_plot | safe}}">
+            </div>
+            {% endif %}
+            <h2>ClassificationAndLocalizationError visualization</h2>
+            <p>
+                The following is a montage of the classification and localization errors.
+            </p>
+            <div class="class-images">
+            {% for class_int, image_list in classification_and_localization_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["pred_class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+
         </div>
         <div id="DuplicateError">
             <h1>DuplicateError</h1>
+            <h2>DuplicateError visualization</h2>
+            <p>
+                The following is a montage of the duplicate errors. White boxes indicate ground truths, green boxes indicate best predictions, and red boxes indicate duplicate predictions.
+            </p>
+            <div class="class-images">
+            {% for class_int, image_list in duplicate_error_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | IOU, Conf ({{ image_dict["iou"] }}, {{ image_dict["confidence"] }}) | Best ({{ image_dict["best_iou"] }}, {{ image_dict["best_conf"] }})</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
         </div>
         <div id="MissedError">
             <h1>MissedError</h1>
@@ -120,7 +189,6 @@
                         <div class="summary-metric-value">{{ individual_summary['recall'] }}</span></div>
                     </div>
                 {% endfor %}
-            </div>
             </div>
             <h2>Aspect ratio and size variance</h2>
             <p>
@@ -165,7 +233,41 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+        <div id="TruePositive">
+            <h1>True Positives</h1>
+            <h2>Classwise True Positives</h2>
+            <p>
+                Number of True Positives per class | number of total objects per class
+            </p>
+            <div class="summary-container">
+                {% for class_idx, individual_summary in classwise_summary.items() %}
+                    {% set true_positives = individual_summary.get("true_positives", 0) %}
+                    {% set total_count = individual_summary.get("total_count", 0) %}
+                    <div class="summary-item">
+                        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+                        <div class="summary-metric-value">{{ true_positives }} <span class="text-dark">| {{ total_count }}</span></div>
+                    </div>
+                {% endfor %}
+            </div>
+            <h2>True Positives visualization</h2>
+            <p>List of all the True Positives detections. No prediction was made below <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span>.</p>
+            <div class="class-images">
+            {% for class_int, image_list in true_positive_figs.items() %}
+                <div class="class-images-container">
+                    <div class="class-name">True Positives: Class {{ class_int }}</div>
+                    <div class="class-image-container">
+                        {% for image_dict in image_list %}
+                        <div class="class-image-wrapper">
+                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | IOU {{ image_dict["iou"] }}</span>
                         </div>
                         {% endfor %}
                     </div>

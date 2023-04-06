@@ -1,6 +1,9 @@
+from typing import Dict, List
+
 import numpy as np
 import torch
 
+from riptide.detection.errors import MissedError
 from riptide.detection.evaluation import ObjectDetectionEvaluator
 
 
@@ -27,7 +30,7 @@ def distance_size_score(
     return score
 
 
-def sort_by_crowding(evaluator: ObjectDetectionEvaluator) -> dict:
+def sort_by_crowding(evaluator: ObjectDetectionEvaluator) -> Dict:
     scores = []
     for evaluation in evaluator.evaluations:
         missed_gt_idxs = [
@@ -50,38 +53,35 @@ def sort_by_crowding(evaluator: ObjectDetectionEvaluator) -> dict:
 
 def compute_aspect_variance(evaluator: ObjectDetectionEvaluator) -> dict:
     """Compute object aspect variance for MissedErrors."""
-    aspect_ratios = {}
+    aspect_ratios: Dict[int, List[float]] = {}
     for evaluation in evaluator.evaluations:
         for error in evaluation.instances:
             error_name = error.__class__.__name__
             if error_name == "MissedError":
                 w = error.gt_bbox[2] - error.gt_bbox[0]
                 h = error.gt_bbox[3] - error.gt_bbox[1]
-                class_idx = int(error.gt_label.item())
+                class_idx = error.gt_label
                 if class_idx not in aspect_ratios:
                     aspect_ratios[class_idx] = []
                 aspect_ratios[class_idx].append(w / h)
     for class_idx, aspect_ratio_list in aspect_ratios.items():
-        aspect_ratio_list = [_.item() for _ in aspect_ratio_list]
         aspect_ratios[class_idx] = round(np.var(aspect_ratio_list), 2)
     return aspect_ratios
 
 
-def compute_size_variance(evaluator: ObjectDetectionEvaluator) -> dict:
+def compute_size_variance(evaluator: ObjectDetectionEvaluator) -> Dict:
     """Compute object size variance for MissedErrors."""
-    areas = {}
+    areas: Dict[int, List[int]] = {}
     for evaluation in evaluator.evaluations:
         for error in evaluation.instances:
-            error_name = error.__class__.__name__
-            if error_name == "MissedError":
+            if isinstance(error, MissedError):
                 area = (error.gt_bbox[2] - error.gt_bbox[0]) * (
                     error.gt_bbox[3] - error.gt_bbox[1]
                 )
-                class_idx = int(error.gt_label.item())
+                class_idx = error.gt_label
                 if class_idx not in areas:
                     areas[class_idx] = []
                 areas[class_idx].append(area)
     for class_idx, area_list in areas.items():
-        area_list = [_.item() for _ in area_list]
         areas[class_idx] = f"{np.var(area_list):.2E}"
     return areas
