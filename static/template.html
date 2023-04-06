@@ -50,7 +50,7 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
                         </div>
                         {% endfor %}
                     </div>

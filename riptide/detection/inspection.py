@@ -379,9 +379,13 @@ class Inspector:
         error_type: Type[Error],
         color: str,
         axis: int = 0,
-        get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
+        *,
         preview_size=128,
+        get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
         get_additional_metadata_func: Callable[[Error], Dict] = None,
+        bbox_attr: str = None,
+        label_attr: str = None,
+        projector_attr: str = None,
     ) -> Dict[int, List[Dict]]:
         """Computes a dictionary of plots for the confidence of given error types, classwise.
 
@@ -403,14 +407,17 @@ class Inspector:
         """
 
         errors = self.errorlist_dict.get(error_type.__name__, dict())
+        if len(errors) == 0:
+            return dict()
+
         if axis == 0:
-            bbox_attr = "gt_bbox"
-            label_attr = "gt_label"
-            projector_attr = "gt_projector"
+            bbox_attr = bbox_attr or "gt_bbox"
+            label_attr = label_attr or "gt_label"
+            projector_attr = projector_attr or "gt_projector"
         else:
-            bbox_attr = "pred_bbox"
-            label_attr = "pred_label"
-            projector_attr = "pred_projector"
+            bbox_attr = bbox_attr or "pred_bbox"
+            label_attr = label_attr or "pred_label"
+            projector_attr = projector_attr or "pred_projector"
 
         if get_bbox_func is None:
 
@@ -426,7 +433,6 @@ class Inspector:
 
         projector: CropProjector = getattr(self, projector_attr)
 
-        # HACK: Might not work for TP
         code = "TP" if error_type is NonError else error_type.code
         clusters = projector.cluster(by_labels=code)
 
@@ -574,7 +580,7 @@ class Inspector:
         """
 
         classwise_dict = self.error_classwise_dict(
-            ClassificationError, color="crimson", axis=1
+            ClassificationError, color="crimson", axis=1, label_attr="gt_label"
         )
         fig = self.error_classwise_ranking(ClassificationError)
 
@@ -615,6 +621,7 @@ class Inspector:
             axis=1,
             get_bbox_func=get_both_bboxes,
             preview_size=192,
+            label_attr="gt_label",
         )
         fig = self.error_classwise_ranking(ClassificationAndLocalizationError)
 
