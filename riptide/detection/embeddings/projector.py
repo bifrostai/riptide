@@ -65,9 +65,29 @@ class CropProjector(_Projector):
         embeddings = torch.stack(embeddings, dim=0)
         preview = torch.stack(preview, dim=0)
 
+        image_sizes = torch.tensor([image.shape[-2:] for image in self.images])
+        hw_ratios = torch.nan_to_num(image_sizes[:, 0] / image_sizes[:, 1])
+        embeddings = torch.cat([embeddings, hw_ratios.unsqueeze(1)], dim=1)
+
         return embeddings, preview, None
 
-    def get_embeddings(self, labels: Iterable = None) -> torch.Tensor:
+    def get_embeddings(
+        self, labels: Iterable = None, extend: torch.Tensor = None
+    ) -> torch.Tensor:
+        """Get embeddings for a given set of labels
+
+        Parameters
+        ----------
+        labels : Iterable, optional
+            Labels to filter by, if None, all embeddings are returned, by default None
+        extend : torch.Tensor, optional
+            Additional tensor to extend the embeddings by, by default None
+
+        Returns
+        -------
+        torch.Tensor
+            Embeddings for the given labels
+        """
         if self._embeddings is None:
             embeddings, _, _ = self._get_embeddings()
 
@@ -76,15 +96,35 @@ class CropProjector(_Projector):
                     (embeddings - embeddings.min(dim=0)[0])
                     / (embeddings.max(dim=0)[0] - embeddings.min(dim=0)[0])
                 )
+
             self._embeddings = embeddings
 
         if labels is not None:
             if not isinstance(labels, Iterable):
                 labels = [labels]
             mask = [label in labels for label in self.labels]
-            return self._embeddings[mask]
+            embeddings = self._embeddings[mask]
+        else:
+            embeddings = self._embeddings
 
-        return self._embeddings
+        if extend is not None:
+            assert extend.size(0) == embeddings.size(
+                0
+            ), "Embedding and extend must have the same number of rows"
+            if self.normalize_embeddings:
+                extend = torch.nan_to_num(
+                    (extend - extend.min(dim=0)[0])
+                    / (extend.max(dim=0)[0] - extend.min(dim=0)[0])
+                )
+            embeddings = torch.cat([embeddings, extend], dim=1)
+
+        if self.normalize_embeddings:
+            embeddings = torch.nan_to_num(
+                (embeddings - embeddings.min(dim=0)[0])
+                / (embeddings.max(dim=0)[0] - embeddings.min(dim=0)[0])
+            )
+
+        return embeddings
 
     def cluster(
         self, eps: float = 0.5, min_samples: int = 5, by_labels: List = None
