@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "riptide"
-version = "0.1.0"
+version = "0.2.0"
 description = "Bifrost Object Detection Evaluation Suite"
-authors = ["huangjoel <joel@bifrost.ai>"]
+authors = ["huangjoel <joel@bifrost.ai>", "Sean <sean_yap@bifrost.ai"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
