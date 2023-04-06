@@ -1,17 +1,12 @@
 import os
 from typing import Any, Iterable, List, Tuple, Union
 
-import PIL.Image as Image
 import torch
 from mise_en_place.encoders import VariableLayerEncoder
-from mise_en_place.objects import COCOObjects
 from mise_en_place.projector import _Projector
 from mise_en_place.transforms import inverse_normalize, normalize
 from sklearn.cluster import DBSCAN
-from torch.nn.functional import interpolate
-from torch.utils.data import DataLoader, Dataset
-from torch.utils.tensorboard import SummaryWriter
-from torchvision.transforms import Compose, RandomCrop, ToTensor
+from torchvision.transforms import Compose
 from torchvision.transforms.functional import crop, pad, resize, to_tensor
 from tqdm import tqdm
 
@@ -21,7 +16,6 @@ class CropProjector(_Projector):
         self,
         name: str,
         images: torch.Tensor,
-        output_dir: str,
         encoder_mode: str,
         normalize_embeddings: bool,
         labels: List[Any] = None,
@@ -29,20 +23,29 @@ class CropProjector(_Projector):
     ) -> None:
         if labels is not None:
             assert len(images) == len(labels), "Number of images and labels must match"
+
         self.inverse_transform = inverse_normalize()
         transform = Compose([normalize()])
         self.images = images
         self.labels = labels
         self._embeddings: torch.Tensor = None
-        super().__init__(
-            name=name,
-            output_dir=output_dir,
-            encoder_mode=encoder_mode,
-            normalize_embeddings=normalize_embeddings,
-            num_categories=1,
-            transform=transform,
-            device=device,
-            write_previews=False,
+
+        # Override __init__: No SummaryWriter
+        self.name = name
+        self.device = device
+        self.num_categories = 1
+        self.transform = transform
+        self.write_previews = False
+        self.normalize_embeddings = normalize_embeddings
+        self.encoder = VariableLayerEncoder(mode=encoder_mode).to(device)
+        self.preview_size = 32
+        self.embedding_size = self.encoder(torch.empty((1, 3, 48, 48)).to(device)).size(
+            1
+        )
+
+    def project(self):
+        raise NotImplementedError(
+            "Exporting to Tensorboard is not currently supported for CropProjector"
         )
 
     def _get_embeddings(self, *args, **kwargs) -> tuple:
@@ -87,6 +90,7 @@ class CropProjector(_Projector):
         self, eps: float = 0.5, min_samples: int = 5, by_labels: List = None
     ) -> torch.Tensor:
         embeddings = self.get_embeddings(by_labels)
+
         return torch.tensor(
             DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
         )

@@ -874,6 +874,15 @@ class Evaluator:
             self._errorlist_dict = errorlist_dict
         return self._errorlist_dict
 
+    def get_errorlist_dict(self) -> Dict[str, List[Error]]:
+        if self._errorlist_dict is None:
+            errorlist_dict = {error_type.__name__: [] for error_type in ERROR_TYPES}
+            for evaluation in self.evaluations:
+                for error in evaluation.instances:
+                    errorlist_dict[error.__class__.__name__].append(error)
+            self._errorlist_dict = errorlist_dict
+        return self._errorlist_dict
+
 
 class ObjectDetectionEvaluator(Evaluator):
     """Object Detection Evaluator class.
@@ -1004,7 +1013,11 @@ class ObjectDetectionEvaluator(Evaluator):
                 error_type.__name__: dict() for error_type in ERROR_TYPES
             }
             for evaluation in self.evaluations:
-                for error in evaluation.instances:
+                for error in (
+                    evaluation.errors.pred_errors + evaluation.errors.gt_errors
+                ):
+                    if error is None:
+                        continue
                     error_name = error.__class__.__name__
                     if evaluation.image_path not in errorlist_dict[error_name]:
                         errorlist_dict[error_name][evaluation.image_path] = []

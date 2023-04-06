@@ -64,6 +64,7 @@ def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
 
 
 class Error:
+    code = "UN"
     confusion = Confusion.UNUSED
 
     def __init__(
@@ -75,7 +76,7 @@ class Error:
         pred_bbox: torch.Tensor = None,
         gt_bbox: torch.Tensor = None,
         confidence: float = None,
-        code: str = "UN",
+        code: str = None,
     ) -> None:
         self.pred_idx = (
             pred_idx.item() if isinstance(pred_idx, torch.Tensor) else pred_idx
@@ -94,8 +95,7 @@ class Error:
         self.confidence = (
             confidence.item() if isinstance(confidence, torch.Tensor) else confidence
         )
-
-        self.code = code
+        self.code = code or self.code
 
     def __repr__(self) -> str:
         attrs = [f"{x}={getattr(self, x)}" for x in dir(self) if not x.startswith("_")]
@@ -105,6 +105,7 @@ class Error:
 
 class ClassificationError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "CLS"
 
     def __init__(
         self,
@@ -138,13 +139,13 @@ class ClassificationError(Error):
             pred_bbox=pred_bbox,
             gt_bbox=gt_bbox,
             confidence=confidence,
-            code="CLS",
         )
         self.conf_threshold = conf_threshold
 
 
 class LocalizationError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "LOC"
 
     def __init__(
         self,
@@ -190,7 +191,6 @@ class LocalizationError(Error):
             pred_bbox=pred_bbox,
             gt_bbox=gt_bbox,
             confidence=confidence,
-            code="LOC",
         )
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
@@ -198,6 +198,7 @@ class LocalizationError(Error):
 
 class ClassificationAndLocalizationError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "CLL"
 
     def __init__(
         self,
@@ -243,7 +244,6 @@ class ClassificationAndLocalizationError(Error):
             pred_bbox=pred_bbox,
             gt_bbox=gt_bbox,
             confidence=confidence,
-            code="CLL",
         )
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
@@ -251,6 +251,7 @@ class ClassificationAndLocalizationError(Error):
 
 class DuplicateError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "DUP"
 
     def __init__(
         self,
@@ -319,7 +320,6 @@ class DuplicateError(Error):
             pred_bbox=pred_bbox,
             gt_bbox=gt_bbox,
             confidence=confidence,
-            code="DUP",
         )
         self.best_pred_idx = best_pred_idx
         self.best_pred_label = (
@@ -339,6 +339,7 @@ class DuplicateError(Error):
 
 class BackgroundError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "BKG"
 
     def __init__(
         self,
@@ -364,13 +365,13 @@ class BackgroundError(Error):
             pred_label=pred_label,
             pred_bbox=pred_bbox,
             confidence=confidence,
-            code="BKG",
         )
         self.conf_threshold = conf_threshold
 
 
 class MissedError(Error):
     confusion = Confusion.FALSE_NEGATIVE
+    code = "MIS"
 
     def __init__(
         self,
@@ -383,10 +384,13 @@ class MissedError(Error):
                 f"The ground truth category must have value > 0, got {gt_label}"
             )
 
-        super().__init__(gt_idx=gt_idx, gt_label=gt_label, gt_bbox=gt_bbox, code="MIS")
+        super().__init__(gt_idx=gt_idx, gt_label=gt_label, gt_bbox=gt_bbox)
 
 
 class NonError(Error):
+    confusion = Confusion.UNUSED
+    code = "NON"
+
     def __init__(
         self,
         pred_idx: int,
