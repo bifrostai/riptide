@@ -127,7 +127,7 @@ class FlowVisualizer:
         )
         edges = edges[
             (edges["idx_source"] < edges["idx_target"])
-            & (edges["state_source"] != "UN")
+            & ~(edges["state_source"].isin(["UN", "BKG"]))
         ]
         edges["gt_ids"] = edges.apply(
             lambda row: row["gt_ids_source"] & row["gt_ids_target"], axis=1
@@ -216,7 +216,7 @@ class FlowVisualizer:
         source, target = edges[["source", "target"]].values.T.tolist()
         attrs = edges[["weight", "gt_ids", "score"]].to_dict(orient="records")
 
-        edge_labels = [f"{attr['score']} {attr['weight']}" for attr in attrs]
+        edge_labels = [f"{attr['score']:.2f}" for attr in attrs]
 
         value = [attr["weight"] for attr in attrs]
 

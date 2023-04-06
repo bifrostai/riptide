@@ -11,7 +11,7 @@ For any quantitative evaluation, you need:
 - Predictions
 
 Riptide allows you to quickly evaluate object detection models using the following API:
-```
+```python
 from riptide.detection.evaluation import ObjectDetectionEvaluator
 
 evaluator = ObjectDetectionEvaluator.from_dict(pt_dict_file) # .pt results
@@ -21,7 +21,7 @@ evaluator = ObjectDetectionEvaluator.from_coco(coco_pred_file, coco_gt_file) # c
 ### Report Generation
 Riptide supports HTML report generation using `jinja2`. Here is a minimal example of generating a report from an evaluator object:
 
-```
+```python
 from riptide.detection.evaluation import ObjectDetectionEvaluator
 from riptide.reports import HtmlReport
 
@@ -37,18 +37,18 @@ report = HtmlReport(evaluator).render("path/to/output/folder")
 
 ## Understanding Evaluations
 To obtain a summary of the predictions, use `summarize()`. This gives a breakdown of each error type, the confusion counts, and the precision, recall and F1 score.
-```
+```python
 evaluator.summarize()
 ```
 
 To obtain a classwise summary of the predictions, use `classwise_summarize()`. This gives a classwise breakdown of the above.
-```
+```python
 evaluator.classwise_summarize()
 ```
 
 ## Inspecting Individual Images
 To diagnose the error for a single image, you can access the `evaluations` attribute of the evaluator.
-```
+```python
 print(evaluator.evaluations[0])
 
 >>> ObjectDetectionEvaluation(pred=2, gt=1)
@@ -95,7 +95,7 @@ IMAGE_DIR: str = "/path/to/images"
 ## Instantiate FlowVisualizer
 flow = FlowVisualizer(evaluators, COCO_PATH, IMAGE_DIR)
 
-## Show Plotly figure
+## Show figure
 flow.visualize().show()
 ```
 
