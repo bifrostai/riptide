@@ -50,7 +50,7 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -132,7 +132,7 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["pred_class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -155,7 +155,7 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | IOU, Conf ({{ image_dict["iou"] }}, {{ image_dict["conf"] }}) | Best ({{ image_dict["best_iou"] }}, {{ image_dict["best_conf"] }})</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | IOU, Conf ({{ image_dict["iou"] }}, {{ image_dict["confidence"] }}) | Best ({{ image_dict["best_iou"] }}, {{ image_dict["best_conf"] }})</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -267,7 +267,7 @@
                         {% for image_dict in image_list %}
                         <div class="class-image-wrapper">
                             <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["conf"] }} | IOU {{ image_dict["iou"] }}</span>
+                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | IOU {{ image_dict["iou"] }}</span>
                         </div>
                         {% endfor %}
                     </div>

@@ -64,16 +64,19 @@ def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
 
 
 class Error:
+    code = "UN"
     confusion = Confusion.UNUSED
 
     def __init__(
         self,
-        pred_idx: int,
-        gt_idx: int,
-        pred_label: int,
-        confidence: float,
-        gt_label: int,
-        code: str,
+        pred_idx: int = None,
+        gt_idx: int = None,
+        pred_label: int = None,
+        gt_label: int = None,
+        pred_bbox: torch.Tensor = None,
+        gt_bbox: torch.Tensor = None,
+        confidence: float = None,
+        code: str = None,
     ) -> None:
         self.pred_idx = (
             pred_idx.item() if isinstance(pred_idx, torch.Tensor) else pred_idx
@@ -82,13 +85,17 @@ class Error:
         self.pred_label = (
             pred_label.item() if isinstance(pred_label, torch.Tensor) else pred_label
         )
-        self.confidence = (
-            confidence.item() if isinstance(confidence, torch.Tensor) else confidence
-        )
         self.gt_label = (
             gt_label.item() if isinstance(gt_label, torch.Tensor) else gt_label
         )
-        self.code = code
+
+        self.pred_bbox = pred_bbox
+        self.gt_bbox = gt_bbox
+
+        self.confidence = (
+            confidence.item() if isinstance(confidence, torch.Tensor) else confidence
+        )
+        self.code = code or self.code
 
     def __repr__(self) -> str:
         attrs = [f"{x}={getattr(self, x)}" for x in dir(self) if not x.startswith("_")]
@@ -98,6 +105,7 @@ class Error:
 
 class ClassificationError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "CLS"
 
     def __init__(
         self,
@@ -123,14 +131,21 @@ class ClassificationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(pred_idx, gt_idx, pred_label, confidence, gt_label, "CLS")
-        self.pred_bbox = pred_bbox
-        self.gt_bbox = gt_bbox
+        super().__init__(
+            pred_idx=pred_idx,
+            gt_idx=gt_idx,
+            pred_label=pred_label,
+            gt_label=gt_label,
+            pred_bbox=pred_bbox,
+            gt_bbox=gt_bbox,
+            confidence=confidence,
+        )
         self.conf_threshold = conf_threshold
 
 
 class LocalizationError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "LOC"
 
     def __init__(
         self,
@@ -168,15 +183,22 @@ class LocalizationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(pred_idx, gt_idx, pred_label, confidence, gt_label, "LOC")
-        self.pred_bbox = pred_bbox
-        self.gt_bbox = gt_bbox
+        super().__init__(
+            pred_idx=pred_idx,
+            gt_idx=gt_idx,
+            pred_label=pred_label,
+            gt_label=gt_label,
+            pred_bbox=pred_bbox,
+            gt_bbox=gt_bbox,
+            confidence=confidence,
+        )
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
 
 class ClassificationAndLocalizationError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "CLL"
 
     def __init__(
         self,
@@ -214,15 +236,22 @@ class ClassificationAndLocalizationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(pred_idx, gt_idx, pred_label, confidence, gt_label, "CLL")
-        self.pred_bbox = pred_bbox
-        self.gt_bbox = gt_bbox
+        super().__init__(
+            pred_idx=pred_idx,
+            gt_idx=gt_idx,
+            pred_label=pred_label,
+            gt_label=gt_label,
+            pred_bbox=pred_bbox,
+            gt_bbox=gt_bbox,
+            confidence=confidence,
+        )
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
 
 class DuplicateError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "DUP"
 
     def __init__(
         self,
@@ -283,9 +312,16 @@ class DuplicateError(Error):
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
 
-        super().__init__(pred_idx, gt_idx, pred_label, confidence, gt_label, "DUP")
+        super().__init__(
+            pred_idx=pred_idx,
+            gt_idx=gt_idx,
+            pred_label=pred_label,
+            gt_label=gt_label,
+            pred_bbox=pred_bbox,
+            gt_bbox=gt_bbox,
+            confidence=confidence,
+        )
         self.best_pred_idx = best_pred_idx
-        self.pred_bbox = pred_bbox
         self.best_pred_label = (
             best_pred_label.item()
             if isinstance(best_pred_label, torch.Tensor)
@@ -297,13 +333,13 @@ class DuplicateError(Error):
             if isinstance(best_confidence, torch.Tensor)
             else best_confidence
         )
-        self.gt_bbox = gt_bbox
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
 
 class BackgroundError(Error):
     confusion = Confusion.FALSE_POSITIVE
+    code = "BKG"
 
     def __init__(
         self,
@@ -324,13 +360,18 @@ class BackgroundError(Error):
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
 
-        super().__init__(pred_idx, None, pred_label, confidence, None, "BKG")
-        self.pred_bbox = pred_bbox
+        super().__init__(
+            pred_idx=pred_idx,
+            pred_label=pred_label,
+            pred_bbox=pred_bbox,
+            confidence=confidence,
+        )
         self.conf_threshold = conf_threshold
 
 
 class MissedError(Error):
     confusion = Confusion.FALSE_NEGATIVE
+    code = "MIS"
 
     def __init__(
         self,
@@ -343,11 +384,13 @@ class MissedError(Error):
                 f"The ground truth category must have value > 0, got {gt_label}"
             )
 
-        super().__init__(None, gt_idx, None, None, gt_label, "MIS")
-        self.gt_bbox = gt_bbox
+        super().__init__(gt_idx=gt_idx, gt_label=gt_label, gt_bbox=gt_bbox)
 
 
 class NonError(Error):
+    confusion = Confusion.UNUSED
+    code = "NON"
+
     def __init__(
         self,
         pred_idx: int,
@@ -390,9 +433,16 @@ class NonError(Error):
                 "Non errors must have confusion in (UNUSED, TRUE_POSITIVE), "
                 f"got {confusion}"
             )
-        super().__init__(pred_idx, gt_idx, pred_label, confidence, gt_label, code)
-        self.pred_bbox = pred_bbox
-        self.gt_bbox = gt_bbox
+        super().__init__(
+            pred_idx=pred_idx,
+            gt_idx=gt_idx,
+            pred_label=pred_label,
+            gt_label=gt_label,
+            pred_bbox=pred_bbox,
+            gt_bbox=gt_bbox,
+            confidence=confidence,
+            code=code,
+        )
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
         self.confusion = confusion

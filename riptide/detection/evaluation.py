@@ -8,7 +8,7 @@ import torch
 from termcolor import colored
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
-from torchvision.transforms.functional import to_pil_image
+from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
 from riptide.detection.confusions import Confusion, Confusions
@@ -24,6 +24,16 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.io.loaders import COCOLoader, DictLoader
+
+ERROR_TYPES = [
+    BackgroundError,
+    ClassificationError,
+    LocalizationError,
+    ClassificationAndLocalizationError,
+    DuplicateError,
+    MissedError,
+    NonError,
+]
 
 
 class Status:
@@ -791,6 +801,7 @@ class Evaluator:
         self.updated_datetime = self.created_datetime
         self.evaluations = evaluations
         self.name = name
+        self._errorlist_dict = None
 
     @classmethod
     def from_coco(
@@ -854,6 +865,15 @@ class Evaluator:
     def classwise_summarize(self) -> Dict[str, any]:
         raise NotImplementedError()
 
+    def get_errorlist_dict(self) -> Dict[str, List[Error]]:
+        if self._errorlist_dict is None:
+            errorlist_dict = {error_type.__name__: [] for error_type in ERROR_TYPES}
+            for evaluation in self.evaluations:
+                for error in evaluation.instances:
+                    errorlist_dict[error.__class__.__name__].append(error)
+            self._errorlist_dict = errorlist_dict
+        return self._errorlist_dict
+
 
 class ObjectDetectionEvaluator(Evaluator):
     """Object Detection Evaluator class.
@@ -870,9 +890,11 @@ class ObjectDetectionEvaluator(Evaluator):
     def __init__(
         self,
         evaluations: List[ObjectDetectionEvaluation],
+        image_dir: str = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(evaluations, **kwargs)
+        self.image_dir = image_dir
         self.num_images = len(evaluations)
         self.num_errors = sum([len(e.instances) for e in evaluations])
 
@@ -976,6 +998,26 @@ class ObjectDetectionEvaluator(Evaluator):
 
         return classwise_summary
 
+    def get_errorlist_dict(self) -> Dict[str, Dict[str, List[Error]]]:
+        if self._errorlist_dict is None:
+            errorlist_dict: Dict[str, Dict[str, List[Error]]] = {
+                error_type.__name__: dict() for error_type in ERROR_TYPES
+            }
+            for evaluation in self.evaluations:
+                for error in (
+                    evaluation.errors.pred_errors + evaluation.errors.gt_errors
+                ):
+                    if error is None:
+                        continue
+                    error_name = error.__class__.__name__
+                    if evaluation.image_path not in errorlist_dict[error_name]:
+                        errorlist_dict[error_name][evaluation.image_path] = []
+                    errorlist_dict[error.__class__.__name__][
+                        evaluation.image_path
+                    ].append(error)
+            self._errorlist_dict = errorlist_dict
+        return self._errorlist_dict
+
     def get_true_positives(self) -> int:
         tp = 0
         for evaluation in self.evaluations:
@@ -1002,3 +1044,45 @@ class ObjectDetectionEvaluator(Evaluator):
 
     def get_f1(self, precision: float, recall: float):
         return (2 * precision * recall) / (precision + recall + 1e-7)
+
+    def crop_objects(
+        self, pad: int = 0, axis: int = 1
+    ) -> Tuple[List[torch.Tensor], List[Error]]:
+        images: List[torch.Tensor] = [None] * len(self.evaluations)
+        num_bboxes: torch.Tensor = torch.zeros(len(self.evaluations)).long()
+        bboxes: List[torch.Tensor] = []
+        errors: List[List[Error]] = [None] * len(self.evaluations)
+
+        errors_attr = "gt_errors" if axis == 0 else "pred_errors"
+        bboxes_attr = "gt_bboxes" if axis == 0 else "pred_bboxes"
+
+        for i, e in enumerate(self.evaluations):
+            errors[i] = getattr(e.errors, errors_attr)
+            img_bboxes: torch.Tensor = getattr(e, bboxes_attr)
+
+            num_bboxes[i] = img_bboxes.shape[0]
+            bboxes.append(img_bboxes)
+
+            images[i] = read_image(e.image_path)
+
+        combined_errors = [error for error_list in errors for error in error_list]
+        combined_bboxes = torch.concat(bboxes, dim=0).long()
+        combined_bboxes[:, 2:] = (
+            combined_bboxes[:, 2:] - combined_bboxes[:, :2] + 2 * pad
+        )
+        combined_bboxes[:, :2] = combined_bboxes[:, :2] - pad
+
+        crops: List[torch.Tensor] = [None] * combined_bboxes.shape[0]
+        idx = 0
+        for i, image in enumerate(images):
+            for _ in range(num_bboxes[i]):
+                crops[idx] = crop(
+                    image,
+                    combined_bboxes[idx, 1],
+                    combined_bboxes[idx, 0],
+                    combined_bboxes[idx, 2],
+                    combined_bboxes[idx, 3],
+                )
+                idx += 1
+
+        return crops, combined_errors
