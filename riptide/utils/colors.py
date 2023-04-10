@@ -1,6 +1,9 @@
 from enum import Enum
 
-COLORS = {
+import numpy as np
+from matplotlib import colors
+
+ERROR_COLORS = {
     "BKG": {
         "name": "magenta",
         "hex": "#FF00FF",
@@ -79,17 +82,44 @@ class ErrorColor(str, Enum):
 
     @property
     def colorstr(self):
-        return COLORS[self.value]["name"]
+        return ERROR_COLORS[self.value]["name"]
 
     @property
     def hex(self):
-        return COLORS[self.value]["hex"]
+        return ERROR_COLORS[self.value]["hex"]
 
     def rgb(self, alpha: int = 0, as_tuple: bool = True):
         assert 0 <= alpha <= 255, "Alpha must be between 0 and 255"
         color = (
-            COLORS[self.value]["rgb"] + (alpha,) if alpha else COLORS[self.value]["rgb"]
+            ERROR_COLORS[self.value]["rgb"] + (alpha,)
+            if alpha
+            else ERROR_COLORS[self.value]["rgb"]
         )
         if not as_tuple:
             color = f"rgba{color}" if alpha else f"rgb{color}"
         return color
+
+
+def add_alpha(color: str, alpha: float) -> str:
+    """Adds an alpha value to a color.
+
+    Args:
+        color (str): The color to add alpha to.
+        alpha (float): The alpha value to add.
+
+    Returns:
+        str: The color with alpha.
+    """
+    rgb = colors.to_rgb(color)
+    rgba = (*rgb, alpha)
+    return colors.to_hex(rgba)
+
+
+def gradient(c1: str, c2: str, step: float, output_rgb=False):
+    # Linear interpolation from color c1 (at step=0) to c2 (step=1)
+    c1 = np.array(colors.to_rgb(c1))
+    c2 = np.array(colors.to_rgb(c2))
+    rgb = np.clip((1 - step) * c1 + step * c2, 0, 1)
+    if output_rgb:
+        return rgb
+    return colors.to_hex(rgb)

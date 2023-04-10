@@ -1,7 +1,5 @@
 import base64
 import io
-import logging
-import traceback
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
@@ -14,7 +12,6 @@ from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
-from riptide.core.colors import ErrorColor
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
@@ -27,6 +24,8 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
+from riptide.utils.colors import ErrorColor, gradient
+from riptide.utils.logging import logger
 
 PALETTE_DARKER = "#222222"
 PALETTE_LIGHT = "#FFEECC"
@@ -49,31 +48,6 @@ def setup_mpl_params():
     plt.rcParams["figure.edgecolor"] = PALETTE_LIGHT
     plt.rcParams["savefig.facecolor"] = TRANSPARENT
     plt.rcParams["savefig.edgecolor"] = PALETTE_LIGHT
-
-
-def add_alpha(color: str, alpha: float) -> str:
-    """Adds an alpha value to a color.
-
-    Args:
-        color (str): The color to add alpha to.
-        alpha (float): The alpha value to add.
-
-    Returns:
-        str: The color with alpha.
-    """
-    rgb = colors.to_rgb(color)
-    rgba = (*rgb, alpha)
-    return colors.to_hex(rgba)
-
-
-def gradient(c1: str, c2: str, step: float, output_rgb=False):
-    # Linear interpolation from color c1 (at step=0) to c2 (step=1)
-    c1 = np.array(colors.to_rgb(c1))
-    c2 = np.array(colors.to_rgb(c2))
-    rgb = np.clip((1 - step) * c1 + step * c2, 0, 1)
-    if output_rgb:
-        return rgb
-    return colors.to_hex(rgb)
 
 
 def crop_preview(
@@ -215,30 +189,6 @@ def get_both_bboxes(error: Error, bbox_attr: str):
     return torch.stack([error.gt_bbox, error.pred_bbox])
 
 
-logging.basicConfig(
-    level=logging.WARNING,
-    format="{levelname:<8} {message}",
-    style="{",
-)
-
-
-def logger():
-    def decorator(f):
-        def inner_func(*__args__, **__kwargs__):
-            try:
-                logging.info(f"Executing {f.__name__}")
-                res = f(*__args__, **__kwargs__)
-                logging.info(f"Successfully executed: {f.__name__}")
-                return res
-            except Exception as e:
-                stack_trace = "\n".join(traceback.format_exc().splitlines()[3:])
-                logging.error(f"Error in: {f.__name__}\n{stack_trace}", exc_info=False)
-
-        return inner_func
-
-    return decorator
-
-
 class Inspector:
     def __init__(self, evaluator: ObjectDetectionEvaluator):
         self.evaluator = evaluator
@@ -246,7 +196,7 @@ class Inspector:
 
         crops, errors = evaluator.crop_objects()
         self.pred_projector = CropProjector(
-            name=evaluator.name,
+            name=f"{evaluator.name} predictions",
             images=crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
@@ -256,7 +206,7 @@ class Inspector:
 
         crops, errors = evaluator.crop_objects(axis=0)
         self.gt_projector = CropProjector(
-            name=evaluator.name,
+            name=f"{evaluator.name} ground truths",
             images=crops,
             encoder_mode="preconv",
             normalize_embeddings=True,

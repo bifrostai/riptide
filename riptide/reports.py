@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from typing import Dict, List
@@ -81,7 +82,7 @@ class HtmlReport:
         ]
 
         # Summary data
-        print("Creating summaries...")
+        logging.info("Creating summaries...")
         evaluator_summary = self.evaluator.summarize()
         overall_summary = {
             "num_images": self.evaluator.num_images,
@@ -97,44 +98,43 @@ class HtmlReport:
                 classwise_summary[class_idx][metric] = round(value, 3)
 
         # BackgroundError data - classwise false positives
-        # TODO: Visual grouping using MeP
-        print("Visualizing BackgroundErrors...")
+        # print("Visualizing BackgroundErrors...")
         background_error_figs = inspector.background_error()
 
         # ClassificationError data - classwise confusion
-        print("Visualizing ClassificationErrors...")
+        # print("Visualizing ClassificationErrors...")
         (
             classification_error_figs,
             classification_error_plot,
         ) = inspector.classification_error()
 
         # LocalizationError data - classwise confusion
-        print("Visualizing LocalizationErrors...")
+        # print("Visualizing LocalizationErrors...")
         (
             localization_error_figs,
             localization_error_plot,
         ) = inspector.localization_error()
 
         # ClassificationAndLocalizationError data - classwise confusion
-        print("Visualizing ClassificationAndLocalizationError...")
+        # print("Visualizing ClassificationAndLocalizationError...")
         (
             classification_and_localization_error_figs,
             classification_and_localization_error_plot,
         ) = inspector.classification_and_localization_error()
 
         # DuplicateError data - classwise confusion
-        print("Visualizing DuplicateErrors...")
+        # print("Visualizing DuplicateErrors...")
         duplicate_error_figs, duplicate_error_plot = inspector.duplicate_error()
 
         # MissedError data - classwise false negatives
-        print("Visualizing MissedErrors...")
+        # print("Visualizing MissedErrors...")
         missed_size_var = compute_size_variance(self.evaluator)
         missed_aspect_var = compute_aspect_variance(self.evaluator)
 
         missed_error_figs, missed_error_plot = inspector.missed_error()
 
         # True Positives data - to bring a balanced and unbiased view to the dataset
-        print("Visualizing TruePositives...")
+        # print("Visualizing TruePositives...")
         true_positive_figs, true_positive_plot = inspector.true_positives()
 
         # Infobox suggestions
@@ -145,7 +145,7 @@ class HtmlReport:
             missed_aspect_var=missed_aspect_var,
         )
 
-        print("Rendering output...")
+        logging.info("Rendering output...")
         output = self.template.render(
             title="Riptide",
             section_names=section_names,

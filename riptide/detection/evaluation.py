@@ -11,7 +11,6 @@ from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
-from riptide.core.colors import ErrorColor
 from riptide.detection.confusions import Confusion, Confusions
 from riptide.detection.errors import (
     BackgroundError,
@@ -25,6 +24,7 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.io.loaders import COCOLoader, DictLoader
+from riptide.utils.colors import ErrorColor
 
 ERROR_TYPES = [
     BackgroundError,

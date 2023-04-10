@@ -6,6 +6,7 @@ from sklearn.cluster import DBSCAN
 from torchvision.transforms import Compose
 from torchvision.transforms.functional import resize
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from riptide.detection.embeddings.mep.encoders import VariableLayerEncoder
 from riptide.detection.embeddings.mep.transforms import inverse_normalize, normalize
@@ -52,15 +53,16 @@ class CropProjector:
         embeddings = list()
         preview = list()
 
-        for image in tqdm(self.images):
-            image = self.transform(image.float())
-            instance = image.unsqueeze(0)
+        with logging_redirect_tqdm():
+            for image in tqdm(self.images, desc=f"Computing embeddings ({self.name})"):
+                image = self.transform(image.float())
+                instance = image.unsqueeze(0)
 
-            with torch.no_grad():
-                embeddings.append(self.encoder(instance.to(self.device)).squeeze(0))
+                with torch.no_grad():
+                    embeddings.append(self.encoder(instance.to(self.device)).squeeze(0))
 
-            instance = resize(instance, (self.preview_size, self.preview_size))
-            preview.append(self.inverse_transform(instance.squeeze(0)))
+                instance = resize(instance, (self.preview_size, self.preview_size))
+                preview.append(self.inverse_transform(instance.squeeze(0)))
 
         embeddings = torch.stack(embeddings, dim=0)
         preview = torch.stack(preview, dim=0)
