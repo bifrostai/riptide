@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from typing import Dict, List
@@ -81,7 +82,7 @@ class HtmlReport:
         ]
 
         # Summary data
-        print("Creating summaries...")
+        logging.info("Creating summaries...")
         evaluator_summary = self.evaluator.summarize()
         overall_summary = {
             "num_images": self.evaluator.num_images,
@@ -144,7 +145,7 @@ class HtmlReport:
             missed_aspect_var=missed_aspect_var,
         )
 
-        print("Rendering output...")
+        logging.info("Rendering output...")
         output = self.template.render(
             title="Riptide",
             section_names=section_names,

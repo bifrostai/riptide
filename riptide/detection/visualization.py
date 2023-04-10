@@ -24,7 +24,7 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
-from riptide.utils.colors import ErrorColor
+from riptide.utils.colors import ErrorColor, gradient
 from riptide.utils.logging import logger
 
 PALETTE_DARKER = "#222222"
@@ -48,31 +48,6 @@ def setup_mpl_params():
     plt.rcParams["figure.edgecolor"] = PALETTE_LIGHT
     plt.rcParams["savefig.facecolor"] = TRANSPARENT
     plt.rcParams["savefig.edgecolor"] = PALETTE_LIGHT
-
-
-def add_alpha(color: str, alpha: float) -> str:
-    """Adds an alpha value to a color.
-
-    Args:
-        color (str): The color to add alpha to.
-        alpha (float): The alpha value to add.
-
-    Returns:
-        str: The color with alpha.
-    """
-    rgb = colors.to_rgb(color)
-    rgba = (*rgb, alpha)
-    return colors.to_hex(rgba)
-
-
-def gradient(c1: str, c2: str, step: float, output_rgb=False):
-    # Linear interpolation from color c1 (at step=0) to c2 (step=1)
-    c1 = np.array(colors.to_rgb(c1))
-    c2 = np.array(colors.to_rgb(c2))
-    rgb = np.clip((1 - step) * c1 + step * c2, 0, 1)
-    if output_rgb:
-        return rgb
-    return colors.to_hex(rgb)
 
 
 def crop_preview(
@@ -221,7 +196,7 @@ class Inspector:
 
         crops, errors = evaluator.crop_objects()
         self.pred_projector = CropProjector(
-            name=evaluator.name,
+            name=f"{evaluator.name} predictions",
             images=crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
@@ -231,7 +206,7 @@ class Inspector:
 
         crops, errors = evaluator.crop_objects(axis=0)
         self.gt_projector = CropProjector(
-            name=evaluator.name,
+            name=f"{evaluator.name} ground truths",
             images=crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
