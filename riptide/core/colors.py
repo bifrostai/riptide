@@ -42,6 +42,11 @@ COLORS = {
         "rgb": (0, 0, 255),
     },
     "FN": {
+        "name": "olivedrab",
+        "hex": "#6B8E23",
+        "rgb": (107, 142, 35),
+    },
+    "FP": {
         "name": "red",
         "hex": "#FF0000",
         "rgb": (255, 0, 0),
@@ -54,7 +59,7 @@ COLORS = {
 }
 
 
-class Color(str, Enum):
+class ErrorColor(str, Enum):
 
     BKG = "BKG"
     CLS = "CLS"
@@ -64,12 +69,19 @@ class Color(str, Enum):
     MIS = "MIS"
     TP = "TP"
     FN = "FN"
+    BST = "BST"
+    FP = "FP"
     WHITE = "default"
 
     @classmethod
     def _missing_(cls, value):
         return cls.WHITE
 
+    @property
+    def colorstr(self):
+        return COLORS[self.value]["name"]
+
+    @property
     def hex(self):
         return COLORS[self.value]["hex"]
 

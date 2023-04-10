@@ -11,6 +11,7 @@ from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
+from riptide.core.colors import ErrorColor
 from riptide.detection.confusions import Confusion, Confusions
 from riptide.detection.errors import (
     BackgroundError,
@@ -737,9 +738,9 @@ class ObjectDetectionEvaluation(Evaluation):
             image,
             boxes=self.pred_bboxes[tp_idxs],
             labels=[
-                f"p({int(i.item())}) TruePositive" for i in self.pred_labels[tp_idxs]
+                f"p{int(i.item())} TruePositive" for i in self.pred_labels[tp_idxs]
             ],
-            colors="lime",
+            colors=ErrorColor.TP.hex,
             width=2,
         )
 
@@ -748,7 +749,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 if isinstance(err, BackgroundError):
                     boxes = err.pred_bbox.unsqueeze(0)
                     labels = [f"p{err.pred_idx} BackgroundError"]
-                    colors = "magenta"
+                    colors = [ErrorColor.BKG.hex]
                 elif isinstance(err, ClassificationError):
                     boxes = torch.stack([err.gt_bbox, err.pred_bbox])
                     labels = [
@@ -756,11 +757,11 @@ class ObjectDetectionEvaluation(Evaluation):
                         f"p{err.pred_idx} ClassificationError"
                         f" ({err.gt_label}->{err.pred_label})",
                     ]
-                    colors = ["white", "crimson"]
+                    colors = [ErrorColor.WHITE.hex, ErrorColor.CLS.hex]
                 elif isinstance(err, LocalizationError):
                     boxes = torch.stack([err.gt_bbox, err.pred_bbox])
                     labels = ["gt", f"p{err.pred_idx} LocalizationError"]
-                    colors = ["white", "gold"]
+                    colors = [ErrorColor.WHITE.hex, ErrorColor.LOC.hex]
                 elif isinstance(err, ClassificationAndLocalizationError):
                     boxes = torch.stack([err.gt_bbox, err.pred_bbox])
                     labels = [
@@ -768,17 +769,21 @@ class ObjectDetectionEvaluation(Evaluation):
                         f"p{err.pred_idx} ClsLocError"
                         f" ({err.gt_label}->{err.pred_label})",
                     ]
-                    colors = ["white", "darkorange"]
+                    colors = [ErrorColor.WHITE.hex, ErrorColor.CLL.hex]
                 elif isinstance(err, DuplicateError):
                     boxes = torch.stack(
                         [err.gt_bbox, err.best_pred_bbox, err.pred_bbox]
                     )
                     labels = ["gt", "best", f"p{err.pred_idx} DuplicateError"]
-                    colors = ["white", "blue", "cyan"]
+                    colors = [
+                        ErrorColor.WHITE.hex,
+                        ErrorColor.BST.hex,
+                        ErrorColor.DUP.hex,
+                    ]
                 elif isinstance(err, MissedError):
                     boxes = err.gt_bbox.unsqueeze(0)
                     labels = [f"g{err.gt_idx} MissedError"]
-                    colors = ["yellowgreen"]
+                    colors = [ErrorColor.MIS.hex]
                 image = draw_bounding_boxes(
                     image,
                     boxes=boxes,
