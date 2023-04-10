@@ -679,8 +679,35 @@ class Inspector:
 
         return classwise_dict, fig
 
-    def inspect(self):
+    def inspect(self) -> Dict[str, Any]:
+        """Generate figures and plots for the errors.
 
-        for evaluation in self.evaluator.evaluations:
-            for error in evaluation.instances:
-                pass
+        Returns
+        -------
+        Dict
+            A dictionary containing the generated figures and plots.
+        """
+
+        results = dict()
+
+        results["background_error_figs"] = self.background_error()
+        (
+            results["classification_error_figs"],
+            results["classification_error_plot"],
+        ) = self.classification_error()
+        (
+            results["localization_error_figs"],
+            results["localization_error_plot"],
+        ) = self.localization_error()
+        (
+            results["classification_and_localization_error_figs"],
+            results["classification_and_localization_error_plot"],
+        ) = self.classification_and_localization_error()
+        results["duplicate_error_figs"], _ = self.duplicate_error()
+        results["missed_error_figs"], results["missed_error_plot"] = self.missed_error()
+        (
+            results["true_positive_figs"],
+            results["true_positive_plot"],
+        ) = self.true_positives()
+
+        return results

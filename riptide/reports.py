@@ -97,45 +97,12 @@ class HtmlReport:
             for metric, value in individual_summary.items():
                 classwise_summary[class_idx][metric] = round(value, 3)
 
-        # BackgroundError data - classwise false positives
-        # print("Visualizing BackgroundErrors...")
-        background_error_figs = inspector.background_error()
-
-        # ClassificationError data - classwise confusion
-        # print("Visualizing ClassificationErrors...")
-        (
-            classification_error_figs,
-            classification_error_plot,
-        ) = inspector.classification_error()
-
-        # LocalizationError data - classwise confusion
-        # print("Visualizing LocalizationErrors...")
-        (
-            localization_error_figs,
-            localization_error_plot,
-        ) = inspector.localization_error()
-
-        # ClassificationAndLocalizationError data - classwise confusion
-        # print("Visualizing ClassificationAndLocalizationError...")
-        (
-            classification_and_localization_error_figs,
-            classification_and_localization_error_plot,
-        ) = inspector.classification_and_localization_error()
-
-        # DuplicateError data - classwise confusion
-        # print("Visualizing DuplicateErrors...")
-        duplicate_error_figs, duplicate_error_plot = inspector.duplicate_error()
+        # Error data - figures and plots for each error type
+        error_fig_plots = inspector.inspect()
 
         # MissedError data - classwise false negatives
-        # print("Visualizing MissedErrors...")
         missed_size_var = compute_size_variance(self.evaluator)
         missed_aspect_var = compute_aspect_variance(self.evaluator)
-
-        missed_error_figs, missed_error_plot = inspector.missed_error()
-
-        # True Positives data - to bring a balanced and unbiased view to the dataset
-        # print("Visualizing TruePositives...")
-        true_positive_figs, true_positive_plot = inspector.true_positives()
 
         # Infobox suggestions
         infoboxes = self.get_suggestions(
@@ -145,6 +112,8 @@ class HtmlReport:
             missed_aspect_var=missed_aspect_var,
         )
 
+        error_info = self.get_error_info()
+
         logging.info("Rendering output...")
         output = self.template.render(
             title="Riptide",
@@ -152,22 +121,10 @@ class HtmlReport:
             summary=overall_summary,
             classwise_summary=classwise_summary,
             infoboxes=infoboxes,
-            error_info=self.get_error_info(),
-            background_error_figs=background_error_figs,
-            classification_error_figs=classification_error_figs,
-            classification_error_plot=classification_error_plot,
-            localization_error_figs=localization_error_figs,
-            localization_error_plot=localization_error_plot,
-            classification_and_localization_error_figs=classification_and_localization_error_figs,
-            classification_and_localization_error_plot=classification_and_localization_error_plot,
-            duplicate_error_figs=duplicate_error_figs,
-            # duplicate_error_plot=duplicate_error_plot,
-            missed_error_figs=missed_error_figs,
-            missed_error_plot=missed_error_plot,
+            error_info=error_info,
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
-            true_positive_figs=true_positive_figs,
-            true_positive_plot=true_positive_plot,
+            **error_fig_plots,
         )
         os.makedirs(output_dir, exist_ok=True)
         with open(f"{output_dir}/report.html", "w") as f:
