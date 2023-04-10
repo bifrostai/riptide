@@ -16,7 +16,7 @@ from riptide.detection.errors import (
     LocalizationError,
     MissedError,
 )
-from riptide.detection.inspection import Inspector
+from riptide.detection.visualization import Inspector
 
 ERROR_TYPES = [
     BackgroundError,

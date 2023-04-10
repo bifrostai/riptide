@@ -115,7 +115,6 @@ class FlowVisualizer:
         ]
         nodes = nodes.rename(columns={"gt_id_set": "gt_ids"})
 
-        # TODO: BKG, UN edges not collated correctly
         edges = pd.merge(
             nodes, nodes, how="cross", suffixes=("_source", "_target")
         ).rename(
