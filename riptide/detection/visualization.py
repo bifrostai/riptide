@@ -14,7 +14,7 @@ from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
-from riptide.detection.confusions import Confusion, Confusions
+from riptide.core.colors import ErrorColor
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
@@ -377,7 +377,7 @@ class Inspector:
     def error_classwise_dict(
         self,
         error_type: Type[Error],
-        color: str,
+        color: Union[str, ErrorColor, List[Union[str, ErrorColor]]],
         axis: int = 0,
         *,
         preview_size=128,
@@ -394,8 +394,8 @@ class Inspector:
         error_types : Union[Error, Iterable[Error]]
             Error types to plot confidence for
 
-        color : str
-            Color of bounding box
+        color : Union[str, ErrorColor, List[Union[str, ErrorColor]]]
+            Color(s) for the bounding box(es). Can be a single color or a list of colors
 
         axis : int, optional
             Axis to crop image on. 0 for ground truth, 1 for predictions, by default 0
@@ -409,6 +409,11 @@ class Inspector:
         errors = self.errorlist_dict.get(error_type.__name__, dict())
         if len(errors) == 0:
             return dict()
+
+        if not isinstance(color, list):
+            color = [color]
+
+        color = [c.colorstr if isinstance(c, ErrorColor) else c for c in color]
 
         if axis == 0:
             bbox_attr = bbox_attr or "gt_bbox"
@@ -559,7 +564,7 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
-        figs = self.error_classwise_dict(BackgroundError, color="magenta", axis=1)
+        figs = self.error_classwise_dict(BackgroundError, color=ErrorColor.BKG, axis=1)
         return dict(
             sorted(
                 figs.items(),
@@ -580,7 +585,7 @@ class Inspector:
         """
 
         classwise_dict = self.error_classwise_dict(
-            ClassificationError, color="crimson", axis=1, label_attr="gt_label"
+            ClassificationError, color=ErrorColor.CLS, axis=1, label_attr="gt_label"
         )
         fig = self.error_classwise_ranking(ClassificationError)
 
@@ -597,7 +602,7 @@ class Inspector:
 
         classwise_dict = self.error_classwise_dict(
             LocalizationError,
-            color=["white", "gold"],
+            color=[ErrorColor.WHITE, ErrorColor.LOC],
             axis=1,
             get_bbox_func=get_both_bboxes,
             preview_size=192,
@@ -617,7 +622,7 @@ class Inspector:
         """
         classwise_dict = self.error_classwise_dict(
             ClassificationAndLocalizationError,
-            color=["white", "darkorange"],
+            color=[ErrorColor.WHITE, ErrorColor.CLL],
             axis=1,
             get_bbox_func=get_both_bboxes,
             preview_size=192,
@@ -654,7 +659,7 @@ class Inspector:
 
         classwise_dict = self.error_classwise_dict(
             DuplicateError,
-            color=["white", "lime", "red"],
+            color=[ErrorColor.WHITE, ErrorColor.TP, ErrorColor.DUP],
             axis=1,
             get_bbox_func=get_bbox_func,
             preview_size=192,
@@ -682,7 +687,7 @@ class Inspector:
             containing the images and metadata of the false positives.
         """
         classwise_dict = self.error_classwise_dict(
-            MissedError, color="yellowgreen", axis=0
+            MissedError, color=ErrorColor.MIS, axis=0
         )
         classwise_dict = dict(
             sorted(
@@ -706,7 +711,10 @@ class Inspector:
             containing the images and metadata of the false positives.
         """
         classwise_dict = self.error_classwise_dict(
-            NonError, color=["white", "lime"], axis=1, get_bbox_func=get_both_bboxes
+            NonError,
+            color=[ErrorColor.WHITE, ErrorColor.TP],
+            axis=1,
+            get_bbox_func=get_both_bboxes,
         )
         classwise_dict = dict(
             sorted(
