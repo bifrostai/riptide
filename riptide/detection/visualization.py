@@ -1,7 +1,5 @@
 import base64
 import io
-import logging
-import traceback
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
@@ -14,7 +12,6 @@ from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 
-from riptide.core.colors import ErrorColor
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
@@ -27,6 +24,8 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
+from riptide.utils.colors import ErrorColor
+from riptide.utils.logging import logger
 
 PALETTE_DARKER = "#222222"
 PALETTE_LIGHT = "#FFEECC"
@@ -213,30 +212,6 @@ def encode_base64(input: Any) -> bytes:
 
 def get_both_bboxes(error: Error, bbox_attr: str):
     return torch.stack([error.gt_bbox, error.pred_bbox])
-
-
-logging.basicConfig(
-    level=logging.WARNING,
-    format="{levelname:<8} {message}",
-    style="{",
-)
-
-
-def logger():
-    def decorator(f):
-        def inner_func(*__args__, **__kwargs__):
-            try:
-                logging.info(f"Executing {f.__name__}")
-                res = f(*__args__, **__kwargs__)
-                logging.info(f"Successfully executed: {f.__name__}")
-                return res
-            except Exception as e:
-                stack_trace = "\n".join(traceback.format_exc().splitlines()[3:])
-                logging.error(f"Error in: {f.__name__}\n{stack_trace}", exc_info=False)
-
-        return inner_func
-
-    return decorator
 
 
 class Inspector:
