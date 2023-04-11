@@ -20,9 +20,9 @@ ERROR_COLORS = {
         "rgb": (255, 215, 0),
     },
     "CLL": {
-        "name": "darkorange",
-        "hex": "#FF8C00",
-        "rgb": (255, 215, 0),
+        "name": "orangered",
+        "hex": "#FF4500",
+        "rgb": (255, 69, 0),
     },
     "DUP": {
         "name": "cyan",
@@ -45,9 +45,9 @@ ERROR_COLORS = {
         "rgb": (0, 0, 255),
     },
     "FN": {
-        "name": "olivedrab",
-        "hex": "#6B8E23",
-        "rgb": (107, 142, 35),
+        "name": "red",
+        "hex": "#FF0000",
+        "rgb": (255, 0, 0),
     },
     "FP": {
         "name": "red",
