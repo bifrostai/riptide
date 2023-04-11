@@ -24,6 +24,7 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
+from riptide.report.section import Content, ContentType, Section
 from riptide.utils.colors import ErrorColor, gradient
 from riptide.utils.logging import logger
 
@@ -190,9 +191,29 @@ def get_both_bboxes(error: Error, bbox_attr: str):
 
 
 class Inspector:
-    def __init__(self, evaluator: ObjectDetectionEvaluator):
+    def __init__(
+        self,
+        evaluators: Union[ObjectDetectionEvaluator, List[ObjectDetectionEvaluator]],
+    ):
+        if isinstance(evaluators, list):
+            assert (
+                len({e.image_dir for e in evaluators}) == 1
+            ), "Models should be evaluated on the same dataset."
+        else:
+            evaluators = [evaluators]
+
+        self.evaluators = evaluators
+        evaluator = evaluators[0]
         self.evaluator = evaluator
-        self.errorlist_dict = self.evaluator.get_errorlist_dict()
+        self.errorlist_dict = evaluator.get_errorlist_dict()
+
+        self.num_images = evaluator.num_images
+        self.conf_threshold = round(evaluator.evaluations[0].conf_threshold, 2)
+        self.image_dir = evaluator.image_dir
+        self.iou_threshold = (
+            round(evaluator.evaluations[0].bg_iou_threshold, 2),
+            round(evaluator.evaluations[0].fg_iou_threshold, 2),
+        )
 
         crops, errors = evaluator.crop_objects()
         self.pred_projector = CropProjector(
@@ -234,7 +255,91 @@ class Inspector:
         ax.set_ylabel("Number of Occurences")
         return encode_base64(fig)
 
+    def summary(self) -> Section:
+        content = [
+            {
+                "No. of Images": self.num_images,
+                "Conf. Threshold": self.conf_threshold,
+                "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
+            },
+            [None] * len(self.evaluators),
+        ]
+        for i, evaluator in enumerate(self.evaluators):
+            summary = evaluator.summarize()
+
+            counts = {
+                "TP": summary.get("true_positives", 0),
+                "FP": summary.get("false_positives", 0),
+                "FN": summary.get("false_negatives", 0),
+                "MIS": summary.get("MissedError", 0),
+                "BKG": summary.get("BackgroundError", 0),
+                "CLS": summary.get("ClassificationError", 0),
+                "LOC": summary.get("LocalizationError", 0),
+                "CLL": summary.get("ClassificationAndLocalizationError", 0),
+                "DUP": summary.get("DuplicateError", 0),
+            }
+            counts["FN"] -= counts["MIS"]
+            counts["FP"] -= sum(
+                counts[code] for code in ["BKG", "CLS", "LOC", "CLL", "DUP"]
+            )
+
+            opacity = 0.8
+            gt_bar = [
+                (ErrorColor(code).rgb(opacity, False), counts[code])
+                for code in ["TP", "MIS", "FN"]
+            ]
+
+            pred_bar = [
+                (ErrorColor(code).rgb(opacity, False), counts[code])
+                for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
+            ]
+
+            content[1][i] = (
+                evaluator.name,
+                {
+                    "Precision": round(summary["precision"], 2),
+                    "Recall": round(summary["recall"], 2),
+                    "F1": round(summary["f1"], 2),
+                    "Unused": summary["unused"],
+                    "Ground Truths": {
+                        "total": summary["total_count"],
+                        "bar": [v for v in gt_bar if v[1] > 0],
+                    },
+                    "Predictions": {
+                        "total": summary["true_positives"] + summary["false_positives"],
+                        "bar": [v for v in pred_bar if v[1] > 0],
+                    },
+                },
+            )
+
+        section = Section(
+            id="Overview",
+            contents=[Content(type=ContentType.OVERVIEW, content=content)],
+        )
+
+        return section
+
     @logger()
+    def overview(self) -> dict:
+
+        evaluator_summary = self.evaluator.summarize()
+        overall_summary = {
+            "num_images": self.evaluator.num_images,
+            "conf_threshold": self.evaluator.evaluations[0].conf_threshold,
+            "bg_iou_threshold": self.evaluator.evaluations[0].bg_iou_threshold,
+            "fg_iou_threshold": self.evaluator.evaluations[0].fg_iou_threshold,
+        }
+        overall_summary.update({k: round(v, 3) for k, v in evaluator_summary.items()})
+
+        summary_section = self.summary()
+
+        classwise_summary = self.evaluator.classwise_summarize()
+        for class_idx, individual_summary in classwise_summary.items():
+            for metric, value in individual_summary.items():
+                classwise_summary[class_idx][metric] = round(value, 3)
+
+        return overall_summary, classwise_summary, summary_section
+
     def error_confidence(
         self, error_types: Union[Type[Error], Iterable[Type[Error]]]
     ) -> Dict[str, bytes]:
@@ -275,7 +380,6 @@ class Inspector:
 
         return confidence_hists
 
-    @logger()
     def boxplot(self, classwise_dict: Dict[int, List[Dict]]) -> bytes:
         """Computes a dictionary of plots for the confidence of given error types.
 
@@ -515,12 +619,24 @@ class Inspector:
             containing the images and metadata of the false positives.
         """
         figs = self.error_classwise_dict(BackgroundError, color=ErrorColor.BKG, axis=1)
+
         return dict(
             sorted(
                 figs.items(),
                 key=lambda x: len(x[1]),
                 reverse=True,
             )
+        )
+
+        return Section(
+            id=BackgroundError.__name__,
+            title="Background Errors",
+            description="""
+            List of all the false positive detections that are above the <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> but do not pass the <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span>.
+            """,
+            contents=[
+                Content(type=ContentType.IMAGES, header="Visualizations", content=figs)
+            ],
         )
 
     @logger()
@@ -541,6 +657,23 @@ class Inspector:
 
         return classwise_dict, fig
 
+        return Section(
+            id=ClassificationError.__name__,
+            title="Classification Errors",
+            description="""
+            The following plot shows the distribution of classification errors.
+            """,
+            contents=[
+                Content(type=ContentType.RANKING, header="Ranking", content=fig),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    content=classwise_dict,
+                ),
+            ],
+        )
+
+    @logger()
     def localization_error(self) -> Tuple[Dict[int, Dict], bytes]:
         """Saves the LocalizationErrors of the evaluator to the given output directory.
 
@@ -561,6 +694,7 @@ class Inspector:
 
         return classwise_dict, fig
 
+    @logger()
     def classification_and_localization_error(self) -> Tuple[Dict[int, Dict], bytes]:
         """Saves the ClassificationAndLocalizationErrors of the evaluator to the given output directory.
 
@@ -582,6 +716,7 @@ class Inspector:
 
         return classwise_dict, fig
 
+    @logger()
     def duplicate_error(self) -> Tuple[Dict[int, Dict], bytes]:
         """Saves the DuplicateErrors of the evaluator to the given output directory.
 
@@ -627,6 +762,7 @@ class Inspector:
 
         return classwise_dict, fig
 
+    @logger()
     def missed_error(self) -> Tuple[Dict[int, Dict], bytes]:
         """Saves the MissedErrors of the evaluator to the given output directory.
 
@@ -651,6 +787,7 @@ class Inspector:
 
         return classwise_dict, fig
 
+    @logger()
     def true_positives(self) -> Tuple[Dict[int, Dict], bytes]:
         """Saves the TruePositives of the evaluator to the given output directory.
 
@@ -679,6 +816,7 @@ class Inspector:
 
         return classwise_dict, fig
 
+    @logger()
     def inspect(self) -> Dict[str, Any]:
         """Generate figures and plots for the errors.
 
