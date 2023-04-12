@@ -207,33 +207,53 @@ class Inspector:
         self.evaluators = evaluators
         evaluator = evaluators[0]
         self.evaluator = evaluator
-        self.errorlist_dict = evaluator.get_errorlist_dict()
+        self.errorlist_dicts = [
+            evaluator.get_errorlist_dict() for evaluator in evaluators
+        ]
 
         self.num_images = evaluator.num_images
-        self.conf_threshold = round(evaluator.evaluations[0].conf_threshold, 2)
         self.image_dir = evaluator.image_dir
+        # NOTE: Assumes all models have the same conf_threshold and iou_threshold
+        self.conf_threshold = round(evaluator.evaluations[0].conf_threshold, 2)
         self.iou_threshold = (
             round(evaluator.evaluations[0].bg_iou_threshold, 2),
             round(evaluator.evaluations[0].fg_iou_threshold, 2),
         )
 
-        crops, errors = evaluator.crop_objects()
+        pred_crops: List[torch.Tensor] = []
+        pred_errors: List[List[Error]] = []
+        gt_crops: List[torch.Tensor] = []
+        gt_errors: List[List[Error]] = []
+        for evaluator in evaluators:
+            model_crops, model_errors = evaluator.crop_objects()
+            pred_crops.extend(model_crops)
+            pred_errors.append(model_errors)
+            model_crops, model_errors = evaluator.crop_objects(axis=0)
+            gt_crops.extend(model_crops)
+            gt_errors.append(model_errors)
+
         self.pred_projector = CropProjector(
-            name=f"{evaluator.name} predictions",
-            images=crops,
+            name=f"Predictions",
+            images=pred_crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=[error.code if error is not None else "NON" for error in errors],
+            labels=[
+                (i, error.code) if error is not None else "NON"
+                for i, model_errors in enumerate(pred_errors)
+                for error in model_errors
+            ],
             device=torch.device("cpu"),
         )
-
-        crops, errors = evaluator.crop_objects(axis=0)
         self.gt_projector = CropProjector(
-            name=f"{evaluator.name} ground truths",
-            images=crops,
+            name=f"Ground truths",
+            images=gt_crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=[error.code if error is not None else "NON" for error in errors],
+            labels=[
+                (i, error.code) if error is not None else "NON"
+                for i, model_errors in enumerate(gt_errors)
+                for error in model_errors
+            ],
             device=torch.device("cpu"),
         )
 
@@ -322,7 +342,7 @@ class Inspector:
         return section
 
     @logger()
-    def overview(self) -> dict:
+    def overview(self) -> Tuple[dict, dict, Section]:
 
         evaluator_summary = self.evaluator.summarize()
         overall_summary = {
@@ -346,7 +366,9 @@ class Inspector:
         return overall_summary, classwise_summary, summary_section
 
     def error_confidence(
-        self, error_types: Union[Type[Error], Iterable[Type[Error]]]
+        self,
+        error_types: Union[Type[Error], Iterable[Type[Error]]],
+        evaluator_id: int = 0,
     ) -> Dict[str, bytes]:
         """Computes a dictionary of plots for the confidence of given error types.
 
@@ -367,9 +389,9 @@ class Inspector:
         confidence_lists = {
             error_type.__name__: [
                 error.confidence
-                for errors in self.errorlist_dict.get(
-                    error_type.__name__, dict()
-                ).values()
+                for errors in self.errorlist_dicts[evaluator_id]
+                .get(error_type.__name__, dict())
+                .values()
                 for error in errors
                 if error.confidence is not None
             ]
@@ -439,6 +461,7 @@ class Inspector:
         color: Union[str, ErrorColor, List[Union[str, ErrorColor]]],
         axis: int = 0,
         *,
+        evaluator_ids: List[int] = 0,
         preview_size=128,
         bbox_attr: str = None,
         label_attr: str = None,
@@ -490,10 +513,13 @@ class Inspector:
         Dict[str, Dict[str, bytes]]
             Dictionary of plots for each error type, classwise
         """
+        assert not isinstance(evaluator_ids, Iterable), "Only one evaluator id allowed"
 
-        errors = self.errorlist_dict.get(error_type.__name__, dict())
+        errors = self.errorlist_dicts[evaluator_ids].get(error_type.__name__, dict())
         if len(errors) == 0:
             return dict()
+
+        evaluator_ids = [evaluator_ids]
 
         if not isinstance(color, list):
             color = [color]
@@ -533,7 +559,12 @@ class Inspector:
         projector: CropProjector = getattr(self, projector_attr)
 
         code = "TP" if error_type is NonError else error_type.code
-        clusters = projector.cluster(by_labels=code)
+        cluster_labels = {(i, code) for i in evaluator_ids}
+
+        def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
+            return [label in cluster_labels for label in labels]
+
+        clusters = projector.cluster(label_mask_func=cluster_filter)
 
         classwise_dict: Dict[int, Tuple[str, List[Dict]]] = {}
         label_set = set()
@@ -953,5 +984,56 @@ class Inspector:
             results["true_positive_figs"],
             results["true_positive_plot"],
         ) = self.true_positives()
+
+        return results
+
+    @logger()
+    def compare_background_errors(self) -> Section:
+        """Saves the BackgroundErrors (false positives) of the evaluators to the given
+        output directory.
+
+        Returns
+        -------
+        Dict[int, List]
+            A dictionary mapping the class id to a list of dictionaries
+            containing the images and metadata of the false positives.
+        """
+        figs = [
+            self.error_classwise_dict(
+                BackgroundError, color=ErrorColor.BKG, axis=1, evaluator_ids=idx
+            )
+            for idx in range(len(self.evaluators))
+        ]
+
+        return Section(
+            id="BackgroundError",
+            title="Background Errors",
+            description=f"""
+            List of all the false positive detections with confidence above the <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span> but do not pass the <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span>.
+            """,
+            contents=[
+                Content(
+                    type=ContentType.IMAGES,
+                    header=f"Errors in {self.evaluators[i].name}",
+                    content=fig,
+                )
+                for i, fig in enumerate(figs)
+            ],
+        )
+
+    @logger()
+    def compare(self) -> Dict[str, Section]:
+        """Generate figures and plots for the errors.
+
+        Returns
+        -------
+        Dict
+            A dictionary containing the generated figures and plots.
+        """
+
+        results = dict()
+
+        overall_summary, classwise_summary, results["overview"] = self.overview()
+        results["background_errors"] = self.compare_background_errors()
 
         return results

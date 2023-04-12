@@ -1,5 +1,5 @@
 import os
-from typing import Any, Iterable, List
+from typing import Any, Callable, Iterable, List
 
 import torch
 from sklearn.cluster import DBSCAN
@@ -74,7 +74,9 @@ class CropProjector:
         return embeddings, preview, None
 
     def get_embeddings(
-        self, labels: Iterable = None, extend: torch.Tensor = None
+        self,
+        label_mask_func: Callable[[list], List[bool]] = None,
+        extend: torch.Tensor = None,
     ) -> torch.Tensor:
         """Get embeddings for a given set of labels
 
@@ -101,10 +103,8 @@ class CropProjector:
 
             self._embeddings = embeddings
 
-        if labels is not None:
-            if not isinstance(labels, Iterable):
-                labels = [labels]
-            mask = [label in labels for label in self.labels]
+        if label_mask_func is not None:
+            mask = label_mask_func(self.labels)
             embeddings = self._embeddings[mask]
         else:
             embeddings = self._embeddings
@@ -129,9 +129,12 @@ class CropProjector:
         return embeddings
 
     def cluster(
-        self, eps: float = 0.5, min_samples: int = 5, by_labels: List = None
+        self,
+        eps: float = 0.5,
+        min_samples: int = 5,
+        label_mask_func: Callable[[list], List[bool]] = None,
     ) -> torch.Tensor:
-        embeddings = self.get_embeddings(by_labels)
+        embeddings = self.get_embeddings(label_mask_func)
         if len(embeddings) == 0:
             return torch.zeros(0, dtype=torch.long)
 

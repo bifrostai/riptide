@@ -1,0 +1,31 @@
+{% from "section.html" import render_section %}
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8">
+ <title>{{ title }}</title>
+ <link href='http://fonts.googleapis.com/css?family=Lato:100,300,400,700,900' rel='stylesheet' type='text/css'>
+ <link href='http://fonts.googleapis.com/css?family=Fira+Code:400' rel='stylesheet' type='text/css'>
+ <link rel="icon" type="image/png" href="https://cdn.sanity.io/images/p86pglis/production/c7435e346bfd6cb876a502467f23766b4b961279-34x34.png?w=256&h=256">
+ <style type="text/css">
+    {% include "style.css" %}
+ </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="title"><span class="gradient">Riptide</span><span class="light">Report</span></h1>
+            <span class="subtitle">v0.2.0 | <a href="https://gitlab.com/bifrost-core/ai-team/riptide">source</a></span>
+        </div>
+        <div class="sidebar-items">
+        {% for id, name in section_names.items() %}
+            <a class="sidebar-button" href="#{{ id }}">{{ name }}</a>
+        {% endfor %}
+        </div>
+    </div>
+    <div class="main">
+        {{ render_section(overview) }}
+        {{ render_section(background_errors)}}
+    </div>
+</body>
+</html>
