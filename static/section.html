@@ -70,7 +70,7 @@
 
 {%- macro render_images(images) -%}
 <div class="class-images">
-    {%- for class_info, image_list in images -%}
+    {%- for _, (class_info, image_list) in images.items() -%}
         <div class="class-images-container">
             <div class="class-name">{{ class_info }}</div>
             <div class="class-image-container">

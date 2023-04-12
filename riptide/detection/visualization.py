@@ -338,6 +338,9 @@ class Inspector:
             for metric, value in individual_summary.items():
                 classwise_summary[class_idx][metric] = round(value, 3)
 
+        self.overall_summary = overall_summary
+        self.classwise_summary = classwise_summary
+
         return overall_summary, classwise_summary, summary_section
 
     def error_confidence(
@@ -380,7 +383,7 @@ class Inspector:
 
         return confidence_hists
 
-    def boxplot(self, classwise_dict: Dict[int, List[Dict]]) -> bytes:
+    def boxplot(self, classwise_dict: Dict[int, Tuple[str, List[Dict]]]) -> bytes:
         """Computes a dictionary of plots for the confidence of given error types.
 
         Arguments
@@ -397,7 +400,7 @@ class Inspector:
         setup_mpl_params()
         fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
         area_info = {}
-        for class_idx, info_dict in classwise_dict.items():
+        for class_idx, (_, info_dict) in classwise_dict.items():
             areas = [m["bbox_area"] for m in info_dict]
             area_info[class_idx] = areas
 
@@ -435,12 +438,14 @@ class Inspector:
         axis: int = 0,
         *,
         preview_size=128,
-        get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
-        get_additional_metadata_func: Callable[[Error], Dict] = None,
         bbox_attr: str = None,
         label_attr: str = None,
         projector_attr: str = None,
-    ) -> Dict[int, List[Dict]]:
+        get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
+        get_additional_metadata_func: Callable[[Error], dict] = None,
+        get_label_func: Callable[[int], str] = None,
+        add_caption_func: Callable[[dict], dict] = None,
+    ) -> Dict[int, Tuple[str, List[Dict]]]:
         """Computes a dictionary of plots for the confidence of given error types, classwise.
 
         Arguments
@@ -451,8 +456,32 @@ class Inspector:
         color : Union[str, ErrorColor, List[Union[str, ErrorColor]]]
             Color(s) for the bounding box(es). Can be a single color or a list of colors
 
-        axis : int, optional
-            Axis to crop image on. 0 for ground truth, 1 for predictions, by default 0
+        axis : int, default=0
+            Axis to crop image on. 0 for ground truth, 1 for predictions
+
+        preview_size : int, default=128
+            Size of the preview image
+
+        bbox_attr : str, default=None
+            Attribute name for the bounding box. If None, attribute is determined by `axis`
+
+        label_attr : str, default=None
+            Attribute name for the label. If None, attribute is determined by `axis`
+
+        projector_attr : str, default=None
+            Attribute name for the projector. If None, attribute is determined by `axis`
+
+        get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], default=None
+            Function to get the bounding box from the error, by default a function that returns the bounding box specified by `bbox_attr`
+
+        get_additional_metadata_func : Callable[[Error], dict], default=None
+            Function to get additional metadata from an error, by default a function that returns an empty dictionary
+
+        get_label_func : Callable[[int], str], default=None
+            Function to get the label from the class index, by default a function that returns the class index as a string
+
+        add_caption_func : Callable[[dict], dict], default=None
+            Function to add a caption to the metadata, by default a function that returns the metadata as is
 
         Returns
         -------
@@ -485,17 +514,26 @@ class Inspector:
                 assert isinstance(t, torch.Tensor), f"{bbox_attr} is not a tensor"
                 return t.unsqueeze(0)
 
-        if get_additional_metadata_func is None:
+        get_additional_metadata_func = get_additional_metadata_func or (
+            lambda error: dict()
+        )
+        get_label_func = get_label_func or (lambda label: f"Predicted: Class {label}")
 
-            def get_additional_metadata_func(error: Error) -> Dict:
-                return dict()
+        if add_caption_func is None:
+
+            def add_caption_func(metadata: dict) -> dict:
+                metadata["caption"] = (
+                    f"{ metadata['image_name'] } | Conf { metadata['confidence'] } |"
+                    f" W{ metadata['bbox_width'] } | H{ metadata['bbox_height'] }"
+                )
+                return metadata
 
         projector: CropProjector = getattr(self, projector_attr)
 
         code = "TP" if error_type is NonError else error_type.code
         clusters = projector.cluster(by_labels=code)
 
-        classwise_dict: Dict[int, List[Dict]] = {}
+        classwise_dict: Dict[int, Tuple[str, List[Dict]]] = {}
         label_set = set()
         idx = 0
         for image_path, image_errors in errors.items():
@@ -524,7 +562,7 @@ class Inspector:
                     encoded_crop = None
 
                 if label not in classwise_dict:
-                    classwise_dict[label] = []
+                    classwise_dict[label] = (get_label_func(label), [])
 
                 confidence = (
                     round(error.confidence, 2) if error.confidence is not None else None
@@ -540,27 +578,27 @@ class Inspector:
                     else None
                 )
 
-                classwise_dict[label].append(
-                    {
-                        "image_name": image_name,
-                        "image_base64": encoded_crop,
-                        "pred_class": error.pred_label,
-                        "gt_class": error.gt_label,
-                        "confidence": confidence,
-                        "bbox_width": width,
-                        "bbox_height": height,
-                        "bbox_area": area,
-                        "iou": iou,
-                        "cluster": clusters[idx],
-                        **get_additional_metadata_func(error),
-                    }
+                classwise_dict[label][1].append(
+                    add_caption_func(
+                        {
+                            "image_name": image_name,
+                            "image_base64": encoded_crop,
+                            "pred_class": error.pred_label,
+                            "gt_class": error.gt_label,
+                            "confidence": confidence,
+                            "bbox_width": width,
+                            "bbox_height": height,
+                            "bbox_area": area,
+                            "iou": iou,
+                            "cluster": clusters[idx],
+                            **get_additional_metadata_func(error),
+                        }
+                    )
                 )
                 idx += 1
 
         for label in label_set:
-            classwise_dict[label] = sorted(
-                classwise_dict[label], key=lambda x: x["cluster"], reverse=True
-            )
+            classwise_dict[label][1].sort(key=lambda x: x["cluster"], reverse=True)
 
         return classwise_dict
 
@@ -619,13 +657,24 @@ class Inspector:
             containing the images and metadata of the false positives.
         """
         figs = self.error_classwise_dict(BackgroundError, color=ErrorColor.BKG, axis=1)
-
-        return dict(
+        figs = dict(
             sorted(
                 figs.items(),
-                key=lambda x: len(x[1]),
+                key=lambda x: len(x[1][1]),
                 reverse=True,
             )
+        )
+        # return figs
+
+        return Section(
+            id="BackgroundError",
+            title="Background Errors",
+            description=f"""
+            List of all the false positive detections with confidence above the <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span> but do not pass the <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span>.
+            """,
+            contents=[
+                Content(type=ContentType.IMAGES, header="Visualizations", content=figs)
+            ],
         )
 
     @logger()
@@ -645,6 +694,22 @@ class Inspector:
         fig = self.error_classwise_ranking(ClassificationError)
 
         return classwise_dict, fig
+
+        return Section(
+            id="ClassificationError",
+            title="Classification Errors",
+            description="""
+            The following plot shows the distribution of classification errors.
+            """,
+            contents=[
+                Content(type=ContentType.RANKING, header="Ranking", content=fig),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    content=classwise_dict,
+                ),
+            ],
+        )
 
     @logger()
     def localization_error(self) -> Tuple[Dict[int, Dict], bytes]:
@@ -726,7 +791,7 @@ class Inspector:
         classwise_dict = dict(
             sorted(
                 classwise_dict.items(),
-                key=lambda x: len(x[1]),
+                key=lambda x: len(x[1][1]),
                 reverse=True,
             )
         )
@@ -751,7 +816,7 @@ class Inspector:
         classwise_dict = dict(
             sorted(
                 classwise_dict.items(),
-                key=lambda x: len(x[1]),
+                key=lambda x: len(x[1][1]),
                 reverse=True,
             )
         )
@@ -779,7 +844,7 @@ class Inspector:
         classwise_dict = dict(
             sorted(
                 classwise_dict.items(),
-                key=lambda x: len(x[1]),
+                key=lambda x: len(x[1][1]),
                 reverse=True,
             )
         )

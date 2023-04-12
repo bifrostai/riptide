@@ -31,25 +31,7 @@
             <div class="infobox-content">{{ infobox['content'] }}</div>
         </div>
         {% endfor %}
-        <div id="BackgroundError">
-            <h1>BackgroundError</h1>
-            <p>List of all the false positive detections that are above the <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> but do not pass the <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span>.</p>
-            <div class="class-images">
-            {% for class_int, image_list in background_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Predicted: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-        </div>
+        {{ render_section(background_error_figs)}}
         <div id="ClassificationError">
             <h1>ClassificationError</h1>
             {% if classification_error_plot is not none %}
@@ -62,7 +44,7 @@
             </div>
             {% endif %}
             <div class="class-images">
-            {% for class_int, image_list in classification_error_figs.items() %}
+            {% for class_int, (_, image_list) in classification_error_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">Ground Truth: Class {{ class_int }}</div>
                     <div class="class-image-container">
@@ -85,7 +67,7 @@
                 The following is a montage of the localization errors.
             </p>
             <div class="class-images">
-            {% for class_int, image_list in localization_error_figs.items() %}
+            {% for class_int, (_, image_list) in localization_error_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">Ground Truth: Class {{ class_int }}</div>
                     <div class="class-image-container">
@@ -117,7 +99,7 @@
                 The following is a montage of the classification and localization errors.
             </p>
             <div class="class-images">
-            {% for class_int, image_list in classification_and_localization_error_figs.items() %}
+            {% for class_int, (_, image_list) in classification_and_localization_error_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">Ground Truth: Class {{ class_int }}</div>
                     <div class="class-image-container">
@@ -140,7 +122,7 @@
                 The following is a montage of the duplicate errors. White boxes indicate ground truths, green boxes indicate best predictions, and red boxes indicate duplicate predictions.
             </p>
             <div class="class-images">
-            {% for class_int, image_list in duplicate_error_figs.items() %}
+            {% for class_int, (_, image_list) in duplicate_error_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">Ground Truth: Class {{ class_int }}</div>
                     <div class="class-image-container">
@@ -218,7 +200,7 @@
             <h2>MissedError visualization</h2>
             <p>List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> that had IoU above <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span> (otherwise it would be considered a LocalizationError).</p>
             <div class="class-images">
-            {% for class_int, image_list in missed_error_figs.items() %}
+            {% for class_int, (_, image_list) in missed_error_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">Missed: Class {{ class_int }}</div>
                     <div class="class-image-container">
@@ -252,7 +234,7 @@
             <h2>True Positives visualization</h2>
             <p>List of all the True Positives detections. No prediction was made below <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span>.</p>
             <div class="class-images">
-            {% for class_int, image_list in true_positive_figs.items() %}
+            {% for class_int, (_, image_list) in true_positive_figs.items() %}
                 <div class="class-images-container">
                     <div class="class-name">True Positives: Class {{ class_int }}</div>
                     <div class="class-image-container">
