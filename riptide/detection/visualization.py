@@ -285,12 +285,12 @@ class Inspector:
 
             opacity = 0.8
             gt_bar = [
-                (ErrorColor(code).rgb(opacity, False), counts[code])
+                (ErrorColor(code).rgb(opacity, False), counts[code], code)
                 for code in ["TP", "MIS", "FN"]
             ]
 
             pred_bar = [
-                (ErrorColor(code).rgb(opacity, False), counts[code])
+                (ErrorColor(code).rgb(opacity, False), counts[code], code)
                 for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
             ]
 

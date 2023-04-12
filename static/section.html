@@ -43,7 +43,7 @@
             <div class="summary-metric-value">
                 <div class="summary-bar">
                     <span class="summary-bar-value">{{ value["total"] }}</span>
-                    {% for color, count in value["bar"] %}
+                    {% for color, count, info in value["bar"] %}
                     {% if loop.first %}
                     <div class="summary-bar-item first" style="flex-grow: {{ count }}; background-color: {{ color }};">
                     {% elif loop.last %}
@@ -51,7 +51,7 @@
                     {% else %}
                     <div class="summary-bar-item" style="flex-grow: {{ count }}; background-color: {{ color }};">
                     {% endif %}
-                    <span class="label">{{ count }}</span></div>
+                    <span class="label">{{ count }}</span><span class="tooltiptext">{{ info }}</span></div>
                     {% endfor %}
                 </div>
             </div>
