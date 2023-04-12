@@ -138,6 +138,7 @@ class HtmlReport:
         inspector = self.inspector
         section_names = {
             "Overview": "Overview",
+            "Flow": "Flow",
             "BackgroundError": "Background Errors",
         }
 

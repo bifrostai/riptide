@@ -10,7 +10,6 @@ class ContentType(str, Enum):
     # IMAGE = "image"
     IMAGES = "images"
     PLOT = "plot"
-    RANKING = "ranking"
 
 
 class Content(BaseModel):

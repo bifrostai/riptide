@@ -2,9 +2,11 @@ from typing import Any, Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 from matplotlib.colorbar import Colorbar
 from matplotlib.image import AxesImage
 from matplotlib.ticker import StrMethodFormatter
+from plotly.offline import plot
 
 # region: Helper functions for plotting heatmaps
 # Based on https://matplotlib.org/stable/gallery/images_contours_and_fields/image_annotated_heatmap.html
@@ -162,3 +164,21 @@ def annotate_heatmap(
 
 
 # endregion
+
+
+def plotly_markup(content: go.Figure) -> str:
+    layout = dict(
+        template="simple_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=30, b=10),
+    )
+    content.update_layout(layout)
+    return plot(
+        content,
+        include_plotlyjs=False,
+        output_type="div",
+        config=dict(
+            modeBarButtonsToRemove=["toggleHover"], responsive=True, displaylogo=False
+        ),
+    )

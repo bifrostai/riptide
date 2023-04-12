@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 import torch
 from matplotlib import colors
 from matplotlib.figure import Figure
@@ -25,10 +26,11 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.detection.evaluation import ObjectDetectionEvaluator
+from riptide.flow import FlowVisualizer
 from riptide.report.section import Content, ContentType, Section
 from riptide.utils.colors import ErrorColor, gradient
 from riptide.utils.logging import logger
-from riptide.utils.plots import annotate_heatmap, heatmap
+from riptide.utils.plots import annotate_heatmap, heatmap, plotly_markup
 
 PALETTE_DARKER = "#222222"
 PALETTE_LIGHT = "#FFEECC"
@@ -183,6 +185,8 @@ def encode_base64(input: Any) -> bytes:
     elif isinstance(input, Figure):
         input.savefig(bytesio, format="png")
         plt.close(input)
+    elif isinstance(input, go.Figure):
+        input.write_image(bytesio, format="png")
     else:
         raise Exception(f"Input type {input.__class__.__name__} not supported.")
     return base64.b64encode(bytesio.getvalue()).decode("utf-8")
@@ -778,7 +782,7 @@ class Inspector:
                     """,
             contents=[
                 Content(
-                    type=ContentType.RANKING,
+                    type=ContentType.PLOT,
                     header="Ranking",
                     content=dict(plot=fig),
                 ),
@@ -1022,6 +1026,34 @@ class Inspector:
         )
 
     @logger()
+    def flow(self) -> Section:
+        """Saves the flow of the evaluators to the given output directory.
+
+        Returns
+        -------
+        Dict[int, List]
+            A dictionary mapping the class id to a list of dictionaries
+            containing the images and metadata of the false positives.
+        """
+        fig = plotly_markup(
+            FlowVisualizer(self.evaluators, None, self.image_dir).visualize()
+        )
+
+        return Section(
+            id="Flow",
+            title="Flow",
+            description=f"""
+            A visual representation of the flow of the ground truth statuses between models.
+            """,
+            contents=[
+                Content(
+                    type=ContentType.PLOT,
+                    content=dict(plot=fig, interactive=True),
+                )
+            ],
+        )
+
+    @logger()
     def compare(self) -> Dict[str, Section]:
         """Generate figures and plots for the errors.
 
@@ -1035,5 +1067,5 @@ class Inspector:
 
         overall_summary, classwise_summary, results["overview"] = self.overview()
         results["background_errors"] = self.compare_background_errors()
-
+        results["flow"] = self.flow()
         return results
