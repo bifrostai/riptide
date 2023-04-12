@@ -628,17 +628,6 @@ class Inspector:
             )
         )
 
-        return Section(
-            id=BackgroundError.__name__,
-            title="Background Errors",
-            description="""
-            List of all the false positive detections that are above the <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> but do not pass the <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span>.
-            """,
-            contents=[
-                Content(type=ContentType.IMAGES, header="Visualizations", content=figs)
-            ],
-        )
-
     @logger()
     def classification_error(self) -> Tuple[Dict[int, List[Dict]], bytes]:
         """Saves the ClassificationErrors of the evaluator to the given output directory.
@@ -656,22 +645,6 @@ class Inspector:
         fig = self.error_classwise_ranking(ClassificationError)
 
         return classwise_dict, fig
-
-        return Section(
-            id=ClassificationError.__name__,
-            title="Classification Errors",
-            description="""
-            The following plot shows the distribution of classification errors.
-            """,
-            contents=[
-                Content(type=ContentType.RANKING, header="Ranking", content=fig),
-                Content(
-                    type=ContentType.IMAGES,
-                    header="Visualizations",
-                    content=classwise_dict,
-                ),
-            ],
-        )
 
     @logger()
     def localization_error(self) -> Tuple[Dict[int, Dict], bytes]:

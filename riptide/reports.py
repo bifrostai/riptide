@@ -47,31 +47,20 @@ class HtmlReport:
             k: v for k, v in overall_summary.items() if k.endswith("Error")
         }
         worst_error, worst_error_value = max(overall_errors.items(), key=lambda x: x[1])
-        # if worst_error == "MissedError":
-        #     worst_class_idx, classwise_errors = max(
-        #         classwise_summary.items(), key=lambda x: x[1]["MissedError"]
-        #     )
-        #     suggestions.append(
-        #         {
-        #             "title": f"Top Error: MissedError ({worst_error_value})",
-        #             "content": (
-        #                 "You have a lot of missed detections in class"
-        #                 f" {worst_class_idx} ({classwise_errors['MissedError']})."
-        #             ),
-        #         }
-        #     )
-        worst_class_idx, classwise_errors = max(
-            classwise_summary.items(), key=lambda x: x[1][worst_error]
-        )
-        suggestions.append(
-            {
-                "title": f"Top Error: {worst_error} ({worst_error_value})",
-                "content": (
-                    f"You have a lot of {worst_error.replace('Error', '')} detections"
-                    f" in class {worst_class_idx} ({classwise_errors[worst_error]})."
-                ),
-            }
-        )
+        if worst_error == "MissedError":
+            worst_class_idx, classwise_errors = max(
+                classwise_summary.items(), key=lambda x: x[1]["MissedError"]
+            )
+            suggestions.append(
+                {
+                    "title": f"Top Error: MissedError ({worst_error_value})",
+                    "content": (
+                        "You have a lot of missed detections in class"
+                        f" {worst_class_idx} ({classwise_errors['MissedError']})."
+                    ),
+                }
+            )
+
         return suggestions
 
     def get_error_info(self) -> Dict:
