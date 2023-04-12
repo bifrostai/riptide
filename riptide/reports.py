@@ -31,6 +31,8 @@ ERROR_TYPES = [
 
 class HtmlReport:
     def __init__(self, evaluators: "Evaluator"):
+        if not isinstance(evaluators, list):
+            evaluators = [evaluators]
         self.evaluators = evaluators
         self.evaluator = evaluators[0]
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
