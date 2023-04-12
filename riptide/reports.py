@@ -30,11 +30,14 @@ ERROR_TYPES = [
 
 
 class HtmlReport:
-    def __init__(self, evaluator: "Evaluator"):
-        self.evaluator = evaluator
+    def __init__(self, evaluators: "Evaluator"):
+        if not isinstance(evaluators, list):
+            evaluators = [evaluators]
+        self.evaluators = evaluators
+        self.evaluator = evaluators[0]
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
         self.template = self.env.get_template("template.html")
-        self.inspector = Inspector(evaluator)
+        self.inspector = Inspector(evaluators)
 
     def get_suggestions(
         self, overall_summary: Dict, classwise_summary: Dict, **kwargs
@@ -57,6 +60,7 @@ class HtmlReport:
                     ),
                 }
             )
+
         return suggestions
 
     def get_error_info(self) -> Dict:
@@ -68,34 +72,23 @@ class HtmlReport:
             for error_name, confidence_hist in confidence_hists.items()
         }
 
-    def render(self, output_dir: str):
+    def render(self, output_dir: str, fname: str = "report.html"):
         inspector = self.inspector
-        section_names = [
-            "Overview",
-            "BackgroundError",
-            "ClassificationError",
-            "LocalizationError",
-            "ClassificationAndLocalizationError",
-            "DuplicateError",
-            "MissedError",
-            "TruePositive",
-        ]
+        section_names = {
+            "Overview": "Overview",
+            "BackgroundError": "Background Errors",
+            "ClassificationError": "Classification Errors",
+            "LocalizationError": "Localization Errors",
+            "ClassificationAndLocalizationError": (
+                "Classification And Localization Errors"
+            ),
+            "DuplicateError": "Duplicate Errors",
+            "MissedError": "Missed Errors",
+            "TruePositive": "True Positives",
+        }
 
         # Summary data
-        logging.info("Creating summaries...")
-        evaluator_summary = self.evaluator.summarize()
-        overall_summary = {
-            "num_images": self.evaluator.num_images,
-            "conf_threshold": self.evaluator.evaluations[0].conf_threshold,
-            "bg_iou_threshold": self.evaluator.evaluations[0].bg_iou_threshold,
-            "fg_iou_threshold": self.evaluator.evaluations[0].fg_iou_threshold,
-        }
-        overall_summary.update({k: round(v, 3) for k, v in evaluator_summary.items()})
-
-        classwise_summary = self.evaluator.classwise_summarize()
-        for class_idx, individual_summary in classwise_summary.items():
-            for metric, value in individual_summary.items():
-                classwise_summary[class_idx][metric] = round(value, 3)
+        overall_summary, classwise_summary, summary_section = inspector.overview()
 
         # Error data - figures and plots for each error type
         error_fig_plots = inspector.inspect()
@@ -119,6 +112,7 @@ class HtmlReport:
             title="Riptide",
             section_names=section_names,
             summary=overall_summary,
+            summary_section=summary_section,
             classwise_summary=classwise_summary,
             infoboxes=infoboxes,
             error_info=error_info,
@@ -127,5 +121,5 @@ class HtmlReport:
             **error_fig_plots,
         )
         os.makedirs(output_dir, exist_ok=True)
-        with open(f"{output_dir}/report.html", "w") as f:
+        with open(os.path.join(output_dir, fname), "w") as f:
             f.writelines(output)

@@ -189,7 +189,59 @@ body {
     width: 500px;
 }
 
+.tooltip::after {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    content: '🛈';
+    padding-left: 0.5em;
+    color: #7b949b;
+}
+
+.tooltiptext {
+    --tooltip-width: 120px;
+    --tooltip-opacity: 1;
+    width: calc(var(--tooltip-width));
+    background-color: rgba(85, 85, 85, var(--tooltip-opacity));
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 1;
+    bottom: 150%;
+    left: 50%;
+    margin-left: calc(-0.5 * var(--tooltip-width));
+}
+
+.tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #555 transparent transparent transparent;
+}
+
+/* :has() only manually supported on firefox */
+*:has(> .tooltiptext) {
+    position: relative
+}
+
+*:not(:hover) .tooltiptext {
+    visibility: hidden;
+}
+
 .summary-container {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0.4vw;
+}
+
+.summary-row {
     display: flex;
     flex-wrap: wrap;
     flex-direction: row;
@@ -202,10 +254,45 @@ body {
     padding: 1vh 1vh;
 }
 
+.summary-metric-title {
+    position: relative;
+}
+
 .summary-metric-value {
     padding: 0.5vh;
     font-size: 1.5em;
     font-weight: 700;
+}
+
+.summary-bar {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+}
+
+.summary-bar-value {
+    padding-right: 0.5em;
+}
+
+.summary-bar-item > .label {
+    vertical-align: middle;
+    padding-left: 0.2em;
+    font-size: small;
+    color: #111111;
+}
+
+.summary-bar-item  .tooltiptext {
+    --tooltip-width: 60px;
+    --tooltip-opacity: 0.8;
+    font-size: small;
+}
+
+.summary-bar-item.first {
+    border-radius: 8px 0 0 8px;
+}
+
+.summary-bar-item.last {
+    border-radius: 0 8px 8px 0;
 }
 
 .info-panel {
@@ -221,4 +308,9 @@ body {
 
 .info-panel-content-summary-image {
     width: 100%;
+}
+
+.break {
+    flex-basis: 100%;
+    height: 0;
 }

@@ -915,7 +915,7 @@ class ObjectDetectionEvaluator(Evaluator):
 
     def summarize(self) -> Dict[str, Union[int, float]]:
         summary = self._initialize_error_dict()
-        tp, fp, fn = 0, 0, 0
+        tp, fp, fn, un = 0, 0, 0, 0
 
         for evaluation in self.evaluations:
             for error in evaluation.instances:
@@ -924,6 +924,7 @@ class ObjectDetectionEvaluator(Evaluator):
             tp += evaluation.confusions.get_true_positives()
             fp += evaluation.confusions.get_false_positives()
             fn += evaluation.confusions.get_false_negatives()
+            un += evaluation.confusions.get_unused()
         precision = self.get_precision(tp, fp)
         recall = self.get_recall(tp, fn)
         f1 = self.get_f1(precision, recall)
@@ -931,6 +932,7 @@ class ObjectDetectionEvaluator(Evaluator):
         summary["true_positives"] = tp
         summary["false_positives"] = fp
         summary["false_negatives"] = fn
+        summary["unused"] = un
         summary["precision"] = precision
         summary["recall"] = recall
         summary["f1"] = f1
@@ -938,7 +940,7 @@ class ObjectDetectionEvaluator(Evaluator):
         return summary
 
     def classwise_summarize(self) -> Dict[int, Dict[str, Union[int, float]]]:
-        classwise_summary = dict()
+        classwise_summary: Dict[int, dict] = dict()
         for evaluation in self.evaluations:
             for error in evaluation.instances:
                 error_name = error.__class__.__name__
@@ -986,13 +988,10 @@ class ObjectDetectionEvaluator(Evaluator):
 
         # Calculate P, R, F1
         for category, summary in classwise_summary.items():
-            tp, fn, fp = 0, 0, 0
-            if "true_positives" in summary:
-                tp = summary["true_positives"]
-            if "false_negatives" in summary:
-                fn = summary["false_negatives"]
-            if "false_positives" in summary:
-                fp = summary["false_positives"]
+            tp = summary.get("true_positives", 0)
+            fn = summary.get("false_negatives", 0)
+            fp = summary.get("false_positives", 0)
+
             precision = self.get_precision(tp, fp)
             recall = self.get_recall(tp, fn)
             f1 = self.get_f1(precision, recall)

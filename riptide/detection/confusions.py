@@ -119,3 +119,7 @@ class Confusions:
     def get_false_negatives(self) -> int:
         self.assert_valid_confusions()
         return len([c for c in self.gt_confusions if c is Confusion.FALSE_NEGATIVE])
+
+    def get_unused(self) -> int:
+        self.assert_valid_confusions()
+        return len([c for c in self.pred_confusions if c is Confusion.UNUSED])

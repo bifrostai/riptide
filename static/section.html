@@ -1,0 +1,98 @@
+{%- macro render_section(section) -%}
+<div id="{{section.id}}">
+    {% if section.title is not none %}<h2>{{ section.title }}</h2>{% endif %}
+    {% if section.description is not none %}<p>{{ section.description | safe }}</p>{% endif %}
+    {%- for content in section.contents -%}
+        {{ render_content(content) }}
+    {%- endfor -%}
+</div>
+{%- endmacro -%}
+
+{%- macro render_content(content) -%}
+{% if content.header is not none %}<h3>{{ content.header }}</h3>{% endif %}
+{% if content.description is not none %}<p>{{ content.description | safe }}</p>{% endif %}
+{%- if content.type == "overview" -%}
+    {{ render_overview(content.content) }}
+{%- elif content.type == "images" -%}
+    {{ render_images(content.content) }}
+{%- elif content.type == "ranking" -%}
+    {{ ranking(content) }}
+{%- else -%}
+    {{ content.content | safe }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_overview(content) -%}
+<div class="summary-container">
+    <div class="summary-row">
+        {%- for metric, value in content[0].items() -%}
+        <div class="summary-item">
+            <div class="summary-metric-title gradient">{{ metric }}</div>
+            <div class="summary-metric-value">{{ value }}</div>
+        </div>
+        {%- endfor -%}
+    </div>
+    {%- for name, row in content[1] -%}
+    {% if content[1] | length > 1 %}<h4>{{ name }}</h4>{% endif %}
+    <div class="summary-row">
+        {% for metric, value in row.items() %}
+        {% if metric in ["Ground Truths", "Predictions"] %}
+        <div class="break"></div>
+        <div class="summary-item" style="flex-grow: 1">
+            <div class="summary-metric-title gradient">{{ metric }}</div>
+            <div class="summary-metric-value">
+                <div class="summary-bar">
+                    <span class="summary-bar-value">{{ value["total"] }}</span>
+                    {% for color, count, info in value["bar"] %}
+                    {% if loop.first %}
+                    <div class="summary-bar-item first" style="flex-grow: {{ count }}; background-color: {{ color }};">
+                    {% elif loop.last %}
+                    <div class="summary-bar-item last" style="flex-grow: {{ count }}; background-color: {{ color }};">
+                    {% else %}
+                    <div class="summary-bar-item" style="flex-grow: {{ count }}; background-color: {{ color }};">
+                    {% endif %}
+                    <span class="label">{{ count }}</span><span class="tooltiptext">{{ info }}</span></div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="summary-item">
+            <div class="summary-metric-title gradient">{{ metric }}</div>
+            <div class="summary-metric-value">{{ value }}</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {%- endfor -%}
+</div>
+{%- endmacro -%}
+
+{%- macro render_images(images) -%}
+<div class="class-images">
+    {%- for class_info, image_list in images -%}
+        <div class="class-images-container">
+            <div class="class-name">{{ class_info }}</div>
+            <div class="class-image-container">
+                {%- for image_dict in image_list -%}
+                <div class="class-image-wrapper">
+                    {{ render_image(image_dict) }}
+                </div>
+                {%- endfor -%}
+            </div>
+        </div>
+    {%- endfor -%}
+</div>
+{%- endmacro -%}
+
+
+{%- macro render_image(image) -%}
+    <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">
+    {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"]}}</span>{% endif %}
+{%- endmacro -%}
+
+{%- macro ranking(content) -%}
+<div class="plot">
+    <img class="plot-image" src="data:image/png;base64,{{ content['plot'] | safe}}">
+</div>
+{%- endmacro -%}
