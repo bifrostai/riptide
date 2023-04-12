@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from matplotlib import colors
+from matplotlib.figure import Figure
 from PIL import Image
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
@@ -27,6 +28,7 @@ from riptide.detection.evaluation import ObjectDetectionEvaluator
 from riptide.report.section import Content, ContentType, Section
 from riptide.utils.colors import ErrorColor, gradient
 from riptide.utils.logging import logger
+from riptide.utils.plots import annotate_heatmap, heatmap
 
 PALETTE_DARKER = "#222222"
 PALETTE_LIGHT = "#FFEECC"
@@ -178,7 +180,7 @@ def encode_base64(input: Any) -> bytes:
     bytesio = io.BytesIO()
     if isinstance(input, Image.Image):
         input.save(bytesio, format="jpeg", quality=100)
-    elif isinstance(input, plt.Figure):
+    elif isinstance(input, Figure):
         input.savefig(bytesio, format="png")
         plt.close(input)
     else:
@@ -600,10 +602,19 @@ class Inspector:
         for label in label_set:
             classwise_dict[label][1].sort(key=lambda x: x["cluster"], reverse=True)
 
+        classwise_dict = dict(
+            sorted(
+                classwise_dict.items(),
+                key=lambda x: len(x[1][1]),
+                reverse=True,
+            )
+        )
+
         return classwise_dict
 
-    def error_classwise_ranking(self, error_type: Type[Error]) -> bytes:
-
+    def error_classwise_ranking(
+        self, error_type: Type[Error], display_type: str = "bar"
+    ) -> bytes:
         labels = [
             (error.gt_label, error.pred_label)
             for errors in self.errorlist_dict.get(error_type.__name__, dict()).values()
@@ -622,27 +633,56 @@ class Inspector:
         confusion_dict = {k: confusion_dict[k] for k in ranked_idxs}
 
         setup_mpl_params()
-        fig, ax = plt.subplots(
-            figsize=(4, np.ceil(len(confusion_dict) * 0.4)),
-            dpi=150,
-            constrained_layout=True,
-        )
-        ax.barh(
-            range(len(confusion_dict)),
-            width=confusion_dict.values(),
-            color=[
-                gradient(
-                    PALETTE_GREEN, PALETTE_BLUE, 1 - (x / max(confusion_dict.values()))
-                )
-                for x in confusion_dict.values()
-            ],
-        )
-        ax.set_yticks(range(len(confusion_dict)))
-        ax.set_yticklabels(
-            [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
-        )
-        ax.set_title("Classwise Error Ranking")
-        ax.set_xlabel("Number of Occurences")
+
+        if display_type == "bar":
+            fig, ax = plt.subplots(
+                figsize=(4, np.ceil(len(confusion_dict) * 0.4)),
+                dpi=150,
+                constrained_layout=True,
+            )
+            ax.barh(
+                range(len(confusion_dict)),
+                width=confusion_dict.values(),
+                color=[
+                    gradient(
+                        PALETTE_GREEN,
+                        PALETTE_BLUE,
+                        1 - (x / max(confusion_dict.values())),
+                    )
+                    for x in confusion_dict.values()
+                ],
+            )
+            ax.set_yticks(range(len(confusion_dict)))
+            ax.set_yticklabels(
+                [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
+            )
+            ax.set_title("Classwise Error Ranking")
+            ax.set_xlabel("Number of Occurences")
+        else:
+            row_labels, col_labels = map(set, zip(*confusion_dict.keys()))
+            confusion_matrix = np.array(
+                [
+                    [confusion_dict.get((i, j), 0) for j in col_labels]
+                    for i in row_labels
+                ]
+            )
+
+            fig, ax = plt.subplots(
+                figsize=(np.max(confusion_matrix.shape),) * 2,
+                dpi=150,
+                constrained_layout=True,
+            )
+            im, cbar = heatmap(
+                confusion_matrix,
+                row_labels,
+                col_labels,
+                ax=ax,
+                # grid_color=PALETTE_DARKER,
+                cmap="YlGn",
+                cbarlabel="No. of Occurences",
+            )
+            texts = annotate_heatmap(im, valfmt="{x:.0f}")
+
         return encode_base64(fig)
 
     @logger()
@@ -657,14 +697,6 @@ class Inspector:
             containing the images and metadata of the false positives.
         """
         figs = self.error_classwise_dict(BackgroundError, color=ErrorColor.BKG, axis=1)
-        figs = dict(
-            sorted(
-                figs.items(),
-                key=lambda x: len(x[1][1]),
-                reverse=True,
-            )
-        )
-        # return figs
 
         return Section(
             id="BackgroundError",
@@ -688,21 +720,37 @@ class Inspector:
             containing the images and metadata of the false positives.
         """
 
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
+
+        def add_caption_func(x: dict) -> dict:
+            x["caption"] = (
+                f"{x['image_name']} | Pred: Class {x['pred_class']} | Conf"
+                f" {x['confidence']}"
+            )
+            return x
+
         classwise_dict = self.error_classwise_dict(
-            ClassificationError, color=ErrorColor.CLS, axis=1, label_attr="gt_label"
+            ClassificationError,
+            color=ErrorColor.CLS,
+            axis=1,
+            label_attr="gt_label",
+            get_label_func=get_label_func,
+            add_caption_func=add_caption_func,
         )
         fig = self.error_classwise_ranking(ClassificationError)
-
-        return classwise_dict, fig
 
         return Section(
             id="ClassificationError",
             title="Classification Errors",
             description="""
-            The following plot shows the distribution of classification errors.
-            """,
+                    The following plot shows the distribution of classification errors.
+                    """,
             contents=[
-                Content(type=ContentType.RANKING, header="Ranking", content=fig),
+                Content(
+                    type=ContentType.RANKING,
+                    header="Ranking",
+                    content=dict(plot=fig),
+                ),
                 Content(
                     type=ContentType.IMAGES,
                     header="Visualizations",
@@ -721,16 +769,42 @@ class Inspector:
             Size of the cropped images, by default 192
         """
 
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
+
+        def add_caption_func(x: dict) -> dict:
+            x["caption"] = (
+                f"{x['image_name']} | W{x['bbox_width']} | H{x['bbox_height']} | IOU"
+                f" {x['iou']}"
+            )
+            return x
+
         classwise_dict = self.error_classwise_dict(
             LocalizationError,
             color=[ErrorColor.WHITE, ErrorColor.LOC],
             axis=1,
             get_bbox_func=get_both_bboxes,
             preview_size=192,
+            get_label_func=get_label_func,
+            add_caption_func=add_caption_func,
         )
         fig = self.error_classwise_ranking(LocalizationError)
 
-        return classwise_dict, fig
+        # return classwise_dict, fig
+
+        return Section(
+            id="LocalizationError",
+            title="Localization Errors",
+            description="""
+                    The following is a montage of the localization errors.
+                    """,
+            contents=[
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    content=classwise_dict,
+                )
+            ],
+        )
 
     @logger()
     def classification_and_localization_error(self) -> Tuple[Dict[int, Dict], bytes]:
@@ -867,14 +941,8 @@ class Inspector:
         results = dict()
 
         results["background_error_figs"] = self.background_error()
-        (
-            results["classification_error_figs"],
-            results["classification_error_plot"],
-        ) = self.classification_error()
-        (
-            results["localization_error_figs"],
-            results["localization_error_plot"],
-        ) = self.localization_error()
+        results["classification_error_figs"] = self.classification_error()
+        results["localization_error_figs"] = self.localization_error()
         (
             results["classification_and_localization_error_figs"],
             results["classification_and_localization_error_plot"],

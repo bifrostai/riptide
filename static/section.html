@@ -16,7 +16,7 @@
 {%- elif content.type == "images" -%}
     {{ render_images(content.content) }}
 {%- elif content.type == "ranking" -%}
-    {{ ranking(content) }}
+    {{ ranking(content.content) }}
 {%- else -%}
     {{ content.content | safe }}
 {%- endif -%}

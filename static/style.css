@@ -186,7 +186,7 @@ body {
 }
 
 .plot-image {
-    width: 500px;
+    max-width: 500px;
 }
 
 .tooltip::after {

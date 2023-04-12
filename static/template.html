@@ -32,57 +32,8 @@
         </div>
         {% endfor %}
         {{ render_section(background_error_figs)}}
-        <div id="ClassificationError">
-            <h1>ClassificationError</h1>
-            {% if classification_error_plot is not none %}
-            <h2>ClassificationError ranking</h2>
-            <p>
-                The following plot shows the distribution of classification errors.
-            </p>
-            <div class="plot">
-                <img class="plot-image" src="data:image/png;base64,{{ classification_error_plot | safe}}">
-            </div>
-            {% endif %}
-            <div class="class-images">
-            {% for class_int, (_, image_list) in classification_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Pred: Class {{ image_dict["pred_class"] }} | Conf {{ image_dict["confidence"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-        </div>
-        <div id="LocalizationError">
-            <h1>LocalizationError</h1>
-
-            <h2>LocalizationError visualization</h2>
-            <p>
-                The following is a montage of the localization errors.
-            </p>
-            <div class="class-images">
-            {% for class_int, (_, image_list) in localization_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-
-        </div>
+        {{ render_section(classification_error_figs)}}
+        {{ render_section(localization_error_figs)}}
         <div id="ClassificationAndLocalizationError">
             <h1>ClassificationAndLocalizationError</h1>
             {% if classification_and_localization_error_plot is not none %}

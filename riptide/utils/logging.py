@@ -19,6 +19,7 @@ def logger():
             except Exception as e:
                 stack_trace = "\n".join(traceback.format_exc().splitlines()[3:])
                 logging.error(f"Error in: {f.__name__}\n{stack_trace}", exc_info=False)
+                raise e
 
         return inner_func
 
