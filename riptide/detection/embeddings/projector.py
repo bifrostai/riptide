@@ -16,7 +16,7 @@ class CropProjector:
     def __init__(
         self,
         name: str,
-        images: torch.Tensor,
+        images: List[torch.Tensor],
         encoder_mode: str,
         normalize_embeddings: bool,
         labels: List[Any] = None,

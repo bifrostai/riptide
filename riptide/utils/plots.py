@@ -3,10 +3,94 @@ from typing import Any, Dict, List, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+from matplotlib import colors
 from matplotlib.colorbar import Colorbar
+from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 from matplotlib.ticker import StrMethodFormatter
 from plotly.offline import plot
+
+from riptide.utils.colors import ErrorColor, gradient
+
+# region: mpl setup
+PALETTE_DARKER = "#222222"
+PALETTE_LIGHT = "#FFEECC"
+PALETTE_DARK = "#2C3333"
+PALETTE_GREEN = "#00FFD9"
+PALETTE_BLUE = "#00B3FF"
+TRANSPARENT = colors.to_hex((0, 0, 0, 0), keep_alpha=True)
+PREVIEW_PADDING = 48
+PREVIEW_SIZE = 128
+
+
+def setup_mpl_params():
+    plt.rcParams["text.color"] = PALETTE_LIGHT
+    plt.rcParams["xtick.color"] = PALETTE_LIGHT
+    plt.rcParams["ytick.color"] = PALETTE_LIGHT
+    plt.rcParams["axes.facecolor"] = PALETTE_DARK
+    plt.rcParams["axes.labelcolor"] = PALETTE_LIGHT
+    plt.rcParams["axes.edgecolor"] = PALETTE_DARKER
+    plt.rcParams["figure.facecolor"] = TRANSPARENT
+    plt.rcParams["figure.edgecolor"] = PALETTE_LIGHT
+    plt.rcParams["savefig.facecolor"] = TRANSPARENT
+    plt.rcParams["savefig.edgecolor"] = PALETTE_LIGHT
+
+
+# endregion
+
+
+def boxplot(area_info: dict, ax: plt.Axes = None) -> None:
+    """Plot a boxplot of the area of each class
+
+    Parameters
+    ----------
+    ax : plt.Axes
+        Axes to plot on
+    area_info : dict
+        Dictionary of class index to area
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    for class_idx, area in area_info.items():
+        ax.scatter(
+            np.full_like(area, class_idx),
+            area,
+            color=[gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(area)) for a in area],
+            edgecolors="none",
+        )
+    boxplot_dict = ax.boxplot(
+        area_info.values(),
+        positions=list(area_info.keys()),
+        patch_artist=True,
+    )
+
+    for cap in boxplot_dict["caps"]:
+        cap.set_color(PALETTE_LIGHT)
+    for whisker in boxplot_dict["whiskers"]:
+        whisker.set_color(PALETTE_LIGHT)
+    for median in boxplot_dict["medians"]:
+        median.set_color(PALETTE_GREEN)
+        median.set_linewidth(2)
+    for box in boxplot_dict["boxes"]:
+        box.set(color=PALETTE_LIGHT, facecolor=TRANSPARENT)
+
+    return ax
+
+
+def histogram(data: list, bins: int = 41, ax: plt.Axes = None) -> None:
+    if ax is None:
+        ax = plt.gca()
+    _, _, patches = ax.hist(data, bins=bins)
+    for patch in patches:
+        patch.set_facecolor(
+            gradient(
+                PALETTE_GREEN,
+                PALETTE_BLUE,
+                1 - (patch.get_x() / max(data)),
+            )
+        )
+
 
 # region: Helper functions for plotting heatmaps
 # Based on https://matplotlib.org/stable/gallery/images_contours_and_fields/image_annotated_heatmap.html
