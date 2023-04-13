@@ -473,7 +473,9 @@ class Inspector:
     ) -> bytes:
         labels = [
             (error.gt_label, error.pred_label)
-            for errors in self.errorlist_dict.get(error_type.__name__, dict()).values()
+            for errors in self.errorlist_dicts[0]
+            .get(error_type.__name__, dict())
+            .values()
             for error in errors
         ]
 
