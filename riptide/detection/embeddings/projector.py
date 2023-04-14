@@ -1,5 +1,6 @@
-import os
-from typing import Any, Callable, Iterable, List
+from __future__ import annotations
+
+from typing import Any, Callable, Dict, Iterable, List
 
 import torch
 from sklearn.cluster import DBSCAN
@@ -10,9 +11,11 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from riptide.detection.embeddings.mep.encoders import VariableLayerEncoder
 from riptide.detection.embeddings.mep.transforms import inverse_normalize, normalize
+from riptide.utils.logging import logger
 
 
 class CropProjector:
+    @logger("Initializing CropProjector", "Initialized CropProjector")
     def __init__(
         self,
         name: str,
@@ -120,12 +123,6 @@ class CropProjector:
                 )
             embeddings = torch.cat([embeddings, extend], dim=1)
 
-        if self.normalize_embeddings:
-            embeddings = torch.nan_to_num(
-                (embeddings - embeddings.min(dim=0)[0])
-                / (embeddings.max(dim=0)[0] - embeddings.min(dim=0)[0])
-            )
-
         return embeddings
 
     def cluster(
@@ -133,6 +130,7 @@ class CropProjector:
         eps: float = 0.5,
         min_samples: int = 5,
         label_mask_func: Callable[[list], List[bool]] = None,
+        **kwargs,
     ) -> torch.Tensor:
         embeddings = self.get_embeddings(label_mask_func)
         if len(embeddings) == 0:
@@ -141,3 +139,73 @@ class CropProjector:
         return torch.tensor(
             DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
         )
+
+    def match_clusters(
+        self, labels: list, eps: float = 0.5, min_samples: int = 5
+    ) -> List[torch.Tensor]:
+        """Match clusters between label subsets
+
+        Parameters
+        ----------
+        proj1 : CropProjector
+            First projector
+        proj2 : CropProjector
+            Second projector
+        kwargs : dict
+            Additional arguments to pass to the cluster function
+
+        Returns
+        -------
+        torch.Tensor
+            Cluster mapping
+        """
+        label_mask_funcs = [
+            (lambda x_labels, label=label: [x == label for x in x_labels])
+            for label in labels
+        ]
+
+        clusters_list = [
+            self.cluster(label_mask_func=func, eps=eps, min_samples=min_samples)
+            for func in label_mask_funcs
+        ]
+        cluster_means = [
+            torch.zeros(clusters.max() + 1, self._embeddings.shape[1])
+            for clusters in clusters_list
+        ]
+        for idx, clusters in enumerate(clusters_list):
+            for cluster in torch.unique(clusters):
+                if cluster < 0:
+                    continue
+                mask = clusters == cluster
+                cluster_means[idx][cluster] = self.get_embeddings(
+                    label_mask_func=label_mask_funcs[idx]
+                )[mask].mean(dim=0)
+
+        cluster_reps = torch.concat(cluster_means)
+        matched = torch.tensor(
+            DBSCAN(eps=eps / 2, min_samples=2).fit(cluster_reps).labels_
+        ).split([cluster_mean.shape[0] for cluster_mean in cluster_means])
+        cluster_id = 0
+        match_dict: Dict[int, int] = {}
+        for idx, clusters in enumerate(clusters_list):
+            mapping = matched[idx]
+            new_clusters = torch.full_like(clusters, -1)
+            for cluster in torch.unique(clusters):
+                cluster = cluster.item()
+                # if noisy, no remapping
+                if cluster == -1:
+                    continue
+                map_id = mapping[cluster].item()
+                # if no match, assign next cluster id
+                if map_id == -1:
+                    new_clusters[clusters == cluster] = cluster_id
+                    cluster_id += 1
+                # if match, assign match id
+                else:
+                    if map_id not in match_dict:
+                        match_dict[map_id] = cluster_id
+                        cluster_id += 1
+                    new_clusters[clusters == cluster] = match_dict[map_id]
+            clusters_list[idx] = new_clusters
+
+        return clusters_list

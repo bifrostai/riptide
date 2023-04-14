@@ -864,6 +864,10 @@ class Evaluator:
         )
         return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name)
 
+    @property
+    def conf_threshold(self) -> float:
+        return self.evaluations[0].conf_threshold
+
     def summarize(self) -> Dict[str, any]:
         raise NotImplementedError()
 
@@ -903,6 +907,13 @@ class ObjectDetectionEvaluator(Evaluator):
         self.num_images = len(evaluations)
         self.num_errors = sum([len(e.instances) for e in evaluations])
 
+    @property
+    def iou_thresholds(self) -> Tuple[float, float]:
+        return (
+            self.evaluations[0].bg_iou_threshold,
+            self.evaluations[0].fg_iou_threshold,
+        )
+
     def _initialize_error_dict(self) -> Dict[str, int]:
         return {
             "ClassificationError": 0,
@@ -929,14 +940,18 @@ class ObjectDetectionEvaluator(Evaluator):
         recall = self.get_recall(tp, fn)
         f1 = self.get_f1(precision, recall)
 
-        summary["true_positives"] = tp
-        summary["false_positives"] = fp
-        summary["false_negatives"] = fn
-        summary["unused"] = un
-        summary["precision"] = precision
-        summary["recall"] = recall
-        summary["f1"] = f1
-        summary["total_count"] = tp + fn
+        summary.update(
+            {
+                "true_positives": tp,
+                "false_positives": fp,
+                "false_negatives": fn,
+                "unused": un,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "total_count": tp + fn,
+            }
+        )
         return summary
 
     def classwise_summarize(self) -> Dict[int, Dict[str, Union[int, float]]]:
