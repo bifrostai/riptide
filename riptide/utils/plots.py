@@ -52,13 +52,23 @@ def boxplot(area_info: dict, ax: plt.Axes = None) -> None:
     if ax is None:
         ax = plt.gca()
 
-    for class_idx, area in area_info.items():
+    data = []
+    positions = []
+    n = len(list(area_info.values())[0])
+    pos_pad = 1 if n == 1 else n + 1
+
+    for i, (class_idx, area) in enumerate(area_info.items(), start=1):
+        j = 0
+        # for j, area in enumerate(areas):
         ax.scatter(
             np.full_like(area, class_idx),
             area,
             color=[gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(area)) for a in area],
             edgecolors="none",
         )
+        data.append(area)
+        positions.append(i * pos_pad + j)
+
     boxplot_dict = ax.boxplot(
         area_info.values(),
         positions=list(area_info.keys()),

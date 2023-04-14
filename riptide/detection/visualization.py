@@ -305,8 +305,8 @@ class Inspector:
         color: Union[str, ErrorColor, List[Union[str, ErrorColor]]],
         axis: int = 0,
         *,
-        evaluator_ids: List[int] = 0,
-        preview_size=128,
+        evaluator_id: int = 0,
+        preview_size: int = 128,
         bbox_attr: str = None,
         label_attr: str = None,
         projector_attr: str = None,
@@ -353,27 +353,24 @@ class Inspector:
         Dict[str, Dict[str, bytes]]
             Dictionary of plots for each error type, classwise
         """
-        if not isinstance(evaluator_ids, (list, tuple)):
-            evaluator_ids = [evaluator_ids]
 
-        summaries = list(self.summaries.values())
-        num_errors = sum(
-            [summaries[idx].get(error_type.__name__, 0) for idx in evaluator_ids]
+        error_type_name = (
+            "true_positives" if error_type is NonError else error_type.__name__
         )
 
+        num_errors = self.summaries[evaluator_id].get(error_type_name, 0)
         if num_errors == 0:
             return dict()
 
-        errors_list = [
-            self.errorlist_dicts[idx].get(error_type.__name__, dict())
-            for idx in evaluator_ids
-        ]
-        errors: Dict[str, List[List[Error]]] = {}
-        for i, error_dict in enumerate(errors_list):
-            for key, error_list in error_dict.items():
-                if key not in errors:
-                    errors[key] = [[] for _ in range(len(evaluator_ids))]
-                errors[key][i].extend(error_list)
+        errors_list = self.errorlist_dicts[evaluator_id].get(
+            error_type.__name__, dict()
+        )
+        errors: Dict[str, List[Error]] = {}
+        for image_path, error_list in errors_list.items():
+            if image_path not in errors:
+                errors[image_path] = error_list
+            else:
+                errors[image_path].extend(error_list)
 
         if not isinstance(color, list):
             color = [color]
@@ -419,97 +416,86 @@ class Inspector:
         projector: CropProjector = getattr(self, projector_attr)
 
         code = "TP" if error_type is NonError else error_type.code
-        cluster_labels = {(i, code) for i in evaluator_ids}
 
-        if len(cluster_labels) == 1:
+        def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
+            return [label == (evaluator_id, code) for label in labels]
 
-            def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
-                return [label in cluster_labels for label in labels]
+        clusters = projector.cluster(label_mask_func=cluster_filter)
 
-            clusters = [projector.cluster(label_mask_func=cluster_filter)]
-        else:
-            clusters = projector.match_clusters(cluster_labels)
-
-        classwise_dict: Dict[int, Tuple[str, Tuple[List[Dict], ...]]] = {}
+        classwise_dict: Dict[int, Tuple[str, List[Dict]]] = {}
         label_set = set()
         idx = 0
         for image_path, image_errors in errors.items():
             image_tensor = read_image(image_path)
             image_name = image_path.split("/")[-1]
-            for model_id, model_errors in enumerate(image_errors):
-                for error in model_errors:
-                    bbox: torch.Tensor = getattr(error, bbox_attr)
-                    label: int = getattr(error, label_attr)
-                    label_set.add(label)
+            for error in image_errors:
+                bbox: torch.Tensor = getattr(error, bbox_attr)
+                label: int = getattr(error, label_attr)
+                label_set.add(label)
 
-                    if bbox is not None:
-                        width, height, area = get_bbox_stats(bbox)
-                        bboxes = get_bbox_func(error, bbox_attr)
+                if bbox is not None:
+                    width, height, area = get_bbox_stats(bbox)
+                    bboxes = get_bbox_func(error, bbox_attr)
 
-                        crop_tensor = (
-                            crop_preview(image_tensor, bboxes, color)
-                            if isinstance(bboxes, torch.Tensor)
-                            else image_tensor
-                        )
-                        crop: Image.Image = to_pil_image(crop_tensor)
-                        encoded_crop = encode_base64(
-                            crop.resize((preview_size, preview_size))
-                        )
-                    else:
-                        width, height, area = (None, None, None)
-                        encoded_crop = None
-
-                    if label not in classwise_dict:
-                        classwise_dict[label] = (
-                            get_label_func(label),
-                            tuple([] for _ in evaluator_ids),
-                        )
-
-                    confidence = (
-                        round(error.confidence, 2)
-                        if error.confidence is not None
-                        else None
+                    crop_tensor = (
+                        crop_preview(image_tensor, bboxes, color)
+                        if isinstance(bboxes, torch.Tensor)
+                        else image_tensor
                     )
-                    iou = (
-                        round(
-                            box_iou(
-                                error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)
-                            ).item(),
-                            3,
-                        )
-                        if error.pred_bbox is not None and error.gt_bbox is not None
-                        else None
+                    crop: Image.Image = to_pil_image(crop_tensor)
+                    encoded_crop = encode_base64(
+                        crop.resize((preview_size, preview_size))
+                    )
+                else:
+                    width, height, area = (None, None, None)
+                    encoded_crop = None
+
+                if label not in classwise_dict:
+                    classwise_dict[label] = (
+                        get_label_func(label),
+                        [],
                     )
 
-                    classwise_dict[label][1][model_id].append(
-                        add_metadata_func(
-                            {
-                                "image_name": image_name,
-                                "image_base64": encoded_crop,
-                                "pred_class": error.pred_label,
-                                "gt_class": error.gt_label,
-                                "confidence": confidence,
-                                "bbox_width": width,
-                                "bbox_height": height,
-                                "bbox_area": area,
-                                "iou": iou,
-                                "cluster": clusters[model_id][idx],
-                            },
-                            error,
-                        )
+                confidence = (
+                    round(error.confidence, 2) if error.confidence is not None else None
+                )
+                iou = (
+                    round(
+                        box_iou(
+                            error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)
+                        ).item(),
+                        3,
                     )
-                    idx += 1
+                    if error.pred_bbox is not None and error.gt_bbox is not None
+                    else None
+                )
+
+                classwise_dict[label][1].append(
+                    add_metadata_func(
+                        {
+                            "image_name": image_name,
+                            "image_base64": encoded_crop,
+                            "pred_class": error.pred_label,
+                            "gt_class": error.gt_label,
+                            "confidence": confidence,
+                            "bbox_width": width,
+                            "bbox_height": height,
+                            "bbox_area": area,
+                            "iou": iou,
+                            "cluster": clusters[idx],
+                        },
+                        error,
+                    )
+                )
+                idx += 1
 
         for label in label_set:
-            for model_id in range(len(evaluator_ids)):
-                classwise_dict[label][1][model_id].sort(
-                    key=lambda x: x["cluster"], reverse=True
-                )
+            classwise_dict[label][1].sort(key=lambda x: x["cluster"], reverse=True)
 
         classwise_dict = dict(
             sorted(
                 classwise_dict.items(),
-                key=lambda x: sum([len(y) for y in x[1][1]]),
+                key=lambda x: len(x[1][1]),
                 reverse=True,
             )
         )
@@ -900,7 +886,7 @@ class Inspector:
         """
         figs = [
             self.error_classwise_dict(
-                BackgroundError, color=ErrorColor.BKG, axis=1, evaluator_ids=idx
+                BackgroundError, color=ErrorColor.BKG, axis=1, evaluator_id=idx
             )
             for idx in range(len(self.evaluators))
         ]
