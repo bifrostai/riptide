@@ -1018,6 +1018,13 @@ class ObjectDetectionEvaluator(Evaluator):
         return classwise_summary
 
     def get_errorlist_dict(self) -> Dict[str, Dict[str, List[Error]]]:
+        """Get a dictionary of dictionaries of lists of errors.
+        The first key is the error type, the second key is the image path, and the value is a list of errors.
+        Returns
+        -------
+        Dict[str, Dict[str, List[Error]]]
+            Dictionary of dictionaries of lists of errors.
+        """
         if self._errorlist_dict is None:
             errorlist_dict: Dict[str, Dict[str, List[Error]]] = {
                 error_type.__name__: dict() for error_type in ERROR_TYPES

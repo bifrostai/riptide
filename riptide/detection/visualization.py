@@ -23,13 +23,7 @@ from riptide.detection.evaluation import ObjectDetectionEvaluator
 from riptide.flow import FlowVisualizer
 from riptide.report.section import Content, ContentType, Section
 from riptide.utils.colors import ErrorColor, gradient
-from riptide.utils.image import (
-    convex_hull,
-    crop_preview,
-    encode_base64,
-    get_bbox_stats,
-    get_padded_bbox_crop,
-)
+from riptide.utils.image import crop_preview, encode_base64, get_bbox_stats
 from riptide.utils.logging import logger
 from riptide.utils.plots import (
     PALETTE_BLUE,
@@ -76,14 +70,15 @@ class Inspector:
             round(evaluator.evaluations[0].fg_iou_threshold, 2),
         )
 
-        self.summaries = {
-            evaluator.name: {
+        self.summaries = [
+            {
+                "name": evaluator.name,
                 "conf_threshold": evaluator.conf_threshold,
                 "iou_thresholds": evaluator.iou_thresholds,
                 **{k: round(v, 3) for k, v in evaluator.summarize().items()},
             }
             for evaluator in self.evaluators
-        }
+        ]
 
         self.classwise_summaries = {
             evaluator.name: {
@@ -732,7 +727,7 @@ class Inspector:
         return classwise_dict, fig
 
     @logger()
-    def duplicate_error(self) -> Tuple[Dict[int, Dict], bytes]:
+    def duplicate_error(self) -> Dict[int, Dict]:
         """Saves the DuplicateErrors of the evaluator to the given output directory.
 
         Returns
@@ -779,17 +774,8 @@ class Inspector:
             preview_size=192,
             add_metadata_func=add_metadata_func,
         )
-        classwise_dict = dict(
-            sorted(
-                classwise_dict.items(),
-                key=lambda x: len(x[1][1]),
-                reverse=True,
-            )
-        )
 
-        fig = self.boxplot(classwise_dict)
-
-        return classwise_dict, fig
+        return classwise_dict
 
     @logger()
     def missed_error(self) -> Tuple[Dict[int, Dict], bytes]:
@@ -864,7 +850,7 @@ class Inspector:
             results["classification_and_localization_error_figs"],
             results["classification_and_localization_error_plot"],
         ) = self.classification_and_localization_error()
-        results["duplicate_error_figs"], _ = self.duplicate_error()
+        results["duplicate_error_figs"] = self.duplicate_error()
         results["missed_error_figs"], results["missed_error_plot"] = self.missed_error()
         (
             results["true_positive_figs"],
@@ -947,7 +933,7 @@ class Inspector:
 
         results = dict()
 
-        results["overview"] = self.summary()
+        _, _, results["overview"] = self.overview()
         results["background_errors"] = self.compare_background_errors()
         results["flow"] = self.flow()
         return results

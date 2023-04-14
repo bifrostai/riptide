@@ -39,7 +39,7 @@ def setup_mpl_params():
 # endregion
 
 
-def boxplot(area_info: dict, ax: plt.Axes = None) -> None:
+def boxplot(area_info: Dict[Any, List[list]], ax: plt.Axes = None) -> None:
     """Plot a boxplot of the area of each class
 
     Parameters
@@ -70,8 +70,8 @@ def boxplot(area_info: dict, ax: plt.Axes = None) -> None:
         positions.append(i * pos_pad + j)
 
     boxplot_dict = ax.boxplot(
-        area_info.values(),
-        positions=list(area_info.keys()),
+        data,
+        positions=positions,
         patch_artist=True,
     )
 
