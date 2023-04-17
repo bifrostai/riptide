@@ -67,7 +67,7 @@ def boxplot(area_info: Dict[Any, List[list]], ax: plt.Axes = None) -> None:
             edgecolors="none",
         )
         data.append(area)
-        positions.append(i * pos_pad + j)
+        positions.append(class_idx)
 
     boxplot_dict = ax.boxplot(
         data,
