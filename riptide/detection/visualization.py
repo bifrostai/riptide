@@ -790,13 +790,6 @@ class Inspector:
         classwise_dict = self.error_classwise_dict(
             MissedError, color=ErrorColor.MIS, axis=0
         )
-        classwise_dict = dict(
-            sorted(
-                classwise_dict.items(),
-                key=lambda x: len(x[1][1]),
-                reverse=True,
-            )
-        )
 
         fig = self.boxplot(classwise_dict)
 
@@ -817,13 +810,6 @@ class Inspector:
             color=[ErrorColor.WHITE, ErrorColor.TP],
             axis=1,
             get_bbox_func=get_both_bboxes,
-        )
-        classwise_dict = dict(
-            sorted(
-                classwise_dict.items(),
-                key=lambda x: len(x[1][1]),
-                reverse=True,
-            )
         )
 
         fig = self.boxplot(classwise_dict)
