@@ -8,6 +8,10 @@ from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import to_pil_image
 
+from riptide.detection.characterization import (
+    compute_aspect_variance,
+    compute_size_variance,
+)
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
@@ -401,6 +405,7 @@ class Inspector:
                                 f"Conf { metadata['confidence'] }",
                                 f"W{ metadata['bbox_width'] }",
                                 f"H{ metadata['bbox_height'] }",
+                                f"Cluster { metadata['cluster'] }",
                             ]
                         ),
                     }
@@ -617,6 +622,7 @@ class Inspector:
                             x["image_name"],
                             f"Pred: Class {x['pred_class']}",
                             f"Conf { x['confidence'] }",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -638,17 +644,22 @@ class Inspector:
             id="ClassificationError",
             title="Classification Errors",
             description="""
-                    The following plot shows the distribution of classification errors.
+                    List of all the false positive detections with <span class="code">iou > fg_iou_threshold</span> but with predicted classes not equal to the class of the corresponding ground truth.
                     """,
             contents=[
                 Content(
                     type=ContentType.PLOT,
                     header="Ranking",
+                    description=(
+                        "The following plot shows the distribution of classification"
+                        " errors."
+                    ),
                     content=dict(plot=fig),
                 ),
                 Content(
                     type=ContentType.IMAGES,
                     header="Visualizations",
+                    description="The following is a montage of the classification.",
                     content=classwise_dict,
                 ),
             ],
@@ -669,6 +680,7 @@ class Inspector:
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
                             f"IoU {x['iou']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -685,9 +697,7 @@ class Inspector:
             get_label_func=get_label_func,
             add_metadata_func=add_metadata_func,
         )
-        fig = self.error_classwise_ranking(LocalizationError)
-
-        # return classwise_dict, fig
+        # fig = self.error_classwise_ranking(LocalizationError)
 
         return Section(
             id="LocalizationError",
@@ -714,6 +724,30 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
+
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
+
+        def add_metadata_func(
+            x: dict, error: ClassificationAndLocalizationError
+        ) -> dict:
+            x.update(
+                {
+                    "caption": " | ".join(
+                        [
+                            x["image_name"],
+                            f"Pred: Class {x['pred_class']}",
+                            f"Conf { x['confidence'] }",
+                            f"W{x['bbox_width']}",
+                            f"H{x['bbox_height']}",
+                            f"IoU {x['iou']}",
+                            f"Cluster { x['cluster'] }",
+                        ]
+                    ),
+                }
+            )
+
+            return x
+
         classwise_dict = self.error_classwise_dict(
             ClassificationAndLocalizationError,
             color=[ErrorColor.WHITE, ErrorColor.CLL],
@@ -721,10 +755,38 @@ class Inspector:
             get_bbox_func=get_both_bboxes,
             preview_size=192,
             label_attr="gt_label",
+            get_label_func=get_label_func,
+            add_metadata_func=add_metadata_func,
         )
         fig = self.error_classwise_ranking(ClassificationAndLocalizationError)
 
-        return classwise_dict, fig
+        return Section(
+            id="ClassificationAndLocalizationError",
+            title="Classification and Localization Errors",
+            description="""
+                    List of all the false positive detections with <span class="code">bg_iou_threshold < iou < fg_iou_threshold</span> and with predicted classes not equal to the class of the corresponding ground truth.
+                    """,
+            contents=[
+                Content(
+                    type=ContentType.PLOT,
+                    header="Ranking",
+                    description=(
+                        "The following plot shows the distribution of classification"
+                        " and localization errors."
+                    ),
+                    content=dict(plot=fig),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    description=(
+                        "The following is a montage of the classification and"
+                        " localization errors."
+                    ),
+                    content=classwise_dict,
+                ),
+            ],
+        )
 
     @logger()
     def duplicate_error(self) -> Dict[int, Dict]:
@@ -736,6 +798,8 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
+
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
 
         def get_bbox_func(error: DuplicateError, attr: str):
             return torch.stack([error.gt_bbox, error.best_pred_bbox, error.pred_bbox])
@@ -759,6 +823,7 @@ class Inspector:
                             f"Best  ({ best_iou }, { best_conf })",
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -773,9 +838,28 @@ class Inspector:
             get_bbox_func=get_bbox_func,
             preview_size=192,
             add_metadata_func=add_metadata_func,
+            get_label_func=get_label_func,
         )
 
-        return classwise_dict
+        return Section(
+            id="DuplicateError",
+            title="Duplicate Errors",
+            description=f"""
+                        List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction.
+                        """,
+            contents=[
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    description=(
+                        "The following is a montage of the duplicate errors. White"
+                        " boxes indicate ground truths, green boxes indicate best"
+                        " predictions, and red boxes indicate duplicate predictions."
+                    ),
+                    content=classwise_dict,
+                ),
+            ],
+        )
 
     @logger()
     def missed_error(self) -> Tuple[Dict[int, Dict], bytes]:
@@ -787,13 +871,74 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
+        get_label_func = lambda x: f"Missed: Class {x}"
+
+        def add_metadata_func(x: dict, error: MissedError) -> dict:
+            x.update(
+                {
+                    "caption": " | ".join(
+                        [
+                            x["image_name"],
+                            f"W{x['bbox_width']}",
+                            f"H{x['bbox_height']}",
+                            f"Cluster { x['cluster'] }",
+                        ]
+                    ),
+                }
+            )
+
+            return x
+
         classwise_dict = self.error_classwise_dict(
-            MissedError, color=ErrorColor.MIS, axis=0
+            MissedError,
+            color=ErrorColor.MIS,
+            axis=0,
+            get_label_func=get_label_func,
+            add_metadata_func=add_metadata_func,
         )
 
         fig = self.boxplot(classwise_dict)
 
-        return classwise_dict, fig
+        missed_size_var = compute_size_variance(self.evaluator)
+        missed_aspect_var = compute_aspect_variance(self.evaluator)
+
+        return Section(
+            id="MissedError",
+            title="Missed Errors",
+            description="""
+                    List of all the ground truths that have no corresponding prediction.
+                    """,
+            contents=[
+                # Content(
+                #     type=ContentType.RECALL,
+                #     header="Classwise Missed Errors and recall",
+                #     description="Number of Missed Errors per class | number of total objects per class",
+                #     content=[self.classwise_summary, "MissedError"],
+                # ),
+                # Content(
+                #     type=ContentType.AR_SIZE,
+                #     header="Aspect ratio and size variance",
+                #     description="Variance of aspect ratios across Missed Errors",
+                #     content=[missed_aspect_var, missed_size_var],
+                # ),
+                Content(
+                    type=ContentType.PLOT,
+                    header="Ranking",
+                    description="""
+                    The following plot shows the size (area) distribution of missed errors for each class. The presence of outliers in this plot indicates the misses may be caused by extreme object sizes.
+                    """,
+                    content=dict(plot=fig),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    description=f"""
+                    List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={ self.overall_summary['conf_threshold'] }</span> that had IoU above <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span> (otherwise it would be considered a Localization Error).
+                    """,
+                    content=classwise_dict,
+                ),
+            ],
+        )
 
     @logger()
     def true_positives(self) -> Tuple[Dict[int, Dict], bytes]:
@@ -805,17 +950,47 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
+
+        def add_metadata_func(x: dict, error: NonError) -> dict:
+            x.update(
+                {
+                    "caption": " | ".join(
+                        [
+                            x["image_name"],
+                            f"Conf {x['confidence']}",
+                            f"IoU {x['iou']}",
+                            f"Cluster { x['cluster'] }",
+                        ]
+                    ),
+                }
+            )
+
+            return x
+
         classwise_dict = self.error_classwise_dict(
             NonError,
             color=[ErrorColor.WHITE, ErrorColor.TP],
             axis=1,
             get_bbox_func=get_both_bboxes,
+            get_label_func=get_label_func,
+            add_metadata_func=add_metadata_func,
         )
 
-        fig = self.boxplot(classwise_dict)
-        # fig = encode_base64(plt.Figure())
-
-        return classwise_dict, fig
+        return Section(
+            id="TruePositive",
+            title="True Positives",
+            description=f"""
+                    List of all the True Positives detections. No prediction was made below <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span>.
+                    """,
+            contents=[
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    content=classwise_dict,
+                ),
+            ],
+        )
 
     @logger()
     def inspect(self) -> Dict[str, Any]:
@@ -832,16 +1007,12 @@ class Inspector:
         results["background_error_figs"] = self.background_error()
         results["classification_error_figs"] = self.classification_error()
         results["localization_error_figs"] = self.localization_error()
-        (
-            results["classification_and_localization_error_figs"],
-            results["classification_and_localization_error_plot"],
-        ) = self.classification_and_localization_error()
+        results[
+            "classification_and_localization_error_figs"
+        ] = self.classification_and_localization_error()
         results["duplicate_error_figs"] = self.duplicate_error()
-        results["missed_error_figs"], results["missed_error_plot"] = self.missed_error()
-        (
-            results["true_positive_figs"],
-            results["true_positive_plot"],
-        ) = self.true_positives()
+        results["missed_error_figs"] = self.missed_error()
+        results["true_positive_figs"] = self.true_positives()
 
         return results
 

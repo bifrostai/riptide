@@ -15,6 +15,10 @@
     {{ render_overview(content.content) }}
 {%- elif content.type == "images" -%}
     {{ render_images(content.content) }}
+{%- elif content.type == "ar_size" -%}
+    {{ render_ar_size(content.content) }}
+{%- elif content.type == "recall" -%}
+    {{ render_recall(content.content) }}
 {%- elif content.type == "plot" -%}
     {{ render_plot(content.content) }}
 {%- else -%}
@@ -68,6 +72,54 @@
 </div>
 {%- endmacro -%}
 
+{%- macro render_recall(content) -%}
+{% set classwise_summary = content[0] %}
+{% set error_type = content[1] %}
+<div class="summary-row">
+    {% for class_idx, individual_summary in classwise_summary.items() %}
+        {% set error = individual_summary[error_type] %}
+        {% set total_count = individual_summary["total_count"] %}
+        <div class="summary-item">
+            <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+            <div class="summary-metric-value">{{ error }} <span class="text-dark">| {{ total_count }}</span></div>
+        </div>
+    {% endfor %}
+</div>
+<p>Recall per class</p>
+<div class="summary-row">
+    {% for class_idx, individual_summary in classwise_summary.items() %}
+        <div class="summary-item">
+            <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+            <div class="summary-metric-value">{{ individual_summary['recall'] }}</span></div>
+        </div>
+    {% endfor %}
+</div>
+{%- endmacro -%}
+
+{%- macro render_ar_size(content) -%}
+{% set aspect_vars = content[0] %}
+{% set size_vars = content[1] %}
+<div class="summary-row">
+    {% for class_idx, aspect_var in aspect_vars.items() %}
+    <div class="summary-item">
+        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+        <div class="summary-metric-value">{{ aspect_var }}</div>
+    </div>
+    {% endfor %}
+</div>
+<p>
+    Variance of object size (area) across MissedErrors
+</p>
+<div class="summary-row">
+    {% for class_idx, size_var in size_vars.items() %}
+    <div class="summary-item">
+        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+        <div class="summary-metric-value">{{ size_var }}</div>
+    </div>
+    {% endfor %}
+</div>
+{%- endmacro -%}
+
 {%- macro render_images(images) -%}
 <div class="class-images">
     {%- for _, (class_info, image_list) in images.items() -%}
@@ -81,7 +133,7 @@
                 {%- endfor -%}
             </div>
         </div>
-    {%- endfor -%}
+    {% endfor %}
 </div>
 {%- endmacro -%}
 

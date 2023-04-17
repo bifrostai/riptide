@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field, root_validator
 class ContentType(str, Enum):
     OVERVIEW = "overview"
     TEXT = "text"
-    # IMAGE = "image"
+    RECALL = "recall"
+    AR_SIZE = "ar_size"
     IMAGES = "images"
     PLOT = "plot"
 
