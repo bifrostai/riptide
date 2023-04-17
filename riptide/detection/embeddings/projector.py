@@ -127,8 +127,8 @@ class CropProjector:
 
     def cluster(
         self,
-        eps: float = 0.5,
-        min_samples: int = 5,
+        eps: float = 0.4,
+        min_samples: int = 2,
         label_mask_func: Callable[[list], List[bool]] = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -141,7 +141,7 @@ class CropProjector:
         )
 
     def match_clusters(
-        self, labels: list, eps: float = 0.5, min_samples: int = 5
+        self, labels: list, eps: float = 0.4, min_samples: int = 2
     ) -> List[torch.Tensor]:
         """Match clusters between label subsets
 
