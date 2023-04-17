@@ -126,8 +126,10 @@ class HtmlReport:
             **error_fig_plots,
         )
         os.makedirs(output_dir, exist_ok=True)
-        with open(os.path.join(output_dir, fname), "w") as f:
+        fout = os.path.join(output_dir, fname)
+        with open(fout, "w") as f:
             f.writelines(output)
+        logging.info(f"Rendered output to {fout}")
 
     def compare(
         self,
