@@ -430,8 +430,10 @@ class Inspector:
             def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
                 return [label == (evaluator_id, code) for label in labels]
 
+            mask = [label == (evaluator_id, code) for label in projector.labels]
+
             # TODO: test robustness of clustering
-            clusters = projector.cluster(label_mask_func=cluster_filter)
+            clusters = projector.cluster(mask=mask)
 
         else:
             assert (
@@ -504,6 +506,7 @@ class Inspector:
                             "bbox_height": height,
                             "bbox_area": area,
                             "iou": iou,
+                            "cluster": cluster,
                         },
                         error,
                     )
