@@ -99,8 +99,8 @@ class HtmlReport:
         error_fig_plots = inspector.inspect()
 
         # MissedError data - classwise false negatives
-        missed_size_var = compute_size_variance(self.evaluator)
-        missed_aspect_var = compute_aspect_variance(self.evaluator)
+        missed_size_var = compute_size_variance(self.evaluators[0])
+        missed_aspect_var = compute_aspect_variance(self.evaluators[0])
 
         # Infobox suggestions
         infoboxes = self.get_suggestions(

@@ -78,17 +78,8 @@ class CropProjector:
 
     def get_embeddings(
         self,
-        label_mask_func: Callable[[list], List[bool]] = None,
-        extend: torch.Tensor = None,
     ) -> torch.Tensor:
         """Get embeddings for a given set of labels
-
-        Parameters
-        ----------
-        labels : Iterable, optional
-            Labels to filter by, if None, all embeddings are returned, by default None
-        extend : torch.Tensor, optional
-            Additional tensor to extend the embeddings by, by default None
 
         Returns
         -------
@@ -106,33 +97,18 @@ class CropProjector:
 
             self._embeddings = embeddings
 
-        if label_mask_func is not None:
-            mask = label_mask_func(self.labels)
-            embeddings = self._embeddings[mask]
-        else:
-            embeddings = self._embeddings
-
-        if extend is not None:
-            assert extend.size(0) == embeddings.size(
-                0
-            ), "Embedding and extend must have the same number of rows"
-            if self.normalize_embeddings:
-                extend = torch.nan_to_num(
-                    (extend - extend.min(dim=0)[0])
-                    / (extend.max(dim=0)[0] - extend.min(dim=0)[0])
-                )
-            embeddings = torch.cat([embeddings, extend], dim=1)
-
-        return embeddings
+        return self._embeddings
 
     def cluster(
         self,
         eps: float = 0.4,
         min_samples: int = 2,
-        label_mask_func: Callable[[list], List[bool]] = None,
+        mask: List[bool] = None,
         **kwargs,
     ) -> torch.Tensor:
-        embeddings = self.get_embeddings(label_mask_func)
+        embeddings = self.get_embeddings()
+        if mask is not None:
+            embeddings = embeddings[mask]
         if len(embeddings) == 0:
             return torch.zeros(0, dtype=torch.long)
 
@@ -213,3 +189,41 @@ class CropProjector:
             clusters_list[idx] = new_clusters
 
         return clusters_list
+
+    def match_clusters(
+        self, labels: list, eps: float = 0.5, min_samples: int = 2
+    ) -> List[torch.Tensor]:
+        """Match clusters between label subsets
+
+        Parameters
+        ----------
+        labels : list
+            List of labels to match
+        eps : float, optional
+            DBSCAN eps parameter, by default 0.4
+        min_samples : int, optional
+            DBSCAN min_samples parameter, by default 2
+
+        Returns
+        -------
+        torch.Tensor
+            Cluster mapping
+        """
+
+        mask = []
+        ids = []
+        for label in self.labels:
+            mask.append(label in labels)
+            if label in labels:
+                ids.append(labels.index(label))
+
+        clusters = self.cluster(eps=eps, min_samples=min_samples, mask=mask)
+        cluster_groups = [[] for _ in labels]
+        for i, cluster in enumerate(clusters):
+            if ids[i] == -1:
+                continue
+            cluster_groups[ids[i]].append(cluster)
+
+        cluster_list = [torch.tensor(cluster_group) for cluster_group in cluster_groups]
+
+        return cluster_list
