@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import Enum
 from typing import Any, List, Optional, Union
 
@@ -18,6 +20,7 @@ class Content(BaseModel):
     header: Optional[str]
     description: Optional[str]
     content: Union[dict, list]
+    data: Optional[dict] = dict()
 
     class Config:
         arbitrary_types_allowed = True

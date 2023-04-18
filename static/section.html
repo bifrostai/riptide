@@ -1,11 +1,11 @@
 {%- macro render_section(section) -%}
-<div id="{{section.id}}">
+<section id="{{section.id}}">
     {% if section.title is not none %}<h2>{{ section.title }}</h2>{% endif %}
     {% if section.description is not none %}<p>{{ section.description | safe }}</p>{% endif %}
     {%- for content in section.contents -%}
         {{ render_content(content) }}
     {%- endfor -%}
-</div>
+</section>
 {%- endmacro -%}
 
 {%- macro render_content(content) -%}
@@ -14,7 +14,7 @@
 {%- if content.type == "overview" -%}
     {{ render_overview(content.content) }}
 {%- elif content.type == "images" -%}
-    {{ render_images(content.content) }}
+    {{ render_images(content) }}
 {%- elif content.type == "ar_size" -%}
     {{ render_ar_size(content.content) }}
 {%- elif content.type == "recall" -%}
@@ -120,23 +120,45 @@
 </div>
 {%- endmacro -%}
 
-{%- macro render_images(images) -%}
+{%- macro render_images(content) -%}
+{%- set grouped = content.data.get("grouped", false) -%}
+{%- set images = content.content -%}
 <div class="class-images">
-    {%- for _, (class_info, image_list) in images.items() -%}
+    {%- if images.get("group_headers") is not none -%}
+    <div class="class-images-groups"></div>
+    {%- endif -%}
+    {%- for _, (class_info, clusters) in images.items() -%}
         <div class="class-images-container">
             <div class="class-name">{{ class_info }}</div>
-            <div class="class-image-container">
+            {%- if grouped -%}
+            {%- for cluster in clusters.values() -%}
+            <div class="class-image-container" style="flex-basis: {{ 100 / (clusters | length) }}%">
+                {%- for image_list in cluster -%}
                 {%- for image_dict in image_list -%}
                 <div class="class-image-wrapper">
                     {{ render_image(image_dict) }}
                 </div>
                 {%- endfor -%}
+                {%- endfor -%}
+                </div>
+            {%- endfor -%}
+            {%- else -%}
+            <div class="class-image-container">
+                {%- for cluster in clusters.values() -%}
+                {%- for image_list in cluster -%}
+                {%- for image_dict in image_list -%}
+                <div class="class-image-wrapper">
+                    {{ render_image(image_dict) }}
+                </div>
+                {%- endfor -%}
+                {%- endfor -%}
+                {%- endfor -%}
             </div>
+            {% endif -%}
         </div>
     {% endfor %}
 </div>
 {%- endmacro -%}
-
 
 {%- macro render_image(image) -%}
     <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">

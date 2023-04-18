@@ -273,7 +273,9 @@ class Inspector:
 
         return confidence_hists
 
-    def boxplot(self, classwise_dict: Dict[int, Tuple[str, List[Dict]]]) -> bytes:
+    def boxplot(
+        self, classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]
+    ) -> bytes:
         """Computes a dictionary of plots for the confidence of given error types.
 
         Arguments
@@ -288,9 +290,11 @@ class Inspector:
         """
         # Plot the barplots of the classwise area
         area_info = {}
-        for class_idx, (_, info_dict) in classwise_dict.items():
-            areas = [m["bbox_area"] for m in info_dict]
-            area_info[class_idx] = areas
+        for class_idx, (_, clusters) in classwise_dict.items():
+            for cluster in clusters.values():
+                # TODO: change this for multi model comparison
+                areas = [m["bbox_area"] for info_dicts in cluster for m in info_dicts]
+                area_info[class_idx] = areas
 
         setup_mpl_params()
         fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
@@ -312,19 +316,22 @@ class Inspector:
         get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
         get_label_func: Callable[[int], str] = None,
         add_metadata_func: Callable[[dict, Error], dict] = None,
-    ) -> Dict[int, Tuple[str, List[Dict]]]:
+    ) -> Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]:
         """Computes a dictionary of plots for the crops of the errors, classwise.
 
         Arguments
         ---------
-        error_types : Union[Error, Iterable[Error]]
-            Error types to plot confidence for
+        error_type : Type[Error]
+            Error type to plot crops for
 
         color : Union[str, ErrorColor, List[Union[str, ErrorColor]]]
             Color(s) for the bounding box(es). Can be a single color or a list of colors
 
         axis : int, default=0
             Axis to crop image on. 0 for ground truth, 1 for predictions
+
+        evaluator_id : int, default=0
+            Evaluator id to use
 
         preview_size : int, default=128
             Size of the preview image
@@ -349,10 +356,11 @@ class Inspector:
 
         Returns
         -------
-        Dict[str, Dict[str, bytes]]
-            Dictionary of plots for each error type, classwise
+        Dict[int, Tuple[str, List[List[dict]]]]
+            Dictionary of class ids to cluster ids to list of image metadata
         """
 
+        # region: parse parameters
         error_type_name = (
             "true_positives" if error_type is NonError else error_type.__name__
         )
@@ -420,9 +428,12 @@ class Inspector:
         def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
             return [label == (evaluator_id, code) for label in labels]
 
+        # TODO: test robustness of clustering
         clusters = projector.cluster(label_mask_func=cluster_filter)
 
-        classwise_dict: Dict[int, Tuple[str, List[Dict]]] = {}
+        # endregion
+
+        classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
         label_set = set()
         idx = 0
         for image_path, image_errors in errors.items():
@@ -453,7 +464,7 @@ class Inspector:
                 if label not in classwise_dict:
                     classwise_dict[label] = (
                         get_label_func(label),
-                        [],
+                        dict(),
                     )
 
                 confidence = (
@@ -470,7 +481,11 @@ class Inspector:
                     else None
                 )
 
-                classwise_dict[label][1].append(
+                cluster = clusters[idx].item()
+                if cluster not in classwise_dict[label][1]:
+                    classwise_dict[label][1][cluster] = [[]]
+
+                classwise_dict[label][1][cluster][0].append(
                     add_metadata_func(
                         {
                             "image_name": image_name,
@@ -482,7 +497,9 @@ class Inspector:
                             "bbox_height": height,
                             "bbox_area": area,
                             "iou": iou,
-                            "cluster": clusters[idx],
+                            "cluster": clusters[
+                                idx
+                            ],  # TODO: remove this, it's redundant
                         },
                         error,
                     )
@@ -490,15 +507,12 @@ class Inspector:
                 idx += 1
 
         for label in label_set:
-            classwise_dict[label][1].sort(key=lambda x: x["cluster"], reverse=True)
+            class_info, clusters = classwise_dict[label]
 
-        classwise_dict = dict(
-            sorted(
-                classwise_dict.items(),
-                key=lambda x: len(x[1][1]),
-                reverse=True,
+            classwise_dict[label] = (
+                class_info,
+                dict(sorted(clusters.items(), key=lambda x: x[0], reverse=True)),
             )
-        )
 
         return classwise_dict
 
@@ -578,9 +592,14 @@ class Inspector:
         return encode_base64(fig)
 
     @logger()
-    def background_error(self) -> Dict[int, List[Dict]]:
+    def background_error(self, data: dict = None) -> Dict[int, List[Dict]]:
         """Saves the BackgroundErrors (false positives) of the evaluator to the given
         output directory.
+
+        Parameters
+        ----------
+        data : dict, optional
+            Metadata to attach to content, by default None
 
         Returns
         -------
@@ -588,6 +607,8 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
+        if data is None:
+            data = {}
         figs = self.error_classwise_dict(BackgroundError, color=ErrorColor.BKG, axis=1)
 
         return Section(
@@ -597,7 +618,12 @@ class Inspector:
             List of all the false positive detections with confidence above the <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span> but do not pass the <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span>.
             """,
             contents=[
-                Content(type=ContentType.IMAGES, header="Visualizations", content=figs)
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    content=figs,
+                    data=data,
+                ),
             ],
         )
 

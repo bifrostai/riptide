@@ -142,6 +142,11 @@ body {
     padding: 0.4vw;
     display: flex;
     flex-direction: column;
+    flex-basis: 100%;
+}
+
+.class-images-container + .row {
+    flex-direction: row;
 }
 
 .class-image-container {
