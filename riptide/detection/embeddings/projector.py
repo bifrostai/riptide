@@ -147,12 +147,12 @@ class CropProjector:
 
         Parameters
         ----------
-        proj1 : CropProjector
-            First projector
-        proj2 : CropProjector
-            Second projector
-        kwargs : dict
-            Additional arguments to pass to the cluster function
+        labels : list
+            List of labels to match
+        eps : float, optional
+            DBSCAN eps parameter, by default 0.4
+        min_samples : int, optional
+            DBSCAN min_samples parameter, by default 2
 
         Returns
         -------
@@ -168,6 +168,7 @@ class CropProjector:
             self.cluster(label_mask_func=func, eps=eps, min_samples=min_samples)
             for func in label_mask_funcs
         ]
+
         cluster_means = [
             torch.zeros(clusters.max() + 1, self._embeddings.shape[1])
             for clusters in clusters_list
@@ -182,6 +183,9 @@ class CropProjector:
                 )[mask].mean(dim=0)
 
         cluster_reps = torch.concat(cluster_means)
+        if len(cluster_reps) == 0:
+            return clusters_list
+
         matched = torch.tensor(
             DBSCAN(eps=eps / 2, min_samples=2).fit(cluster_reps).labels_
         ).split([cluster_mean.shape[0] for cluster_mean in cluster_means])

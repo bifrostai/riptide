@@ -132,15 +132,17 @@
             <div class="class-name">{{ class_info }}</div>
             {%- if grouped -%}
             {%- for cluster in clusters.values() -%}
-            <div class="class-image-container" style="flex-basis: {{ 100 / (clusters | length) }}%">
+            <div class="class-image-container">
                 {%- for image_list in cluster -%}
-                {%- for image_dict in image_list -%}
-                <div class="class-image-wrapper">
-                    {{ render_image(image_dict) }}
+                <div class="class-image-container row" style="flex-basis: {{ 100 / (cluster | length) }}%">
+                    {%- for image_dict in image_list -%}
+                    <div class="class-image-wrapper">
+                        {{ render_image(image_dict) }}
+                    </div>
+                    {%- endfor -%}
                 </div>
                 {%- endfor -%}
-                {%- endfor -%}
-                </div>
+            </div>
             {%- endfor -%}
             {%- else -%}
             <div class="class-image-container">

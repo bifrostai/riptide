@@ -316,6 +316,7 @@ class Inspector:
         get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
         get_label_func: Callable[[int], str] = None,
         add_metadata_func: Callable[[dict, Error], dict] = None,
+        clusters: torch.Tensor = None,
     ) -> Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]:
         """Computes a dictionary of plots for the crops of the errors, classwise.
 
@@ -420,15 +421,21 @@ class Inspector:
 
                 return metadata
 
-        projector: CropProjector = getattr(self, projector_attr)
+        if clusters is None:
+            projector: CropProjector = getattr(self, projector_attr)
 
-        code = "TP" if error_type is NonError else error_type.code
+            code = "TP" if error_type is NonError else error_type.code
 
-        def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
-            return [label == (evaluator_id, code) for label in labels]
+            def cluster_filter(labels: List[Tuple[int, str]]) -> List[bool]:
+                return [label == (evaluator_id, code) for label in labels]
 
-        # TODO: test robustness of clustering
-        clusters = projector.cluster(label_mask_func=cluster_filter)
+            # TODO: test robustness of clustering
+            clusters = projector.cluster(label_mask_func=cluster_filter)
+
+        else:
+            assert (
+                clusters.shape[0] == num_errors
+            ), "Number of clusters does not match number of errors"
 
         # endregion
 
@@ -496,9 +503,6 @@ class Inspector:
                             "bbox_height": height,
                             "bbox_area": area,
                             "iou": iou,
-                            "cluster": clusters[
-                                idx
-                            ],  # TODO: remove this, it's redundant
                         },
                         error,
                     )
@@ -591,7 +595,9 @@ class Inspector:
         return encode_base64(fig)
 
     @logger()
-    def background_error(self, data: dict = None) -> Dict[int, List[Dict]]:
+    def background_error(
+        self, data: dict = None, clusters: torch.Tensor = None
+    ) -> Dict[int, List[Dict]]:
         """Saves the BackgroundErrors (false positives) of the evaluator to the given
         output directory.
 
@@ -608,7 +614,9 @@ class Inspector:
         """
         if data is None:
             data = {}
-        figs = self.error_classwise_dict(BackgroundError, color=ErrorColor.BKG, axis=1)
+        figs = self.error_classwise_dict(
+            BackgroundError, color=ErrorColor.BKG, axis=1, clusters=clusters
+        )
 
         return Section(
             id="BackgroundError",
@@ -1046,12 +1054,34 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
+
+        matched_clusters = self.pred_projector.match_clusters(
+            [(model_id, "BKG") for model_id in range(len(self.evaluators))]
+        )
+
         figs = [
             self.error_classwise_dict(
-                BackgroundError, color=ErrorColor.BKG, axis=1, evaluator_id=idx
+                BackgroundError,
+                color=ErrorColor.BKG,
+                axis=1,
+                evaluator_id=idx,
+                clusters=matched_clusters[idx],
             )
             for idx in range(len(self.evaluators))
         ]
+
+        combined_figs: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
+
+        for idx, model_figs in enumerate(figs):
+            for class_idx, (info, clusters) in model_figs.items():
+                for cluster, images in clusters.items():
+                    if class_idx not in combined_figs:
+                        combined_figs[class_idx] = (info, {})
+                    if cluster not in combined_figs[class_idx][1]:
+                        combined_figs[class_idx][1][cluster] = [
+                            [] for _ in range(len(self.evaluators))
+                        ]
+                    combined_figs[class_idx][1][cluster][idx] = images[0]
 
         return Section(
             id="BackgroundError",
@@ -1062,10 +1092,10 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header=f"Errors in {self.evaluators[i].name}",
-                    content=fig,
+                    header=f"Errors in models",
+                    content=combined_figs,
+                    data=dict(grouped=True),
                 )
-                for i, fig in enumerate(figs)
             ],
         )
 

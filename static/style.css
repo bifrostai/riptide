@@ -145,14 +145,18 @@ body {
     flex-basis: 100%;
 }
 
-.class-images-container + .row {
-    flex-direction: row;
-}
-
 .class-image-container {
     display: flex;
     flex-wrap: wrap;
     flex-direction: row;
+}
+
+.class-image-container.row {
+    align-content: flex-start;
+}
+
+.class-image-container.gap {
+    column-gap: 5em;
 }
 
 .class-name {
