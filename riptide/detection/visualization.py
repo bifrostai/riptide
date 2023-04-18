@@ -414,6 +414,7 @@ class Inspector:
                                 f"Conf { metadata['confidence'] }",
                                 f"W{ metadata['bbox_width'] }",
                                 f"H{ metadata['bbox_height'] }",
+                                f"Cluster { metadata['cluster'] }",
                             ]
                         ),
                     }
@@ -655,6 +656,7 @@ class Inspector:
                             x["image_name"],
                             f"Pred: Class {x['pred_class']}",
                             f"Conf { x['confidence'] }",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -712,6 +714,7 @@ class Inspector:
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
                             f"IoU {x['iou']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -771,6 +774,7 @@ class Inspector:
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
                             f"IoU {x['iou']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -853,6 +857,7 @@ class Inspector:
                             f"Best  ({ best_iou }, { best_conf })",
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -910,6 +915,7 @@ class Inspector:
                             x["image_name"],
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -988,6 +994,7 @@ class Inspector:
                             x["image_name"],
                             f"Conf {x['confidence']}",
                             f"IoU {x['iou']}",
+                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
