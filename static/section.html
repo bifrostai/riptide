@@ -22,7 +22,9 @@
 {%- elif content.type == "plot" -%}
     {{ render_plot(content.content) }}
 {%- else -%}
-    {{ content.content | safe }}
+{%- for c in content.content -%}
+    {{ c | safe }}
+{%- endfor -%}
 {%- endif -%}
 {%- endmacro -%}
 

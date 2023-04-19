@@ -46,6 +46,14 @@ def get_both_bboxes(error: Error, bbox_attr: str):
     return torch.stack([error.gt_bbox, error.pred_bbox])
 
 
+def empty_section(section_id: str, title: str, description: str = None):
+    return Section(
+        id=section_id,
+        title=title,
+        contents=[Content(type=ContentType.TEXT, content=[description])],
+    )
+
+
 class Inspector:
     def __init__(
         self,
@@ -109,7 +117,7 @@ class Inspector:
             encoder_mode="preconv",
             normalize_embeddings=True,
             labels=[
-                (i, error.code) if error is not None else "NON"
+                (i, error.code if error is not None else "NON")
                 for i, model_errors in enumerate(pred_errors)
                 for error in model_errors
             ],
@@ -121,7 +129,7 @@ class Inspector:
             encoder_mode="preconv",
             normalize_embeddings=True,
             labels=[
-                (i, error.code) if error is not None else "NON"
+                (i, error.code if error is not None else "NON")
                 for i, model_errors in enumerate(gt_errors)
                 for error in model_errors
             ],
@@ -618,6 +626,22 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+        section_id = "BackgroundError"
+        title = "Background Errors"
+        description = f"""
+            List of all the detections with confidence above the <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span> but do not pass the <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span>.
+            """
+
+        if self.overall_summary[section_id] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
+
         if data is None:
             data = {}
 
@@ -633,11 +657,9 @@ class Inspector:
         figs = self.error_classwise_dict(**kwargs)
 
         return Section(
-            id="BackgroundError",
-            title="Background Errors",
-            description=f"""
-            List of all the false positive detections with confidence above the <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span> but do not pass the <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span>.
-            """,
+            id=section_id,
+            title=title,
+            description=description,
             contents=[
                 Content(
                     type=ContentType.IMAGES,
@@ -664,6 +686,22 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+
+        section_id = "ClassificationError"
+        title = "Classification Errors"
+        description = """
+        List of all the detections with <span class="code">iou > fg_iou_threshold</span> but with predicted classes not equal to the class of the corresponding ground truth.
+        """
+
+        if self.overall_summary[section_id] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
 
         get_label_func = lambda x: f"Ground Truth: Class {x}"
 
@@ -697,29 +735,31 @@ class Inspector:
         classwise_dict = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationError)
 
+        contents = [
+            Content(
+                type=ContentType.PLOT,
+                header="Ranking",
+                description=(
+                    "The following plot shows the distribution of classification"
+                    " errors."
+                ),
+                content=dict(plot=fig),
+            ),
+            Content(
+                type=ContentType.IMAGES,
+                header="Visualizations",
+                description="The following is a montage of the classification.",
+                content=classwise_dict,
+            ),
+        ]
+
         return Section(
             id="ClassificationError",
             title="Classification Errors",
             description="""
                     List of all the false positive detections with <span class="code">iou > fg_iou_threshold</span> but with predicted classes not equal to the class of the corresponding ground truth.
                     """,
-            contents=[
-                Content(
-                    type=ContentType.PLOT,
-                    header="Ranking",
-                    description=(
-                        "The following plot shows the distribution of classification"
-                        " errors."
-                    ),
-                    content=dict(plot=fig),
-                ),
-                Content(
-                    type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description="The following is a montage of the classification.",
-                    content=classwise_dict,
-                ),
-            ],
+            contents=contents,
         )
 
     @logger()
@@ -736,6 +776,22 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+
+        section_id = "LocalizationError"
+        title = "Localization Errors"
+        description = """
+        List of all the detections with predicted classes equal to the class of the corresponding ground truth but with <span class="code">bg_iou_threshold < iou < fg_iou_threshold</span>.
+        """
+
+        if self.overall_summary[section_id] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
 
         get_label_func = lambda x: f"Ground Truth: Class {x}"
 
@@ -771,11 +827,9 @@ class Inspector:
         classwise_dict = self.error_classwise_dict(**kwargs)
 
         return Section(
-            id="LocalizationError",
-            title="Localization Errors",
-            description="""
-                    The following is a montage of the localization errors.
-                    """,
+            id=section_id,
+            title=title,
+            description=description,
             contents=[
                 Content(
                     type=ContentType.IMAGES,
@@ -801,6 +855,22 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+
+        section_id = "ClassificationAndLocalizationError"
+        title = "Classification and Localization Errors"
+        description = """
+        List of all the detections with <span class="code">bg_iou_threshold < iou < fg_iou_threshold</span> and with predicted classes not equal to the class of the corresponding ground truth.
+        """
+
+        if self.overall_summary[section_id] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
 
         get_label_func = lambda x: f"Ground Truth: Class {x}"
 
@@ -842,11 +912,9 @@ class Inspector:
         fig = self.error_classwise_ranking(ClassificationAndLocalizationError)
 
         return Section(
-            id="ClassificationAndLocalizationError",
-            title="Classification and Localization Errors",
-            description="""
-                    List of all the false positive detections with <span class="code">bg_iou_threshold < iou < fg_iou_threshold</span> and with predicted classes not equal to the class of the corresponding ground truth.
-                    """,
+            id=section_id,
+            title=title,
+            description=description,
             contents=[
                 Content(
                     type=ContentType.PLOT,
@@ -883,6 +951,21 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+
+        section_id = "DuplicateError"
+        title = "Duplicate Errors"
+        description = f"""
+            List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction.
+            """
+        if self.overall_summary[section_id] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
 
         get_label_func = lambda x: f"Ground Truth: Class {x}"
 
@@ -931,11 +1014,9 @@ class Inspector:
         classwise_dict = self.error_classwise_dict(**kwargs)
 
         return Section(
-            id="DuplicateError",
-            title="Duplicate Errors",
-            description=f"""
-                        List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction.
-                        """,
+            id=section_id,
+            title=title,
+            description=description,
             contents=[
                 Content(
                     type=ContentType.IMAGES,
@@ -964,6 +1045,22 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+
+        section_id = "MissedError"
+        title = "Missed Errors"
+        description = """
+            List of all the ground truths that have no corresponding prediction.
+            """
+        if self.overall_summary[section_id] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
+
         get_label_func = lambda x: f"Missed: Class {x}"
 
         def add_metadata_func(x: dict, error: MissedError) -> dict:
@@ -1001,11 +1098,9 @@ class Inspector:
         # missed_aspect_var = compute_aspect_variance(evaluator)
 
         return Section(
-            id="MissedError",
-            title="Missed Errors",
-            description="""
-                    List of all the ground truths that have no corresponding prediction.
-                    """,
+            id=section_id,
+            title=title,
+            description=description,
             contents=[
                 # Content(
                 #     type=ContentType.RECALL,
@@ -1052,6 +1147,22 @@ class Inspector:
         Section
             The section containing the visualizations
         """
+
+        section_id = "TruePositive"
+        title = "True Positives"
+        description = f"""
+            List of all the true positive detections. No prediction was made below <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span>.
+            """
+        if self.overall_summary["true_positives"] == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
+
         get_label_func = lambda x: f"Ground Truth: Class {x}"
 
         def add_metadata_func(x: dict, error: NonError) -> dict:
@@ -1084,11 +1195,9 @@ class Inspector:
         classwise_dict = self.error_classwise_dict(**kwargs)
 
         return Section(
-            id="TruePositive",
-            title="True Positives",
-            description=f"""
-                    List of all the True Positives detections. No prediction was made below <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span>.
-                    """,
+            id=section_id,
+            title=title,
+            description=description,
             contents=[
                 Content(
                     type=ContentType.IMAGES,
