@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from riptide.detection.evaluation import Evaluation, Evaluator
+from riptide.utils.colors import ErrorColor
 
 
 class FlowVisualizer:
@@ -196,26 +197,19 @@ class FlowVisualizer:
             raise NotImplementedError("Only sankey diagram is supported for now")
 
         # region: build sankey diagram
-
-        node_labels = [
-            f"{models[ids[attr['idx']]]} {attr['state']}"
-            for node, attr in nodes.iterrows()
-        ]
-
-        ## source represents the indexes of the labels that are to be used
-        ## as the starting point of a "sankey flow"
-        ## the value in the source array corresponds to
-        ## the value in same position in the target array
-
-        ## target represents the indexes of the labels that are to be used
-        ## as the ending point of a "sankey flow"
-        ## the value in the target array corresponds to
-        ## the value in same position in the source array
+        node_labels = []
+        node_colors = []
+        for _, attr in nodes.iterrows():
+            node_labels.append(f"{models[ids[attr['idx']]]} {attr['state']}")
+            node_colors.append(ErrorColor(attr["state"]).rgb(0.8, as_tuple=False))
 
         source, target = edges[["source", "target"]].values.T.tolist()
         attrs = edges[["weight", "gt_ids", "score"]].to_dict(orient="records")
 
         edge_labels = [f"{attr['score']:.2f}" for attr in attrs]
+        edge_colors = [
+            ErrorColor(code).rgb(0.3, False) for code in edges["state_source"].values
+        ]
 
         value = [attr["weight"] for attr in attrs]
 
@@ -228,15 +222,16 @@ class FlowVisualizer:
                     thickness=20,
                     line=dict(color="black", width=0.1),
                     label=node_labels,
-                    color="blue",
+                    color=node_colors,
                     # customdata = [list(dictionary.values()) for dictionary in self.confusion_matrix.values()] + [list]
                     # hovertemplate='%{label} breakdown:<br> ',
                 ),
                 link=dict(
-                    source=source,  # indices correspond to labels, eg A1, A2, A1, B1, ...
+                    source=source,
                     target=target,
                     value=value,
                     label=edge_labels,
+                    color=edge_colors,
                 ),
             ),
             layout=dict(
