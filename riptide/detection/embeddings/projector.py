@@ -79,12 +79,12 @@ class CropProjector:
     def get_embeddings(
         self,
     ) -> torch.Tensor:
-        """Get embeddings for a given set of labels
+        """Get embeddings for images
 
         Returns
         -------
         torch.Tensor
-            Embeddings for the given labels
+            Embeddings for images
         """
         if self._embeddings is None:
             embeddings, _, _ = self._get_embeddings()
@@ -106,6 +106,22 @@ class CropProjector:
         mask: List[bool] = None,
         **kwargs,
     ) -> torch.Tensor:
+        """Cluster embeddings. Provide a mask to perform clustering on a subset of embeddings.
+
+        Parameters
+        ----------
+        eps : float, optional
+            DBSCAN eps parameter, by default 0.4
+        min_samples : int, optional
+            DBSCAN min_samples parameter, by default 2
+        mask : List[bool], optional
+            Mask to apply to embeddings, by default None
+
+        Returns
+        -------
+        torch.Tensor
+            Cluster labels
+        """
         embeddings = self.get_embeddings()
         if mask is not None:
             embeddings = embeddings[mask]
@@ -119,7 +135,7 @@ class CropProjector:
     def match_clusters(
         self, labels: list, eps: float = 0.4, min_samples: int = 2
     ) -> List[torch.Tensor]:
-        """Match clusters between label subsets
+        """COmpute clusters for a subset of labels
 
         Parameters
         ----------
@@ -132,8 +148,8 @@ class CropProjector:
 
         Returns
         -------
-        torch.Tensor
-            Cluster mapping
+        List[torch.Tensor]
+            List of cluster labels for each label
         """
 
         mask = []
