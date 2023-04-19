@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "section.html" import render_section %}
+
+{% block content %}
+{{ render_section(overview) }}
+{{ render_section(flow) }}
+{{ render_section(background_errors)}}
+{% endblock %}

@@ -1,11 +1,11 @@
 {%- macro render_section(section) -%}
-<div id="{{section.id}}">
+<section id="{{section.id}}">
     {% if section.title is not none %}<h2>{{ section.title }}</h2>{% endif %}
     {% if section.description is not none %}<p>{{ section.description | safe }}</p>{% endif %}
     {%- for content in section.contents -%}
         {{ render_content(content) }}
     {%- endfor -%}
-</div>
+</section>
 {%- endmacro -%}
 
 {%- macro render_content(content) -%}
@@ -14,9 +14,13 @@
 {%- if content.type == "overview" -%}
     {{ render_overview(content.content) }}
 {%- elif content.type == "images" -%}
-    {{ render_images(content.content) }}
-{%- elif content.type == "ranking" -%}
-    {{ ranking(content) }}
+    {{ render_images(content) }}
+{%- elif content.type == "ar_size" -%}
+    {{ render_ar_size(content.content) }}
+{%- elif content.type == "recall" -%}
+    {{ render_recall(content.content) }}
+{%- elif content.type == "plot" -%}
+    {{ render_plot(content.content) }}
 {%- else -%}
     {{ content.content | safe }}
 {%- endif -%}
@@ -68,31 +72,107 @@
 </div>
 {%- endmacro -%}
 
-{%- macro render_images(images) -%}
+{%- macro render_recall(content) -%}
+{% set classwise_summary = content[0] %}
+{% set error_type = content[1] %}
+<div class="summary-row">
+    {% for class_idx, individual_summary in classwise_summary.items() %}
+        {% set error = individual_summary[error_type] %}
+        {% set total_count = individual_summary["total_count"] %}
+        <div class="summary-item">
+            <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+            <div class="summary-metric-value">{{ error }} <span class="text-dark">| {{ total_count }}</span></div>
+        </div>
+    {% endfor %}
+</div>
+<p>Recall per class</p>
+<div class="summary-row">
+    {% for class_idx, individual_summary in classwise_summary.items() %}
+        <div class="summary-item">
+            <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+            <div class="summary-metric-value">{{ individual_summary['recall'] }}</span></div>
+        </div>
+    {% endfor %}
+</div>
+{%- endmacro -%}
+
+{%- macro render_ar_size(content) -%}
+{% set aspect_vars = content[0] %}
+{% set size_vars = content[1] %}
+<div class="summary-row">
+    {% for class_idx, aspect_var in aspect_vars.items() %}
+    <div class="summary-item">
+        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+        <div class="summary-metric-value">{{ aspect_var }}</div>
+    </div>
+    {% endfor %}
+</div>
+<p>
+    Variance of object size (area) across MissedErrors
+</p>
+<div class="summary-row">
+    {% for class_idx, size_var in size_vars.items() %}
+    <div class="summary-item">
+        <div class="summary-metric-title gradient">Class {{ class_idx }}</div>
+        <div class="summary-metric-value">{{ size_var }}</div>
+    </div>
+    {% endfor %}
+</div>
+{%- endmacro -%}
+
+{%- macro render_images(content) -%}
+{%- set grouped = content.data.get("grouped", false) -%}
+{%- set images = content.content -%}
 <div class="class-images">
-    {%- for class_info, image_list in images -%}
+    {%- if images.get("group_headers") is not none -%}
+    <div class="class-images-groups"></div>
+    {%- endif -%}
+    {%- for _, (class_info, clusters) in images.items() -%}
         <div class="class-images-container">
             <div class="class-name">{{ class_info }}</div>
+            {%- if grouped -%}
+            {%- for idx, cluster in clusters.items() -%}
+            <div class="class-image-container bg">
+                <span class="class-image-group-header break">Cluster {{ idx }}</span>
+                {%- for image_list in cluster -%}
+                <div class="class-image-container row" style="flex-basis: {{ 100 / (cluster | length) }}%">
+                    {%- for image_dict in image_list -%}
+                    <div class="class-image-wrapper">
+                        {{ render_image(image_dict) }}
+                    </div>
+                    {%- endfor -%}
+                </div>
+                {%- endfor -%}
+            </div>
+            {%- endfor -%}
+            {%- else -%}
             <div class="class-image-container">
+                {%- for cluster in clusters.values() -%}
+                {%- for image_list in cluster -%}
                 {%- for image_dict in image_list -%}
                 <div class="class-image-wrapper">
                     {{ render_image(image_dict) }}
                 </div>
                 {%- endfor -%}
+                {%- endfor -%}
+                {%- endfor -%}
             </div>
+            {% endif -%}
         </div>
-    {%- endfor -%}
+    {% endfor %}
 </div>
 {%- endmacro -%}
-
 
 {%- macro render_image(image) -%}
     <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">
     {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"]}}</span>{% endif %}
 {%- endmacro -%}
 
-{%- macro ranking(content) -%}
+{%- macro render_plot(content) -%}
 <div class="plot">
+    {%- if content.get("interactive") is true -%}{{ content['plot'] | safe}}
+    {%- else -%}
     <img class="plot-image" src="data:image/png;base64,{{ content['plot'] | safe}}">
+    {%- endif -%}
 </div>
 {%- endmacro -%}

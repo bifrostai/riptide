@@ -31,132 +31,13 @@
             <div class="infobox-content">{{ infobox['content'] }}</div>
         </div>
         {% endfor %}
-        <div id="BackgroundError">
-            <h1>BackgroundError</h1>
-            <p>List of all the false positive detections that are above the <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> but do not pass the <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span>.</p>
-            <div class="class-images">
-            {% for class_int, image_list in background_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Predicted: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-        </div>
-        <div id="ClassificationError">
-            <h1>ClassificationError</h1>
-            {% if classification_error_plot is not none %}
-            <h2>ClassificationError ranking</h2>
-            <p>
-                The following plot shows the distribution of classification errors.
-            </p>
-            <div class="plot">
-                <img class="plot-image" src="data:image/png;base64,{{ classification_error_plot | safe}}">
-            </div>
-            {% endif %}
-            <div class="class-images">
-            {% for class_int, image_list in classification_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Pred: Class {{ image_dict["pred_class"] }} | Conf {{ image_dict["confidence"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-        </div>
-        <div id="LocalizationError">
-            <h1>LocalizationError</h1>
-
-            <h2>LocalizationError visualization</h2>
-            <p>
-                The following is a montage of the localization errors.
-            </p>
-            <div class="class-images">
-            {% for class_int, image_list in localization_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-
-        </div>
-        <div id="ClassificationAndLocalizationError">
-            <h1>ClassificationAndLocalizationError</h1>
-            {% if classification_and_localization_error_plot is not none %}
-            <h2>ClassificationAndLocalizationError ranking</h2>
-            <p>
-                The following plot shows the distribution of classification and localization errors.
-            </p>
-            <div class="plot">
-                <img class="plot-image" src="data:image/png;base64,{{ classification_and_localization_error_plot | safe}}">
-            </div>
-            {% endif %}
-            <h2>ClassificationAndLocalizationError visualization</h2>
-            <p>
-                The following is a montage of the classification and localization errors.
-            </p>
-            <div class="class-images">
-            {% for class_int, image_list in classification_and_localization_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Class {{ image_dict["pred_class"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }} | IOU {{ image_dict["iou"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-
-        </div>
-        <div id="DuplicateError">
-            <h1>DuplicateError</h1>
-            <h2>DuplicateError visualization</h2>
-            <p>
-                The following is a montage of the duplicate errors. White boxes indicate ground truths, green boxes indicate best predictions, and red boxes indicate duplicate predictions.
-            </p>
-            <div class="class-images">
-            {% for class_int, image_list in duplicate_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Ground Truth: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | IOU, Conf ({{ image_dict["iou"] }}, {{ image_dict["confidence"] }}) | Best ({{ image_dict["best_iou"] }}, {{ image_dict["best_conf"] }})</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
-        </div>
-        <div id="MissedError">
-            <h1>MissedError</h1>
+        {{ render_section(background_error_figs)}}
+        {{ render_section(classification_error_figs)}}
+        {{ render_section(localization_error_figs)}}
+        {{ render_section(classification_and_localization_error_figs)}}
+        {{ render_section(duplicate_error_figs)}}
+        {{ render_section(missed_error_figs)}}
+        <div id="MissedExtra">
             <h2>Classwise MissedErrors and recall</h2>
             <p>
                 Number of MissedErrors per class | number of total objects per class
@@ -205,36 +86,9 @@
                 </div>
                 {% endfor %}
             </div>
-            {% if missed_error_plot is not none %}
-            <h2>MissedError ranking</h2>
-            <p>
-                The following plot shows the size (area) distribution of missed errors for each class.
-                The presence of outliers in this plot indicates the misses may be caused by extreme object sizes.
-            </p>
-            <div class="plot">
-                <img class="plot-image" src="data:image/png;base64,{{ missed_error_plot | safe}}">
-            </div>
-            {% endif %}
-            <h2>MissedError visualization</h2>
-            <p>List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span> that had IoU above <span class="code">bg_iou_threshold={{ summary["bg_iou_threshold"] }}</span> (otherwise it would be considered a LocalizationError).</p>
-            <div class="class-images">
-            {% for class_int, image_list in missed_error_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">Missed: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | W{{ image_dict["bbox_width"] }} | H{{ image_dict["bbox_height"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
-            </div>
         </div>
-        <div id="TruePositive">
-            <h1>True Positives</h1>
+        {{ render_section(true_positive_figs) }}
+        <div id="TrueExtra">
             <h2>Classwise True Positives</h2>
             <p>
                 Number of True Positives per class | number of total objects per class
@@ -248,23 +102,6 @@
                         <div class="summary-metric-value">{{ true_positives }} <span class="text-dark">| {{ total_count }}</span></div>
                     </div>
                 {% endfor %}
-            </div>
-            <h2>True Positives visualization</h2>
-            <p>List of all the True Positives detections. No prediction was made below <span class="code">conf_threshold={{ summary["conf_threshold"] }}</span>.</p>
-            <div class="class-images">
-            {% for class_int, image_list in true_positive_figs.items() %}
-                <div class="class-images-container">
-                    <div class="class-name">True Positives: Class {{ class_int }}</div>
-                    <div class="class-image-container">
-                        {% for image_dict in image_list %}
-                        <div class="class-image-wrapper">
-                            <img class="class-image" src="data:image/png;base64,{{ image_dict['image_base64'] | safe}}">
-                            <span class="data-tooltip">{{ image_dict["image_name"] }} | Conf {{ image_dict["confidence"] }} | IOU {{ image_dict["iou"] }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endfor %}
             </div>
         </div>
     </div>

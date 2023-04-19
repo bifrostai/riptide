@@ -1,5 +1,6 @@
-import os
-from typing import Any, Iterable, List
+from __future__ import annotations
+
+from typing import Any, Callable, Dict, Iterable, List
 
 import torch
 from sklearn.cluster import DBSCAN
@@ -10,13 +11,15 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from riptide.detection.embeddings.mep.encoders import VariableLayerEncoder
 from riptide.detection.embeddings.mep.transforms import inverse_normalize, normalize
+from riptide.utils.logging import logger
 
 
 class CropProjector:
+    @logger("Initializing CropProjector", "Initialized CropProjector")
     def __init__(
         self,
         name: str,
-        images: torch.Tensor,
+        images: List[torch.Tensor],
         encoder_mode: str,
         normalize_embeddings: bool,
         labels: List[Any] = None,
@@ -74,21 +77,14 @@ class CropProjector:
         return embeddings, preview, None
 
     def get_embeddings(
-        self, labels: Iterable = None, extend: torch.Tensor = None
+        self,
     ) -> torch.Tensor:
-        """Get embeddings for a given set of labels
-
-        Parameters
-        ----------
-        labels : Iterable, optional
-            Labels to filter by, if None, all embeddings are returned, by default None
-        extend : torch.Tensor, optional
-            Additional tensor to extend the embeddings by, by default None
+        """Get embeddings for images
 
         Returns
         -------
         torch.Tensor
-            Embeddings for the given labels
+            Embeddings for images
         """
         if self._embeddings is None:
             embeddings, _, _ = self._get_embeddings()
@@ -101,40 +97,75 @@ class CropProjector:
 
             self._embeddings = embeddings
 
-        if labels is not None:
-            if not isinstance(labels, Iterable):
-                labels = [labels]
-            mask = [label in labels for label in self.labels]
-            embeddings = self._embeddings[mask]
-        else:
-            embeddings = self._embeddings
-
-        if extend is not None:
-            assert extend.size(0) == embeddings.size(
-                0
-            ), "Embedding and extend must have the same number of rows"
-            if self.normalize_embeddings:
-                extend = torch.nan_to_num(
-                    (extend - extend.min(dim=0)[0])
-                    / (extend.max(dim=0)[0] - extend.min(dim=0)[0])
-                )
-            embeddings = torch.cat([embeddings, extend], dim=1)
-
-        if self.normalize_embeddings:
-            embeddings = torch.nan_to_num(
-                (embeddings - embeddings.min(dim=0)[0])
-                / (embeddings.max(dim=0)[0] - embeddings.min(dim=0)[0])
-            )
-
-        return embeddings
+        return self._embeddings
 
     def cluster(
-        self, eps: float = 0.5, min_samples: int = 5, by_labels: List = None
+        self,
+        eps: float = 0.4,
+        min_samples: int = 2,
+        mask: List[bool] = None,
+        **kwargs,
     ) -> torch.Tensor:
-        embeddings = self.get_embeddings(by_labels)
+        """Cluster embeddings. Provide a mask to perform clustering on a subset of embeddings.
+
+        Parameters
+        ----------
+        eps : float, optional
+            DBSCAN eps parameter, by default 0.4
+        min_samples : int, optional
+            DBSCAN min_samples parameter, by default 2
+        mask : List[bool], optional
+            Mask to apply to embeddings, by default None
+
+        Returns
+        -------
+        torch.Tensor
+            Cluster labels
+        """
+        embeddings = self.get_embeddings()
+        if mask is not None:
+            embeddings = embeddings[mask]
         if len(embeddings) == 0:
             return torch.zeros(0, dtype=torch.long)
 
         return torch.tensor(
             DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
         )
+
+    def match_clusters(
+        self, labels: list, eps: float = 0.4, min_samples: int = 2
+    ) -> List[torch.Tensor]:
+        """COmpute clusters for a subset of labels
+
+        Parameters
+        ----------
+        labels : list
+            List of labels to match
+        eps : float, optional
+            DBSCAN eps parameter, by default 0.4
+        min_samples : int, optional
+            DBSCAN min_samples parameter, by default 2
+
+        Returns
+        -------
+        List[torch.Tensor]
+            List of cluster labels for each label
+        """
+
+        mask = []
+        ids = []
+        for label in self.labels:
+            mask.append(label in labels)
+            if label in labels:
+                ids.append(labels.index(label))
+
+        clusters = self.cluster(eps=eps, min_samples=min_samples, mask=mask)
+        cluster_groups = [[] for _ in labels]
+        for i, cluster in enumerate(clusters):
+            if ids[i] == -1:
+                continue
+            cluster_groups[ids[i]].append(cluster)
+
+        cluster_list = [torch.tensor(cluster_group) for cluster_group in cluster_groups]
+
+        return cluster_list

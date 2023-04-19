@@ -72,7 +72,12 @@ class HtmlReport:
             for error_name, confidence_hist in confidence_hists.items()
         }
 
-    def render(self, output_dir: str, fname: str = "report.html"):
+    def render(
+        self,
+        output_dir: str,
+        fname: str = "report.html",
+        template: str = "template.html",
+    ):
         inspector = self.inspector
         section_names = {
             "Overview": "Overview",
@@ -94,8 +99,8 @@ class HtmlReport:
         error_fig_plots = inspector.inspect()
 
         # MissedError data - classwise false negatives
-        missed_size_var = compute_size_variance(self.evaluator)
-        missed_aspect_var = compute_aspect_variance(self.evaluator)
+        missed_size_var = compute_size_variance(self.evaluators[0])
+        missed_aspect_var = compute_aspect_variance(self.evaluators[0])
 
         # Infobox suggestions
         infoboxes = self.get_suggestions(
@@ -108,7 +113,7 @@ class HtmlReport:
         error_info = self.get_error_info()
 
         logging.info("Rendering output...")
-        output = self.template.render(
+        output = self.env.get_template(template).render(
             title="Riptide",
             section_names=section_names,
             summary=overall_summary,
@@ -119,6 +124,33 @@ class HtmlReport:
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
             **error_fig_plots,
+        )
+        os.makedirs(output_dir, exist_ok=True)
+        fout = os.path.join(output_dir, fname)
+        with open(fout, "w") as f:
+            f.writelines(output)
+        logging.info(f"Rendered output to {fout}")
+
+    def compare(
+        self,
+        output_dir: str,
+        fname: str = "compare.html",
+        template: str = "comparison.html",
+    ):
+        inspector = self.inspector
+        section_names = {
+            "Overview": "Overview",
+            "Flow": "Flow",
+            "BackgroundError": "Background Errors",
+        }
+
+        sections = inspector.compare()
+
+        logging.info("Rendering output...")
+        output = self.env.get_template(template).render(
+            title="Riptide",
+            section_names=section_names,
+            **sections,
         )
         os.makedirs(output_dir, exist_ok=True)
         with open(os.path.join(output_dir, fname), "w") as f:

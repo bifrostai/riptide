@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import Enum
 from typing import Any, List, Optional, Union
 
@@ -7,10 +9,10 @@ from pydantic import BaseModel, Field, root_validator
 class ContentType(str, Enum):
     OVERVIEW = "overview"
     TEXT = "text"
-    # IMAGE = "image"
+    RECALL = "recall"
+    AR_SIZE = "ar_size"
     IMAGES = "images"
     PLOT = "plot"
-    RANKING = "ranking"
 
 
 class Content(BaseModel):
@@ -18,6 +20,7 @@ class Content(BaseModel):
     header: Optional[str]
     description: Optional[str]
     content: Union[dict, list]
+    data: Optional[dict] = dict()
 
     class Config:
         arbitrary_types_allowed = True
