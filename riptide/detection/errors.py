@@ -502,6 +502,16 @@ class Errors:
             if isinstance(error, error_type)
         ]
 
+    def get_tp_mask(self, gt_idx: int) -> torch.Tensor:
+        return torch.tensor(
+            [
+                error.confusion == Confusion.TRUE_POSITIVE
+                if (error is not None and error.gt_idx == gt_idx)
+                else False
+                for error in self.pred_errors
+            ]
+        )
+
     def get_errors_by_labels(
         self, labels: Union[int, List[int]], mode: str = "gt"
     ) -> List[Error]:

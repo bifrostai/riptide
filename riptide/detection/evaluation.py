@@ -126,6 +126,7 @@ class Evaluation:
 
         used_mask = pred_scores >= conf_threshold
         unused_mask = ~used_mask
+        self.used_mask = used_mask
 
         pred_idxs = torch.arange(self.num_preds)
         self.used_pred_idxs = pred_idxs[used_mask]
@@ -306,7 +307,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 self.confusions.assign_gt_confusion(gt_idx, Confusion.FALSE_NEGATIVE)
             return
 
-        # First register all true positives
+        # First register all definite true positives
         for pred_idx, (pred_iou, pred_bbox, pred_conf, pred_label) in enumerate(
             zip(self.ious, self.pred_bboxes, self.pred_scores, self.pred_labels)
         ):
@@ -469,6 +470,8 @@ class ObjectDetectionEvaluation(Evaluation):
                 )
                 continue
 
+            # Test for DuplicateError: predictions with a lower IoU than an existing true positive
+            # This detection would have been a positive if it had the highest IoU with this GT
             if self.is_duplicate_error(
                 pred_label,
                 iou_of_best_gt_match,
@@ -503,6 +506,29 @@ class ObjectDetectionEvaluation(Evaluation):
                 self.confusions.assign_prediction_confusion(
                     pred_idx, Confusion.FALSE_POSITIVE
                 )
+                continue
+
+            # Error canditates that are not actually errors are true positives
+            true_positive = NonError(
+                pred_idx=pred_idx,
+                gt_idx=idx_of_best_gt_match,
+                pred_label=pred_label,
+                pred_bbox=pred_bbox,
+                confidence=pred_conf,
+                gt_label=label_of_best_gt_match,
+                gt_bbox=gt_bboxes[idx_of_best_gt_match],
+                iou_threshold=self.fg_iou_threshold,
+                conf_threshold=self.conf_threshold,
+                code="TP",
+                confusion=Confusion.TRUE_POSITIVE,
+            )
+            self.errors.assign_prediction_error(true_positive)
+            self.confusions.assign_prediction_confusion(
+                pred_idx, Confusion.TRUE_POSITIVE
+            )
+            self.confusions.assign_gt_confusion(
+                idx_of_best_gt_match, Confusion.TRUE_POSITIVE
+            )
 
         # Consolidate remaining GTs as MissedErrors and false negatives
         for gt_idx in range(len(gt_bboxes)):
@@ -620,11 +646,19 @@ class ObjectDetectionEvaluation(Evaluation):
         idx_of_best_gt_match: torch.Tensor,
         label_of_best_gt_match: torch.Tensor,
     ):
+
+        iou_mask = torch.logical_and(
+            self.used_mask, self.errors.get_tp_mask(idx_of_best_gt_match)
+        )
+        assigned_ious = self.ious[:, idx_of_best_gt_match][iou_mask]
+        is_highest_iou = (
+            assigned_ious.numel() == 0
+            or iou_of_best_gt_match > self.ious[:, idx_of_best_gt_match][iou_mask].max()
+        )
         return (
             iou_of_best_gt_match >= self.fg_iou_threshold
             and pred_label == label_of_best_gt_match
-            and iou_of_best_gt_match
-            <= self.ious[:, idx_of_best_gt_match][self.used_pred_idxs].max()
+            and not is_highest_iou
         )
 
     _pred_errors = None
