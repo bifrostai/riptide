@@ -1,12 +1,11 @@
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, Union
+import math
+from typing import Any, Callable, Dict, Iterable, List, Set, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from PIL import Image
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
-from torchvision.transforms.functional import to_pil_image
 
 from riptide.detection.characterization import (
     compute_aspect_variance,
@@ -27,8 +26,16 @@ from riptide.detection.evaluation import ObjectDetectionEvaluator
 from riptide.flow import FlowVisualizer
 from riptide.report.section import Content, ContentType, Section
 from riptide.utils.colors import ErrorColor, gradient
-from riptide.utils.image import crop_preview, encode_base64, get_bbox_stats
+from riptide.utils.crops import (
+    add_metadata,
+    generate_fig,
+    get_bbox_by_attr,
+    get_both_bboxes,
+    get_crop_options,
+)
+from riptide.utils.image import encode_base64
 from riptide.utils.logging import logger
+from riptide.utils.models import GTData
 from riptide.utils.plots import (
     PALETTE_BLUE,
     PALETTE_DARKER,
@@ -40,10 +47,6 @@ from riptide.utils.plots import (
     plotly_markup,
     setup_mpl_params,
 )
-
-
-def get_both_bboxes(error: Error, bbox_attr: str):
-    return torch.stack([error.gt_bbox, error.pred_bbox])
 
 
 def empty_section(section_id: str, title: str, description: str = None):
@@ -103,6 +106,7 @@ class Inspector:
         pred_errors: List[List[Error]] = []
         gt_crops: List[torch.Tensor] = []
         gt_errors: List[List[Error]] = []
+
         for evaluator in evaluators:
             model_crops, model_errors = evaluator.crop_objects()
             pred_crops.extend(model_crops)
@@ -136,7 +140,19 @@ class Inspector:
             device=torch.device("cpu"),
         )
 
+        self.gt_data = evaluators[0].get_gt_data()
+        self.actual_projector = CropProjector(
+            name=f"Ground truths",
+            images=self.gt_data.crops,
+            encoder_mode="preconv",
+            normalize_embeddings=True,
+            labels=self.gt_data.gt_ids.tolist(),
+            device=torch.device("cpu"),
+        )
+
         self.overview()
+
+        self.crops = {}
 
     def _confidence_hist(
         self, confidence_list: List[float], error_name: str = "Error"
@@ -320,7 +336,7 @@ class Inspector:
         axis: int = 0,
         *,
         evaluator_id: int = 0,
-        preview_size: int = 128,
+        preview_size: int = 192,
         bbox_attr: str = None,
         label_attr: str = None,
         projector_attr: str = None,
@@ -381,15 +397,7 @@ class Inspector:
         if num_errors == 0:
             return dict()
 
-        errors_list = self.errorlist_dicts[evaluator_id].get(
-            error_type.__name__, dict()
-        )
-        errors: Dict[str, List[Error]] = {}
-        for image_path, error_list in errors_list.items():
-            if image_path not in errors:
-                errors[image_path] = error_list
-            else:
-                errors[image_path].extend(error_list)
+        errors = self.errorlist_dicts[evaluator_id].get(error_type.__name__, dict())
 
         if not isinstance(color, list):
             color = [color]
@@ -405,33 +413,9 @@ class Inspector:
             label_attr = label_attr or "pred_label"
             projector_attr = projector_attr or "pred_projector"
 
-        if get_bbox_func is None:
-
-            def get_bbox_func(error: Error, bbox_attr: str) -> torch.Tensor:
-                t = getattr(error, bbox_attr)
-                assert isinstance(t, torch.Tensor), f"{bbox_attr} is not a tensor"
-                return t.unsqueeze(0)
-
+        get_bbox_func = get_bbox_func or get_bbox_by_attr
+        add_metadata_func = add_metadata_func or add_metadata
         get_label_func = get_label_func or (lambda label: f"Predicted: Class {label}")
-
-        if add_metadata_func is None:
-
-            def add_metadata_func(metadata: dict, error: Error) -> dict:
-                metadata.update(
-                    {
-                        "caption": " | ".join(
-                            [
-                                metadata["image_name"],
-                                f"Conf { metadata['confidence'] }",
-                                f"W{ metadata['bbox_width'] }",
-                                f"H{ metadata['bbox_height'] }",
-                                f"Cluster { metadata['cluster'] }",
-                            ]
-                        ),
-                    }
-                )
-
-                return metadata
 
         if clusters is None:
             projector: CropProjector = getattr(self, projector_attr)
@@ -456,26 +440,8 @@ class Inspector:
             image_tensor = read_image(image_path)
             image_name = image_path.split("/")[-1]
             for error in image_errors:
-                bbox: torch.Tensor = getattr(error, bbox_attr)
                 label: int = getattr(error, label_attr)
                 label_set.add(label)
-
-                if bbox is not None:
-                    width, height, area = get_bbox_stats(bbox)
-                    bboxes = get_bbox_func(error, bbox_attr)
-
-                    crop_tensor = (
-                        crop_preview(image_tensor, bboxes, color)
-                        if isinstance(bboxes, torch.Tensor)
-                        else image_tensor
-                    )
-                    crop: Image.Image = to_pil_image(crop_tensor)
-                    encoded_crop = encode_base64(
-                        crop.resize((preview_size, preview_size))
-                    )
-                else:
-                    width, height, area = (None, None, None)
-                    encoded_crop = None
 
                 if label not in classwise_dict:
                     classwise_dict[label] = (
@@ -483,41 +449,28 @@ class Inspector:
                         dict(),
                     )
 
-                confidence = (
-                    round(error.confidence, 2) if error.confidence is not None else None
-                )
-                iou = (
-                    round(
-                        box_iou(
-                            error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)
-                        ).item(),
-                        3,
-                    )
-                    if error.pred_bbox is not None and error.gt_bbox is not None
-                    else None
-                )
-
                 cluster = clusters[idx].item()
                 if cluster not in classwise_dict[label][1]:
                     classwise_dict[label][1][cluster] = [[]]
 
-                classwise_dict[label][1][cluster][0].append(
-                    add_metadata_func(
-                        {
-                            "image_name": image_name,
-                            "image_base64": encoded_crop,
-                            "pred_class": error.pred_label,
-                            "gt_class": error.gt_label,
-                            "confidence": confidence,
-                            "bbox_width": width,
-                            "bbox_height": height,
-                            "bbox_area": area,
-                            "iou": iou,
-                            "cluster": cluster,
-                        },
-                        error,
-                    )
+                fig = generate_fig(
+                    image_tensor=image_tensor,
+                    image_name=image_name,
+                    error=error,
+                    color=color,
+                    bbox_attr=bbox_attr,
+                    cluster=cluster,
+                    preview_size=preview_size,
+                    get_bbox_func=get_bbox_func,
+                    add_metadata_func=add_metadata_func,
                 )
+
+                crop_key = (evaluator_id, label, error.gt_idx, error.pred_idx, 1)
+                # assert crop_key not in self.crops, "Duplicate crop"
+
+                self.crops[crop_key] = fig
+
+                classwise_dict[label][1][cluster][0].append(fig)
                 idx += 1
 
         for label in label_set:
@@ -605,6 +558,7 @@ class Inspector:
 
         return encode_base64(fig)
 
+    # region: Error Sections
     @logger()
     def background_error(
         self, data: dict = None, clusters: torch.Tensor = None, **kwargs
@@ -818,7 +772,6 @@ class Inspector:
                 color=[ErrorColor.WHITE, ErrorColor.LOC],
                 axis=1,
                 get_bbox_func=get_both_bboxes,
-                preview_size=192,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
             )
@@ -901,7 +854,6 @@ class Inspector:
                 color=[ErrorColor.WHITE, ErrorColor.CLL],
                 axis=1,
                 get_bbox_func=get_both_bboxes,
-                preview_size=192,
                 label_attr="gt_label",
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
@@ -1005,7 +957,6 @@ class Inspector:
                 color=[ErrorColor.WHITE, ErrorColor.TP, ErrorColor.DUP],
                 axis=1,
                 get_bbox_func=get_bbox_func,
-                preview_size=192,
                 add_metadata_func=add_metadata_func,
                 get_label_func=get_label_func,
             )
@@ -1071,7 +1022,6 @@ class Inspector:
                             x["image_name"],
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
-                            f"Cluster { x['cluster'] }",
                         ]
                     ),
                 }
@@ -1207,6 +1157,8 @@ class Inspector:
             ],
         )
 
+    # endregion
+
     @logger()
     def inspect(self) -> Dict[str, Any]:
         """Generate figures and plots for the errors.
@@ -1295,9 +1247,7 @@ class Inspector:
             A dictionary mapping the class id to a list of dictionaries
             containing the images and metadata of the false positives.
         """
-        fig = plotly_markup(
-            FlowVisualizer(self.evaluators, None, self.image_dir).visualize()
-        )
+        fig = plotly_markup(FlowVisualizer(self.evaluators, self.image_dir).visualize())
 
         return Section(
             id="Flow",
@@ -1314,6 +1264,146 @@ class Inspector:
         )
 
     @logger()
+    def compare_errors(
+        self,
+        error_type: Type[Error],
+        ids: List[int] = (0, 1),
+    ) -> List[Section]:
+        assert (
+            len(self.evaluators) > 1
+        ), "Must have more than one evaluator to compare errors"
+        assert len(ids) == 2, "Must have exactly two ids to compare errors"
+        assert isinstance(ids, (list, tuple)), "ids must be a list or tuple"
+
+        if error_type is BackgroundError:
+            return self.compare_background_errors()
+
+        gt_clusters = self.actual_projector.cluster()
+
+        evaluators = [self.evaluators[idx] for idx in ids]
+
+        # gt_errors keys: class_idx -> gt_id : (image_path, [errors for each model])
+        gt_errors: Dict[int, Dict[int, Tuple[str, List[List[Error]]]]] = {}
+        gt_data_list = [None for _ in evaluators]  # NOTE: not currently used
+        for i, evaluator in enumerate(evaluators):
+            gt_data = evaluator.get_gt_data()
+            gt_data_list[i] = gt_data
+            for (gt_id, errors), gt_label, image_path in zip(
+                gt_data.gt_errors.items(), gt_data.gt_labels, gt_data.images
+            ):
+                gt_label = gt_label.item()
+                if gt_label not in gt_errors:
+                    gt_errors[gt_label] = {}
+                if gt_id not in gt_errors[gt_label]:
+                    gt_errors[gt_label][gt_id] = (
+                        image_path,
+                        [[] for _ in range(len(ids))],
+                    )
+                gt_errors[gt_label][gt_id][1][i] = errors
+
+        gt_data = GTData.combine(*gt_data_list)
+        gt_ids = gt_data.gt_ids.tolist()
+
+        ## generate crops
+        # figs keys: gt_id : list of images for each model
+        figs: Dict[int, List[list]] = {}
+        for errors in gt_errors.values():
+            for gt_id, (image_path, error_list) in errors.items():
+                if gt_id not in figs:
+                    figs[gt_id] = [[] for _ in evaluators]
+                image_tensor = read_image(image_path)
+                image_name = image_path.split("/")[-1]
+                cluster = gt_clusters[gt_ids.index(gt_id)].item()
+                for i, model_errors in enumerate(error_list):
+                    for error in model_errors:
+                        crop_options = get_crop_options(error.__class__)
+
+                        figs[gt_id][i].append(
+                            generate_fig(
+                                image_tensor=image_tensor,
+                                image_name=image_name,
+                                error=error,
+                                color=crop_options["color"],
+                                bbox_attr=crop_options["bbox_attr"],
+                                cluster=cluster,
+                                get_bbox_func=crop_options["get_bbox_func"],
+                                add_metadata_func=crop_options["add_metadata_func"],
+                            )
+                        )
+
+        ## Prepare sections
+        """
+        Filter by flow (only show improvements/degradations)
+        -> section, class_id, clusters, error_type
+        """
+
+        _, edges = FlowVisualizer(evaluators, self.image_dir).generate_graph()
+
+        gt_ids_by_section: List[Set[int]] = [set(), set()]
+        for _, (edge_gt_ids, score) in edges[["gt_ids", "score"]].iterrows():
+            # skip transitions with no change
+            if math.isclose(score, 0):
+                continue
+            section_id = int(score > 0)
+            gt_ids_by_section[section_id].update(edge_gt_ids)
+
+        section_contents = [
+            dict(
+                id="Degradations",
+                title="Degradations",
+                description=f"""
+                Degradations from model {evaluators[0].name} to model {evaluators[1].name}.
+                """,
+                contents={},
+            ),
+            dict(
+                id="Improvements",
+                title="Improvements",
+                description=f"""
+                Improvements from model {evaluators[0].name} to model {evaluators[1].name}.
+                """,
+                contents={},
+            ),
+        ]
+        for i, section_gt_ids in enumerate(gt_ids_by_section):
+            for gt_id in section_gt_ids:
+                gt_ref = gt_ids.index(gt_id)
+                class_idx = gt_data.gt_labels[gt_ref].item()
+                cluster = gt_clusters[gt_ref].item()
+                gt_figs = figs.get(gt_id)
+                if gt_figs is None:
+                    continue
+
+                if class_idx not in section_contents[i]["contents"]:
+                    section_contents[i]["contents"][class_idx] = {}
+
+                contents: Dict[
+                    int, Tuple[str, Dict[int, List[List[dict]]]]
+                ] = section_contents[i]["contents"][class_idx]
+
+                if cluster not in contents:
+                    contents[cluster] = (f"Cluster {cluster}", {})
+                contents[cluster][1][gt_id] = gt_figs
+
+        return [
+            Section(
+                id=section_content["id"],
+                title=section_content["title"],
+                description=section_content["description"],
+                contents=[
+                    Content(
+                        type=ContentType.IMAGES,
+                        header=f"Errors in Class {class_idx}",
+                        content=section_content["contents"][class_idx],
+                        data=dict(grouped=True),
+                    )
+                    for class_idx in section_content["contents"]
+                ],
+            )
+            for section_content in section_contents
+        ]
+
+    @logger()
     def compare(self) -> Dict[str, Section]:
         """Generate figures and plots for the errors.
 
@@ -1325,7 +1415,11 @@ class Inspector:
 
         results = dict()
 
-        _, _, results["overview"] = self.overview()
-        results["background_errors"] = self.compare_background_errors()
+        results["overview"] = self.summary()
         results["flow"] = self.flow()
+        results["background_errors"] = self.compare_background_errors()
+        results["degradations"], results["improvements"] = self.compare_errors(
+            error_type=Error
+        )
+
         return results

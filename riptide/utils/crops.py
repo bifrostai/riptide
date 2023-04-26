@@ -1,7 +1,9 @@
-from typing import Callable, Type
+from typing import Any, Callable, List, Type, Union
 
 import torch
+from PIL import Image
 from torchvision.ops.boxes import box_iou
+from torchvision.transforms.functional import to_pil_image
 
 from riptide.detection.errors import (
     BackgroundError,
@@ -14,6 +16,7 @@ from riptide.detection.errors import (
     NonError,
 )
 from riptide.utils.colors import ErrorColor
+from riptide.utils.image import crop_preview, encode_base64, get_bbox_stats
 
 
 def get_bbox_by_attr(error: Error, bbox_attr: str) -> torch.Tensor:
@@ -285,3 +288,59 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
         )
 
     return kwargs
+
+
+def generate_fig(
+    image_tensor: torch.Tensor,
+    image_name: str,
+    error: Error,
+    color: Union[str, ErrorColor, List[Union[str, ErrorColor]]],
+    bbox_attr: str,
+    get_bbox_func: Callable[[Error, str], Any],
+    add_metadata_func: Callable[[dict, Error], dict],
+    *,
+    cluster: int = 0,
+    preview_size: int = 192,
+) -> dict:
+    bbox: torch.Tensor = getattr(error, bbox_attr)
+
+    if bbox is not None:
+        width, height, area = get_bbox_stats(bbox)
+        bboxes = get_bbox_func(error, bbox_attr)
+
+        crop_tensor = (
+            crop_preview(image_tensor, bboxes, color)
+            if isinstance(bboxes, torch.Tensor)
+            else image_tensor
+        )
+        crop: Image.Image = to_pil_image(crop_tensor)
+        encoded_crop = encode_base64(crop.resize((preview_size, preview_size)))
+    else:
+        width, height, area = (None, None, None)
+        encoded_crop = None
+
+    confidence = round(error.confidence, 2) if error.confidence is not None else None
+    iou = (
+        round(
+            box_iou(error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)).item(),
+            3,
+        )
+        if error.pred_bbox is not None and error.gt_bbox is not None
+        else None
+    )
+
+    data = {
+        "type": error.code,
+        "image_name": image_name,
+        "image_base64": encoded_crop,
+        "pred_class": error.pred_label,
+        "gt_class": error.gt_label,
+        "confidence": confidence,
+        "bbox_width": width,
+        "bbox_height": height,
+        "bbox_area": area,
+        "iou": iou,
+        "cluster": cluster,
+    }
+
+    return add_metadata_func(data, error)
