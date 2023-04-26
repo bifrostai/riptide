@@ -25,6 +25,7 @@ from riptide.detection.errors import (
 )
 from riptide.io.loaders import COCOLoader, DictLoader
 from riptide.utils.colors import ErrorColor
+from riptide.utils.models import GTData
 
 ERROR_TYPES = [
     BackgroundError,
@@ -233,6 +234,26 @@ class Evaluation:
 
         return statuses
 
+    def get_errors_by_gt(self) -> Dict[Any, List[Error]]:
+        """Returns the detections for the ground truths.
+
+        Returns
+        -------
+        Dict[Any, List[Error]]
+            A dictionary with the ground truth IDs as keys and the errors as values.
+        """
+        errors: Dict[Any, List[Error]] = dict()
+        for error in self.errors.gt_errors + self.errors.pred_errors:
+            if error is None or error.gt_idx is None:
+                continue
+            gt_id = self.gt_ids[error.gt_idx].item()
+            if gt_id not in errors:
+                errors[gt_id] = [error]
+            else:
+                errors[gt_id].append(error)
+
+        return errors
+
 
 class ObjectDetectionEvaluation(Evaluation):
     """An object that creates and stores Errors and Confusions for a particular image."""
@@ -265,6 +286,9 @@ class ObjectDetectionEvaluation(Evaluation):
         self.gt_bboxes = gt_bboxes
 
         self.ious = box_iou(pred_bboxes, gt_bboxes)
+
+        self._pred_errors = None
+        self._gt_errors = None
 
         # There are no ground truths in the image
         if len(gt_bboxes) == 0:
@@ -661,15 +685,11 @@ class ObjectDetectionEvaluation(Evaluation):
             and not is_highest_iou
         )
 
-    _pred_errors = None
-
     @property
     def pred_errors(self) -> List[Error]:
         if self._pred_errors is None:
             self._pred_errors = self.errors.get_prediction_errors()
         return self._pred_errors
-
-    _gt_errors = None
 
     @property
     def gt_errors(self) -> List[Error]:
@@ -941,6 +961,12 @@ class ObjectDetectionEvaluator(Evaluator):
         self.num_images = len(evaluations)
         self.num_errors = sum([len(e.instances) for e in evaluations])
 
+        self._crops: List[torch.Tensor] = None
+        self._gt_ids: torch.Tensor = None
+        self._gt_errors: Dict[int, List[Error]] = None
+
+        self.gt_data: GTData = None
+
     @property
     def iou_thresholds(self) -> Tuple[float, float]:
         return (
@@ -1140,9 +1166,44 @@ class ObjectDetectionEvaluator(Evaluator):
                     image,
                     combined_bboxes[idx, 1],
                     combined_bboxes[idx, 0],
-                    combined_bboxes[idx, 2],
                     combined_bboxes[idx, 3],
+                    combined_bboxes[idx, 2],
                 )
                 idx += 1
 
         return crops, combined_errors
+
+    def get_gt_data(self, pad: int = 0) -> GTData:
+        if self.gt_data is not None:
+            return self.gt_data
+        gt_errors: Dict[int, List[Error]] = {}
+        gt_ids = []
+        gt_labels = []
+        crops: List[torch.Tensor] = []
+        images: list = []
+        for evaluation in self.evaluations:
+            image = read_image(evaluation.image_path)
+            bboxes = evaluation.gt_bboxes.long()
+            gt_ids.append(evaluation.gt_ids)
+            gt_labels.append(evaluation.gt_labels)
+            bboxes[:, 2:] = (
+                evaluation.gt_bboxes[:, 2:] - evaluation.gt_bboxes[:, :2] + 2 * pad
+            )
+            bboxes[:, :2] = evaluation.gt_bboxes[:, :2] - pad
+            for bbox in bboxes:
+                crops.append(crop(image, bbox[1], bbox[0], bbox[3], bbox[2]))
+                images.append(evaluation.image_path)
+
+            gt_errors.update(evaluation.get_errors_by_gt())
+
+        gt_ids = torch.cat(gt_ids, dim=0)
+        gt_labels = torch.cat(gt_labels, dim=0)
+
+        self.gt_data = GTData(
+            crops=crops,
+            gt_ids=gt_ids,
+            gt_labels=gt_labels,
+            gt_errors=gt_errors,
+            images=images,
+        )
+        return self.gt_data
