@@ -135,7 +135,7 @@
             {%- if grouped -%}
             {%- for idx, cluster in clusters.items() -%}
             <div class="class-image-container bg">
-                <span class="class-image-group-header break">Cluster {{ idx }}</span>
+                <span class="class-image-group-header break">{{ idx }}</span>
                 {%- for image_list in cluster -%}
                 <div class="class-image-container row" style="flex-basis: {{ 100 / (cluster | length) }}%">
                     {%- for image_dict in image_list -%}

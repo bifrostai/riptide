@@ -142,6 +142,8 @@ class HtmlReport:
             "Overview": "Overview",
             "Flow": "Flow",
             "BackgroundError": "Background Errors",
+            "Degradations": "Degradations",
+            "Improvements": "Improvements",
         }
 
         sections = inspector.compare()

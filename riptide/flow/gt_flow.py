@@ -15,8 +15,6 @@ class FlowVisualizer:
     ---------
     evaluators: List[Evaluator]
         List of evaluators to compare
-    coco_annotations: str
-        Path to COCO annotations file
     img_dir: str
         Path to directory containing images
 
@@ -33,24 +31,30 @@ class FlowVisualizer:
 
     statuses = ["CLS", "LOC", "CLL", "DUP", "MIS", "TP", "FN"]
 
-    def __init__(
-        self, evaluators: List[Evaluator], coco_annotations: str, img_dir: str
-    ):
+    def __init__(self, evaluators: List[Evaluator], img_dir: str):
         assert (
             len(evaluators) >= 2
         ), "At least two evaluators are required to create a flow diagram"
         # TODO: Check that all evaluators are based on the same targets (i.e. same COCO annotations file)
         self.evaluators = evaluators
-        self.coco_annotations = coco_annotations
         self.img_dir = img_dir
 
         self.confusion_matrices: Dict[Tuple[int, int], Dict[str, dict]] = dict()
 
+        self._graph: Tuple[pd.DataFrame, pd.DataFrame] = None
+
+    @property
+    def graph(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Returns nodes and edges of gt status flow graph between first two evaluators"""
+        if self._graph is None:
+            self._graph = self.generate_graph()
+        return self._graph
+
     def compute_status_flow(
         self, evaluations: List[Tuple[int, Evaluation]]
-    ) -> Tuple[List[Dict], List[Dict]]:
-        unassigned: List[Dict] = []
-        gt_status_flow = []
+    ) -> Tuple[List[dict], List[dict]]:
+        unassigned: List[dict] = []
+        gt_status_flow: List[dict] = []
         for idx, evaluation in evaluations:
             for gt_id, statuses in evaluation.get_status().items():
                 if gt_id is None:
@@ -75,7 +79,7 @@ class FlowVisualizer:
 
     def generate_graph(
         self,
-        ids: List[int] = [0, 1],
+        ids: List[int] = (0, 1),
         labels: Union[str, int, List[int]] = "all",
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if labels == "all":
@@ -97,7 +101,7 @@ class FlowVisualizer:
         df = pd.DataFrame.from_records(gt_status_flow).convert_dtypes()
         unassigned_df = pd.DataFrame.from_records(unassigned).convert_dtypes()
 
-        nodes = (
+        nodes: pd.DataFrame = (
             pd.concat([df, unassigned_df], ignore_index=True)
             .groupby(["idx", "state"])[["score", "iou", "gt_id"]]
             .agg(
@@ -116,7 +120,7 @@ class FlowVisualizer:
         ]
         nodes = nodes.rename(columns={"gt_id_set": "gt_ids"})
 
-        edges = pd.merge(
+        edges: pd.DataFrame = pd.merge(
             nodes, nodes, how="cross", suffixes=("_source", "_target")
         ).rename(
             columns={
