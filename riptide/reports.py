@@ -76,7 +76,7 @@ class HtmlReport:
         self,
         output_dir: str,
         fname: str = "report.html",
-        template: str = "template.html",
+        template: str = "evaluation.html",
     ):
         inspector = self.inspector
         section_names = {
@@ -93,7 +93,7 @@ class HtmlReport:
         }
 
         # Summary data
-        overall_summary, classwise_summary, summary_section = inspector.overview()
+        overall_summary, classwise_summary, _ = inspector.overview()
 
         # Error data - figures and plots for each error type
         error_fig_plots = inspector.inspect()
@@ -110,17 +110,13 @@ class HtmlReport:
             missed_aspect_var=missed_aspect_var,
         )
 
-        error_info = self.get_error_info()
-
         logging.info("Rendering output...")
         output = self.env.get_template(template).render(
             title="Riptide",
             section_names=section_names,
             summary=overall_summary,
-            summary_section=summary_section,
             classwise_summary=classwise_summary,
             infoboxes=infoboxes,
-            error_info=error_info,
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
             **error_fig_plots,
@@ -155,5 +151,7 @@ class HtmlReport:
             **sections,
         )
         os.makedirs(output_dir, exist_ok=True)
-        with open(os.path.join(output_dir, fname), "w") as f:
+        fout = os.path.join(output_dir, fname)
+        with open(fout, "w") as f:
             f.writelines(output)
+        logging.info(f"Rendered output to {fout}")

@@ -68,10 +68,11 @@ class FlowVisualizer:
                 # take highest confidence status as representative
                 status = statuses[0].copy()
 
-                num_tp = status.score if status.state.code == "TP" else 0
-                total = sum([s.score for s in statuses])
+                num_tp = int(status.state.code == "TP")
+                total = len(statuses)
                 status.score = (
-                    2 * num_tp / (total + num_tp) if total + num_tp > 0 else 0
+                    # 2 * num_tp / (total + num_tp) if total + num_tp > 0 else 0
+                    num_tp
                 )
 
                 gt_status_flow.append({"gt_id": gt_id, "idx": idx, **status.todict()})
@@ -142,7 +143,6 @@ class FlowVisualizer:
             edges["gt_ids"].apply(sum).notna(), edges["count"], inplace=True
         )
         edges["score"] = edges["score_mean_target"] - edges["score_mean_source"]
-        # edges = edges[edges["score"] > 0]
         edges["score_std"] = (
             edges["score_std_source"] ** 2 + edges["score_std_target"] ** 2
         ) ** (0.5)

@@ -1,3 +1,4 @@
+import logging
 import math
 from typing import Any, Callable, Dict, Iterable, List, Set, Tuple, Type, Union
 
@@ -167,17 +168,23 @@ class Inspector:
         return encode_base64(fig)
 
     @logger()
-    def summary(self) -> Section:
+    def summary(self, ids: List[int] = None) -> Section:
         """Generate a summary of the evaluation results for each model."""
+        evaluators = (
+            self.evaluators
+            if ids is None
+            else [self.evaluators[min(i, len(self.evaluators) - 1)] for i in ids]
+        )
+
         content = [
             {
                 "No. of Images": self.num_images,
                 "Conf. Threshold": self.conf_threshold,
                 "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
             },
-            [None] * len(self.evaluators),
+            [None] * len(evaluators),
         ]
-        for i, evaluator in enumerate(self.evaluators):
+        for i, evaluator in enumerate(evaluators):
             summary = evaluator.summarize()
 
             counts = {
@@ -1171,15 +1178,14 @@ class Inspector:
 
         results = dict()
 
-        results["background_error_figs"] = self.background_error()
-        results["classification_error_figs"] = self.classification_error()
-        results["localization_error_figs"] = self.localization_error()
-        results[
-            "classification_and_localization_error_figs"
-        ] = self.classification_and_localization_error()
-        results["duplicate_error_figs"] = self.duplicate_error()
-        results["missed_error_figs"] = self.missed_error()
-        results["true_positive_figs"] = self.true_positives()
+        results["overview"] = self.summary([0])
+        results["BKG"] = self.background_error()
+        results["CLS"] = self.classification_error()
+        results["LOC"] = self.localization_error()
+        results["CLL"] = self.classification_and_localization_error()
+        results["DUP"] = self.duplicate_error()
+        results["MIS"] = self.missed_error()
+        results["TP"] = self.true_positives()
 
         return results
 
@@ -1304,7 +1310,10 @@ class Inspector:
         gt_data = GTData.combine(*gt_data_list)
         gt_ids = gt_data.gt_ids.tolist()
 
+        logging.info("Collated errors")
+
         ## generate crops
+        # TODO: Slowest part of the pipeline. Can we parallelize this?
         # figs keys: gt_id : list of images for each model
         figs: Dict[int, List[list]] = {}
         for errors in gt_errors.values():
@@ -1330,6 +1339,17 @@ class Inspector:
                                 add_metadata_func=crop_options["add_metadata_func"],
                             )
                         )
+
+                    # TODO: this sorting is repeated in Evaluation().get_pred_status(). Use that instead
+                    figs[gt_id][i] = [
+                        sorted(
+                            figs[gt_id][i],
+                            key=lambda x: (x["iou"] or 0, x["confidence"]),
+                            reverse=True,
+                        )[0]
+                    ]
+
+        logging.info("Generated crops")
 
         ## Prepare sections
         """
@@ -1385,6 +1405,8 @@ class Inspector:
                     contents[cluster] = (f"Cluster {cluster}", {})
                 contents[cluster][1][gt_id] = gt_figs
 
+        logging.info("Prepared sections")
+
         return [
             Section(
                 id=section_content["id"],
@@ -1395,7 +1417,7 @@ class Inspector:
                         type=ContentType.IMAGES,
                         header=f"Errors in Class {class_idx}",
                         content=section_content["contents"][class_idx],
-                        data=dict(grouped=True),
+                        data=dict(grouped=True, compact=True),
                     )
                     for class_idx in section_content["contents"]
                 ],
