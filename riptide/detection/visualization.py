@@ -59,6 +59,7 @@ def empty_section(section_id: str, title: str, description: str = None):
 
 
 class Inspector:
+    @logger("Initializing Inspector", "Initialized Inspector")
     def __init__(
         self,
         evaluators: Union[ObjectDetectionEvaluator, List[ObjectDetectionEvaluator]],
@@ -102,54 +103,33 @@ class Inspector:
             }
             for evaluator in self.evaluators
         }
-
-        pred_crops: List[torch.Tensor] = []
-        pred_errors: List[List[Error]] = []
-        gt_crops: List[torch.Tensor] = []
-        gt_errors: List[List[Error]] = []
+        bkg_crops: List[torch.Tensor] = []
+        bkg_errors: List[List[Error]] = []
 
         for evaluator in evaluators:
-            model_crops, model_errors = evaluator.crop_objects()
-            pred_crops.extend(model_crops)
-            pred_errors.append(model_errors)
-            model_crops, model_errors = evaluator.crop_objects(axis=0)
-            gt_crops.extend(model_crops)
-            gt_errors.append(model_errors)
+            model_crops, model_errors = evaluator.crop_objects(by_type=BackgroundError)
+            bkg_crops.extend(model_crops)
+            bkg_errors.append(model_errors)
 
-        self.pred_projector = CropProjector(
-            name=f"Predictions",
-            images=pred_crops,
-            encoder_mode="preconv",
-            normalize_embeddings=True,
-            labels=[
-                (i, error.code if error is not None else "NON")
-                for i, model_errors in enumerate(pred_errors)
-                for error in model_errors
-            ],
-            device=torch.device("cpu"),
-        )
-        self.gt_projector = CropProjector(
-            name=f"Ground truths",
-            images=gt_crops,
-            encoder_mode="preconv",
-            normalize_embeddings=True,
-            labels=[
-                (i, error.code if error is not None else "NON")
-                for i, model_errors in enumerate(gt_errors)
-                for error in model_errors
-            ],
-            device=torch.device("cpu"),
-        )
+        bkg_labels = [
+            (i, error.pred_label)
+            for i, model_errors in enumerate(bkg_errors)
+            for error in model_errors
+        ]
 
         self.gt_data = evaluators[0].get_gt_data()
-        self.actual_projector = CropProjector(
-            name=f"Ground truths",
-            images=self.gt_data.crops,
+        actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
+
+        self.projector = CropProjector(
+            name=f"Crops",
+            images=self.gt_data.crops + bkg_crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=self.gt_data.gt_ids.tolist(),
+            labels=actual_labels + bkg_labels,
             device=torch.device("cpu"),
         )
+
+        self.clusters = self.projector.cluster()
 
         self.overview()
 
@@ -346,7 +326,6 @@ class Inspector:
         preview_size: int = 192,
         bbox_attr: str = None,
         label_attr: str = None,
-        projector_attr: str = None,
         get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
         get_label_func: Callable[[int], str] = None,
         add_metadata_func: Callable[[dict, Error], dict] = None,
@@ -376,9 +355,6 @@ class Inspector:
 
         label_attr : str, default=None
             Attribute name for the label. If None, attribute is determined by `axis`
-
-        projector_attr : str, default=None
-            Attribute name for the projector. If None, attribute is determined by `axis`
 
         get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], default=None
             Function to get the bounding box from the error, by default a function that returns the bounding box specified by `bbox_attr`
@@ -411,26 +387,26 @@ class Inspector:
 
         color = [c.colorstr if isinstance(c, ErrorColor) else c for c in color]
 
-        if axis == 0:
-            bbox_attr = bbox_attr or "gt_bbox"
-            label_attr = label_attr or "gt_label"
-            projector_attr = projector_attr or "gt_projector"
-        else:
-            bbox_attr = bbox_attr or "pred_bbox"
-            label_attr = label_attr or "pred_label"
-            projector_attr = projector_attr or "pred_projector"
+        attr_prefix = "gt" if axis == 0 else "pred"
+        bbox_attr = bbox_attr or f"{attr_prefix}_bbox"
+        label_attr = label_attr or f"{attr_prefix}_label"
 
         get_bbox_func = get_bbox_func or get_bbox_by_attr
         add_metadata_func = add_metadata_func or add_metadata
         get_label_func = get_label_func or (lambda label: f"Predicted: Class {label}")
 
         if clusters is None:
-            projector: CropProjector = getattr(self, projector_attr)
+            projector = self.projector
 
-            code = "TP" if error_type is NonError else error_type.code
+            # code = "TP" if error_type is NonError else error_type.code
 
-            mask = [label == (evaluator_id, code) for label in projector.labels]
+            mask = (
+                [label[0] == -1 for label in projector.labels]
+                if error_type is not BackgroundError
+                else [label[0] != -1 for label in projector.labels]
+            )
 
+            # clusters = self.clusters[mask]
             clusters = projector.cluster(mask=mask)
 
         else:
@@ -440,9 +416,19 @@ class Inspector:
 
         # endregion
 
+        if error_type is BackgroundError:
+
+            def get_cluster(idx, bkg_idx):
+                return clusters[bkg_idx].item()
+
+        else:
+
+            def get_cluster(idx, bkg_idx):
+                return clusters[idx].item()
+
         classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
         label_set = set()
-        idx = 0
+        bkg_idx = 0
         for image_path, image_errors in errors.items():
             image_tensor = read_image(image_path)
             image_name = image_path.split("/")[-1]
@@ -456,7 +442,7 @@ class Inspector:
                         dict(),
                     )
 
-                cluster = clusters[idx].item()
+                cluster = get_cluster(error.idx, bkg_idx)
                 if cluster not in classwise_dict[label][1]:
                     classwise_dict[label][1][cluster] = [[]]
 
@@ -472,13 +458,20 @@ class Inspector:
                     add_metadata_func=add_metadata_func,
                 )
 
-                crop_key = (evaluator_id, label, error.gt_idx, error.pred_idx, 1)
+                crop_key = (
+                    evaluator_id,
+                    label,
+                    error.idx,
+                    error.gt_idx,
+                    error.pred_idx,
+                    1,
+                )
                 # assert crop_key not in self.crops, "Duplicate crop"
 
                 self.crops[crop_key] = fig
 
                 classwise_dict[label][1][cluster][0].append(fig)
-                idx += 1
+                bkg_idx += 1
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
@@ -1167,6 +1160,36 @@ class Inspector:
     # endregion
 
     @logger()
+    def inspect(self) -> Tuple[Dict[str, Any], Dict[str, str]]:
+        """Generate figures and plots for the errors.
+
+        Returns
+        -------
+        Dict
+            A dictionary containing the generated figures and plots.
+        """
+
+        results = {
+            "overview": self.summary([0]),
+            "distractions": self.background_error(),
+            "confusions": self.classification_error(),
+            "misses": self.missed_error(),
+            "duplicates": self.duplicate_error(),
+            "true_positives": self.true_positives(),
+        }
+
+        section_names = {
+            "Overview": "Overview",
+            "Distractions": "Distractions",
+            "Confusions": "Confusions",
+            "Misses": "Misses",
+            "Duplicates": "Duplicates",
+            "TruePositive": "True Positives",
+        }
+
+        return results, section_names
+
+    @logger()
     def inspect(self) -> Dict[str, Any]:
         """Generate figures and plots for the errors.
 
@@ -1199,9 +1222,13 @@ class Inspector:
             The section containing the visualizations
         """
 
-        matched_clusters = self.pred_projector.match_clusters(
-            [(model_id, "BKG") for model_id in range(len(self.evaluators))]
-        )
+        mask = [label[0] != -1 for label in self.projector.labels]
+
+        clusters = self.projector.cluster(mask=mask)
+        submasks = [
+            [label[0] == idx for label in self.projector.labels if label[0] != -1]
+            for idx in range(len(self.evaluators))
+        ]
 
         figs = [
             self.error_classwise_dict(
@@ -1209,7 +1236,7 @@ class Inspector:
                 color=ErrorColor.BKG,
                 axis=1,
                 evaluator_id=idx,
-                clusters=matched_clusters[idx],
+                clusters=clusters[submasks[idx]],
             )
             for idx in range(len(self.evaluators))
         ]
@@ -1284,16 +1311,15 @@ class Inspector:
         if error_type is BackgroundError:
             return self.compare_background_errors()
 
-        gt_clusters = self.actual_projector.cluster()
+        mask = [label[0] == -1 for label in self.projector.labels]
+        gt_clusters = self.projector.cluster(mask=mask)
 
         evaluators = [self.evaluators[idx] for idx in ids]
 
         # gt_errors keys: class_idx -> gt_id : (image_path, [errors for each model])
         gt_errors: Dict[int, Dict[int, Tuple[str, List[List[Error]]]]] = {}
-        gt_data_list = [None for _ in evaluators]  # NOTE: not currently used
         for i, evaluator in enumerate(evaluators):
             gt_data = evaluator.get_gt_data()
-            gt_data_list[i] = gt_data
             for (gt_id, errors), gt_label, image_path in zip(
                 gt_data.gt_errors.items(), gt_data.gt_labels, gt_data.images
             ):
@@ -1307,7 +1333,6 @@ class Inspector:
                     )
                 gt_errors[gt_label][gt_id][1][i] = errors
 
-        gt_data = GTData.combine(*gt_data_list)
         gt_ids = gt_data.gt_ids.tolist()
 
         logging.info("Collated errors")

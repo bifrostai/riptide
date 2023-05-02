@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from termcolor import colored
@@ -25,6 +25,7 @@ from riptide.detection.errors import (
 )
 from riptide.io.loaders import COCOLoader, DictLoader
 from riptide.utils.colors import ErrorColor
+from riptide.utils.logging import logger
 from riptide.utils.models import GTData
 
 ERROR_TYPES = [
@@ -303,6 +304,7 @@ class ObjectDetectionEvaluation(Evaluation):
                     continue
 
                 background_error = BackgroundError(
+                    -1,
                     pred_idx=pred_idx,
                     pred_label=pred_label,
                     pred_bbox=pred_bbox,
@@ -323,6 +325,7 @@ class ObjectDetectionEvaluation(Evaluation):
             # All gts are MissedErrors and false negatives
             for gt_idx, (gt_label, gt_bbox) in enumerate(zip(gt_labels, gt_bboxes)):
                 missed_error = MissedError(
+                    gt_ids[gt_idx],
                     gt_idx=gt_idx,
                     gt_label=gt_label,
                     gt_bbox=gt_bbox,
@@ -347,6 +350,7 @@ class ObjectDetectionEvaluation(Evaluation):
                     label_of_best_gt_match,
                 ):
                     true_positive = NonError(
+                        gt_ids[idx_of_best_gt_match],
                         pred_idx=pred_idx,
                         gt_idx=idx_of_best_gt_match,
                         pred_label=pred_label,
@@ -356,8 +360,6 @@ class ObjectDetectionEvaluation(Evaluation):
                         gt_bbox=gt_bboxes[idx_of_best_gt_match],
                         iou_threshold=self.fg_iou_threshold,
                         conf_threshold=self.conf_threshold,
-                        code="TP",
-                        confusion=Confusion.TRUE_POSITIVE,
                     )
                     self.errors.assign_prediction_error(true_positive)
                     self.confusions.assign_prediction_confusion(
@@ -383,6 +385,7 @@ class ObjectDetectionEvaluation(Evaluation):
 
             if self.is_background_error(pred_iou):
                 background_error = BackgroundError(
+                    -1,
                     pred_idx=pred_idx,
                     pred_label=pred_label,
                     pred_bbox=pred_bbox,
@@ -400,6 +403,8 @@ class ObjectDetectionEvaluation(Evaluation):
             box_of_best_gt_match = gt_bboxes[idx_of_best_gt_match]
             label_of_best_gt_match = gt_labels[idx_of_best_gt_match]
 
+            idx = gt_ids[idx_of_best_gt_match]
+
             # Test for LocalizationError: correct class but poor localization
             # This detection would have been positive if it had higher IoU with this GT
             if self.is_localization_error(
@@ -408,6 +413,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 label_of_best_gt_match,
             ):
                 localization_error = LocalizationError(
+                    idx,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
                     pred_label=pred_label,
@@ -440,6 +446,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 label_of_best_gt_match,
             ):
                 classification_error = ClassificationError(
+                    idx,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
                     pred_label=pred_label,
@@ -470,6 +477,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 label_of_best_gt_match,
             ):
                 classification_localization_error = ClassificationAndLocalizationError(
+                    idx,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
                     pred_label=pred_label,
@@ -512,6 +520,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 best_pred_bbox = self.pred_bboxes[idx_of_best_pred_match]
                 best_confidence = self.pred_scores[idx_of_best_pred_match]
                 duplicate_error = DuplicateError(
+                    idx,
                     pred_idx=pred_idx,
                     best_pred_idx=idx_of_best_pred_match,
                     gt_idx=idx_of_best_gt_match,
@@ -534,6 +543,7 @@ class ObjectDetectionEvaluation(Evaluation):
 
             # Error canditates that are not actually errors are true positives
             true_positive = NonError(
+                idx,
                 pred_idx=pred_idx,
                 gt_idx=idx_of_best_gt_match,
                 pred_label=pred_label,
@@ -543,8 +553,6 @@ class ObjectDetectionEvaluation(Evaluation):
                 gt_bbox=gt_bboxes[idx_of_best_gt_match],
                 iou_threshold=self.fg_iou_threshold,
                 conf_threshold=self.conf_threshold,
-                code="TP",
-                confusion=Confusion.TRUE_POSITIVE,
             )
             self.errors.assign_prediction_error(true_positive)
             self.confusions.assign_prediction_confusion(
@@ -585,6 +593,7 @@ class ObjectDetectionEvaluation(Evaluation):
 
             if all(i is None for i in pred_idx_matches):
                 missed_error = MissedError(
+                    gt_ids[gt_idx],
                     gt_idx=gt_idx,
                     gt_label=gt_labels[gt_idx],
                     gt_bbox=gt_bboxes[gt_idx],
@@ -928,6 +937,7 @@ class Evaluator:
     def classwise_summarize(self) -> Dict[str, any]:
         raise NotImplementedError()
 
+    @logger()
     def get_errorlist_dict(self) -> Dict[str, List[Error]]:
         if self._errorlist_dict is None:
             errorlist_dict = {error_type.__name__: [] for error_type in ERROR_TYPES}
@@ -1077,6 +1087,7 @@ class ObjectDetectionEvaluator(Evaluator):
 
         return classwise_summary
 
+    @logger()
     def get_errorlist_dict(self) -> Dict[str, Dict[str, List[Error]]]:
         """Get a dictionary of dictionaries of lists of errors.
         The first key is the error type, the second key is the image path, and the value is a list of errors.
@@ -1132,15 +1143,38 @@ class ObjectDetectionEvaluator(Evaluator):
         return (2 * precision * recall) / (precision + recall + 1e-7)
 
     def crop_objects(
-        self, pad: int = 0, axis: int = 1
+        self,
+        pad: int = 0,
+        axis: int = 1,
+        by_type: Type[Error] | List[Type[Error]] = None,
     ) -> Tuple[List[torch.Tensor], List[Error]]:
         images: List[torch.Tensor] = [None] * len(self.evaluations)
         num_bboxes: torch.Tensor = torch.zeros(len(self.evaluations)).long()
         bboxes: List[torch.Tensor] = []
         errors: List[List[Error]] = [None] * len(self.evaluations)
 
-        errors_attr = "gt_errors" if axis == 0 else "pred_errors"
-        bboxes_attr = "gt_bboxes" if axis == 0 else "pred_bboxes"
+        attr_prefix = "gt" if axis == 0 else "pred"
+        errors_attr = f"{attr_prefix}_errors"
+        bboxes_attr = f"{attr_prefix}_bboxes"
+
+        if by_type is None:
+
+            def is_type(error: Error):
+                return True
+
+        elif isinstance(by_type, Type):
+
+            def is_type(error: Error):
+                return isinstance(error, by_type)
+
+        else:
+            assert isinstance(by_type, (list, tuple)), "by_type must be a list or tuple"
+            assert all(
+                isinstance(t, Type) for t in by_type
+            ), "by_type must be a list of types"
+
+            def is_type(error: Error):
+                return error.__class__ in by_type
 
         for i, e in enumerate(self.evaluations):
             errors[i] = getattr(e.errors, errors_attr)
@@ -1151,7 +1185,10 @@ class ObjectDetectionEvaluator(Evaluator):
 
             images[i] = read_image(e.image_path)
 
-        combined_errors = [error for error_list in errors for error in error_list]
+        combined_errors = [
+            error for error_list in errors for error in error_list if is_type(error)
+        ]
+
         combined_bboxes = torch.concat(bboxes, dim=0).long()
         combined_bboxes[:, 2:] = (
             combined_bboxes[:, 2:] - combined_bboxes[:, :2] + 2 * pad
@@ -1170,6 +1207,16 @@ class ObjectDetectionEvaluator(Evaluator):
                     combined_bboxes[idx, 2],
                 )
                 idx += 1
+
+        if len(crops) != len(combined_errors):
+            i = 0
+            masked_crops = []
+            for error_list in errors:
+                for error in error_list:
+                    if is_type(error):
+                        masked_crops.append(crops[i])
+                    i += 1
+            crops = masked_crops
 
         return crops, combined_errors
 

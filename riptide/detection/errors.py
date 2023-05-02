@@ -56,6 +56,8 @@ class NotDuplicateException(Exception):
 
 
 def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
+    if pred_bbox is None or gt_bbox is None:
+        return 0.0
     if len(pred_bbox.size()) == 1:
         pred_bbox = pred_bbox.unsqueeze(0)
     if len(gt_bbox.size()) == 1:
@@ -64,11 +66,13 @@ def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
 
 
 class Error:
-    code = "UN"
     confusion = Confusion.UNUSED
+    code = "UN"
 
     def __init__(
         self,
+        idx: int,
+        /,
         pred_idx: int = None,
         gt_idx: int = None,
         pred_label: int = None,
@@ -78,6 +82,7 @@ class Error:
         confidence: float = None,
         code: str = None,
     ) -> None:
+        self.idx = idx.item() if isinstance(idx, torch.Tensor) else idx
         self.pred_idx = (
             pred_idx.item() if isinstance(pred_idx, torch.Tensor) else pred_idx
         )
@@ -109,15 +114,15 @@ class ClassificationError(Error):
 
     def __init__(
         self,
-        pred_idx: int,
-        gt_idx: int,
-        pred_label: int,
-        pred_bbox: torch.Tensor,
-        confidence: float,
-        gt_label: int,
-        gt_bbox: torch.Tensor,
+        idx: int,
+        /,
         conf_threshold: float = 0.5,
+        **kwargs,
     ) -> None:
+        assert conf_threshold > 0, "Confidence threshold must be > 0"
+        pred_label = kwargs.get("pred_label", 0)
+        gt_label = kwargs.get("gt_label", 0)
+        confidence = kwargs.get("confidence", 0)
         if pred_label == 0:
             raise WrongCategoryException(
                 "Classification errors must have prediction category > 0 "
@@ -131,15 +136,7 @@ class ClassificationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(
-            pred_idx=pred_idx,
-            gt_idx=gt_idx,
-            pred_label=pred_label,
-            gt_label=gt_label,
-            pred_bbox=pred_bbox,
-            gt_bbox=gt_bbox,
-            confidence=confidence,
-        )
+        super().__init__(idx, **kwargs)
         self.conf_threshold = conf_threshold
 
 
@@ -149,16 +146,19 @@ class LocalizationError(Error):
 
     def __init__(
         self,
-        pred_idx: int,
-        gt_idx: int,
-        pred_label: int,
-        pred_bbox: torch.Tensor,
-        confidence: float,
-        gt_label: int,
-        gt_bbox: torch.Tensor,
+        idx: int,
+        /,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
+        **kwargs,
     ) -> None:
+        assert iou_threshold > 0, "IoU threshold must be > 0"
+        assert conf_threshold > 0, "Confidence threshold must be > 0"
+        pred_label = kwargs.get("pred_label", 0)
+        gt_label = kwargs.get("gt_label", 0)
+        pred_bbox = kwargs.get("pred_bbox", None)
+        gt_bbox = kwargs.get("gt_bbox", None)
+        confidence = kwargs.get("confidence", 0)
         if pred_label == 0:
             raise WrongCategoryException(
                 "Localization errors must have prediction category > 0 "
@@ -183,15 +183,7 @@ class LocalizationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(
-            pred_idx=pred_idx,
-            gt_idx=gt_idx,
-            pred_label=pred_label,
-            gt_label=gt_label,
-            pred_bbox=pred_bbox,
-            gt_bbox=gt_bbox,
-            confidence=confidence,
-        )
+        super().__init__(idx, **kwargs)
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
@@ -202,16 +194,19 @@ class ClassificationAndLocalizationError(Error):
 
     def __init__(
         self,
-        pred_idx: int,
-        gt_idx: int,
-        pred_label: int,
-        pred_bbox: torch.Tensor,
-        confidence: float,
-        gt_label: int,
-        gt_bbox: torch.Tensor,
+        idx: int,
+        /,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
+        **kwargs,
     ) -> None:
+        assert iou_threshold > 0, "IoU threshold must be > 0"
+        assert conf_threshold > 0, "Confidence threshold must be > 0"
+        pred_label = kwargs.get("pred_label", 0)
+        gt_label = kwargs.get("gt_label", 0)
+        pred_bbox = kwargs.get("pred_bbox", None)
+        gt_bbox = kwargs.get("gt_bbox", None)
+        confidence = kwargs.get("confidence", 0)
         if pred_label == 0:
             raise WrongCategoryException(
                 "Classification-localization errors must have prediction category > 0 "
@@ -236,15 +231,7 @@ class ClassificationAndLocalizationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(
-            pred_idx=pred_idx,
-            gt_idx=gt_idx,
-            pred_label=pred_label,
-            gt_label=gt_label,
-            pred_bbox=pred_bbox,
-            gt_bbox=gt_bbox,
-            confidence=confidence,
-        )
+        super().__init__(idx, **kwargs)
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
@@ -255,20 +242,23 @@ class DuplicateError(Error):
 
     def __init__(
         self,
-        pred_idx: int,
+        idx: int,
+        /,
         best_pred_idx: int,
-        gt_idx: int,
-        pred_label: int,
-        pred_bbox: torch.Tensor,
-        confidence: float,
         best_pred_label: int,
         best_pred_bbox: torch.Tensor,
         best_confidence: float,
-        gt_label: int,
-        gt_bbox: torch.Tensor,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
+        **kwargs,
     ) -> None:
+        assert iou_threshold > 0, "IoU threshold must be > 0"
+        assert conf_threshold > 0, "Confidence threshold must be > 0"
+        pred_label = kwargs.get("pred_label", 0)
+        gt_label = kwargs.get("gt_label", 0)
+        pred_bbox = kwargs.get("pred_bbox", None)
+        gt_bbox = kwargs.get("gt_bbox", None)
+        confidence = kwargs.get("confidence", 0)
         if pred_label == 0:
             raise WrongCategoryException(
                 "Duplicate errors must have prediction category > 0 "
@@ -312,15 +302,7 @@ class DuplicateError(Error):
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
 
-        super().__init__(
-            pred_idx=pred_idx,
-            gt_idx=gt_idx,
-            pred_label=pred_label,
-            gt_label=gt_label,
-            pred_bbox=pred_bbox,
-            gt_bbox=gt_bbox,
-            confidence=confidence,
-        )
+        super().__init__(idx, **kwargs)
         self.best_pred_idx = best_pred_idx
         self.best_pred_label = (
             best_pred_label.item()
@@ -343,6 +325,8 @@ class BackgroundError(Error):
 
     def __init__(
         self,
+        idx: int,
+        /,
         pred_idx: int,
         pred_label: int,
         pred_bbox: torch.Tensor,
@@ -361,6 +345,7 @@ class BackgroundError(Error):
             )
 
         super().__init__(
+            idx,
             pred_idx=pred_idx,
             pred_label=pred_label,
             pred_bbox=pred_bbox,
@@ -375,6 +360,8 @@ class MissedError(Error):
 
     def __init__(
         self,
+        idx: int,
+        /,
         gt_idx: int,
         gt_label: int,
         gt_bbox: torch.Tensor,
@@ -384,27 +371,28 @@ class MissedError(Error):
                 f"The ground truth category must have value > 0, got {gt_label}"
             )
 
-        super().__init__(gt_idx=gt_idx, gt_label=gt_label, gt_bbox=gt_bbox)
+        super().__init__(idx, gt_idx=gt_idx, gt_label=gt_label, gt_bbox=gt_bbox)
 
 
 class NonError(Error):
-    confusion = Confusion.UNUSED
-    code = "NON"
+    confusion = Confusion.TRUE_POSITIVE
+    code = "TP"
 
     def __init__(
         self,
-        pred_idx: int,
-        gt_idx: int,
-        pred_label: int,
-        pred_bbox: torch.Tensor,
-        confidence: float,
-        gt_label: int,
-        gt_bbox: torch.Tensor,
+        idx: int,
+        /,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
-        code: str = "NON",
-        confusion: Confusion = Confusion.UNUSED,
+        **kwargs,
     ) -> None:
+        assert iou_threshold > 0, "IoU threshold must be > 0"
+        assert conf_threshold > 0, "Confidence threshold must be > 0"
+        pred_label = kwargs.get("pred_label", 0)
+        gt_label = kwargs.get("gt_label", 0)
+        pred_bbox = kwargs.get("pred_bbox", None)
+        gt_bbox = kwargs.get("gt_bbox", None)
+        confidence = kwargs.get("confidence", 0)
         if pred_label == 0:
             raise WrongCategoryException(
                 "Non errors must have prediction category > 0 (zero is background),"
@@ -428,24 +416,9 @@ class NonError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        if confusion not in (Confusion.UNUSED, Confusion.TRUE_POSITIVE):
-            raise WrongCategoryException(
-                "Non errors must have confusion in (UNUSED, TRUE_POSITIVE), "
-                f"got {confusion}"
-            )
-        super().__init__(
-            pred_idx=pred_idx,
-            gt_idx=gt_idx,
-            pred_label=pred_label,
-            gt_label=gt_label,
-            pred_bbox=pred_bbox,
-            gt_bbox=gt_bbox,
-            confidence=confidence,
-            code=code,
-        )
+        super().__init__(idx, **kwargs)
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
-        self.confusion = confusion
 
     def __bool__(self) -> bool:
         return False
