@@ -123,8 +123,8 @@
 {%- endmacro -%}
 
 {%- macro render_images(content) -%}
-{%- set grouped = content.data.get("grouped", false) -%}
-{%- set compact = content.data.get("compact", false) -%}
+{%- set grouped = content.data.get("grouped", true) -%}
+{%- set compact = content.data.get("compact", true) -%}
 {%- set images = content.content -%}
 <div class="class-images">
     {%- if images.get("group_headers") is not none -%}

@@ -112,6 +112,9 @@ class Error:
         attrs = ", ".join(attrs)
         return f"{self.__class__.__name__}({attrs})"
 
+    def __hash__(self) -> int:
+        return hash(id(self))
+
 
 class ClassificationError(Error):
     confusion = Confusion.FALSE_POSITIVE

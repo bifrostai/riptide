@@ -5,8 +5,11 @@ from typing import Any, Callable, Dict, Iterable, List, Set, Tuple, Type, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch.nn.functional import conv2d
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
+from torchvision.transforms import Grayscale
+from torchvision.transforms.functional import crop
 
 from riptide.detection.characterization import (
     compute_aspect_variance,
@@ -458,15 +461,9 @@ class Inspector:
                     add_metadata_func=add_metadata_func,
                 )
 
-                crop_key = (
-                    evaluator_id,
-                    label,
-                    error.idx,
-                    error.gt_idx,
-                    error.pred_idx,
-                    1,
-                )
-                # assert crop_key not in self.crops, "Duplicate crop"
+                crop_key = (evaluator_id, error)
+                if crop_key in self.crops:
+                    logging.warn(f"Duplicate crop: {crop_key}")
 
                 self.crops[crop_key] = fig
 
@@ -598,6 +595,8 @@ class Inspector:
 
         if data is None:
             data = {}
+        data["grouped"] = data.get("grouped", True)
+        data["compact"] = data.get("compact", True)
 
         kwargs.update(
             dict(
@@ -1036,52 +1035,150 @@ class Inspector:
                 axis=0,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
+                evaluator_id=1,
             )
         )
 
         classwise_dict = self.error_classwise_dict(**kwargs)
+        box = self.boxplot(classwise_dict)
 
-        fig = self.boxplot(classwise_dict)
+        sections = {
+            "crowded": (
+                "Crowded",
+                "List of all the missed detections that overlap with other objects.",
+            ),
+            "low_feat": (
+                "Not Enough Visual Features",
+                "List of all the missed detections that are blurry or too small.",
+            ),
+            "occluded": (
+                "Occluded",
+                "List of all the missed detections that are occluded.",
+            ),
+            "truncated": (
+                "Truncated",
+                "List of all the missed detections that occur at the edge of the"
+                " image.",
+            ),
+            "bad_label": (
+                "Bad Labels",
+                "List of all the missed detections that have bad labels.",
+            ),
+            "unseen": ("Unseen", "List of all other missed detections."),
+        }
 
-        # evaluator = self.evaluators[0]
-        # missed_size_var = compute_size_variance(evaluator)
-        # missed_aspect_var = compute_aspect_variance(evaluator)
+        groups: Dict[str, List[Error]] = self.missed_groups()[kwargs["evaluator_id"]]
+
+        figs: Dict[str, Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]] = {
+            k: {} for k in groups
+        }
+
+        for group, errors in groups.items():
+            for error in errors:
+                fig: dict = self.crops.get((kwargs["evaluator_id"], error))
+                if fig is None:
+                    logging.warn(f"Could not find crop for {error}")
+                    continue
+                if error.gt_label not in figs[group]:
+                    figs[group][error.gt_label] = (
+                        f"Missed: Class {error.gt_label}",
+                        {},
+                    )
+
+                cluster = fig.get("cluster")
+                if cluster not in figs[group][error.gt_label][1]:
+                    figs[group][error.gt_label][1][cluster] = [[]]
+
+                figs[group][error.gt_label][1][cluster][0].append(fig)
 
         return Section(
             id=section_id,
             title=title,
             description=description,
             contents=[
-                # Content(
-                #     type=ContentType.RECALL,
-                #     header="Classwise Missed Errors and recall",
-                #     description="Number of Missed Errors per class | number of total objects per class",
-                #     content=[self.classwise_summary, "MissedError"],
-                # ),
-                # Content(
-                #     type=ContentType.AR_SIZE,
-                #     header="Aspect ratio and size variance",
-                #     description="Variance of aspect ratios across Missed Errors",
-                #     content=[missed_aspect_var, missed_size_var],
-                # ),
                 Content(
                     type=ContentType.PLOT,
                     header="Ranking",
                     description="""
                     The following plot shows the size (area) distribution of missed errors for each class. The presence of outliers in this plot indicates the misses may be caused by extreme object sizes.
                     """,
-                    content=dict(plot=fig),
+                    content=dict(plot=box),
                 ),
-                Content(
-                    type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description=f"""
-                    List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={ self.overall_summary['conf_threshold'] }</span> that had IoU above <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span> (otherwise it would be considered a Localization Error).
-                    """,
-                    content=classwise_dict,
-                ),
+                *[
+                    Content(
+                        type=ContentType.IMAGES,
+                        header=sections[key][0],
+                        description=sections[key][1],
+                        content=fig,
+                    )
+                    for key, fig in figs.items()
+                    if len(fig) > 0
+                ],
             ],
         )
+
+    @logger()
+    def missed_groups(
+        self,
+        ids: List[int] = None,
+        *,
+        min_size: int = 32,
+        var_threshold: float = 100,
+    ):
+        KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
+
+        errorlist_dicts = (
+            self.errorlist_dicts
+            if ids is None
+            else [self.errorlist_dicts[i] for i in ids if i < len(self.errorlist_dicts)]
+        )
+        errorlist: List[Dict[str, List[MissedError]]] = [
+            d["MissedError"] for d in errorlist_dicts
+        ]
+        groups = [
+            {
+                "crowded": [],
+                "low_feat": [],
+                "occluded": [],
+                "truncated": [],
+                "bad_label": [],  # subjective
+                "unseen": [],
+            }
+            for _ in range(len(errorlist))
+        ]
+        for i, model_errors in enumerate(errorlist):
+            for image_path, errors in model_errors.items():
+                image_tensor = read_image(image_path)
+                for error in errors:
+                    count = 0
+                    if error.crowd_ids().shape[0] > 0:
+                        groups[i]["crowded"].append(error)
+                        # TODO: plot crowd
+                        count += 1
+                    bbox = error.gt_bbox.long()
+                    image_crop: torch.Tensor = crop(
+                        image_tensor, bbox[1], bbox[0], bbox[3], bbox[2]
+                    )
+                    image_crop = Grayscale()(image_crop).unsqueeze(0).float()
+                    if (
+                        torch.min(bbox[2:] - bbox[:2]) < min_size
+                        or conv2d(image_crop, KERNEL).var() < var_threshold
+                    ):
+                        groups[i]["low_feat"].append(error)
+                        count += 1
+
+                    if (
+                        bbox.min() <= 0
+                        or bbox[2] >= image_tensor.shape[2]
+                        or bbox[3] >= image_tensor.shape[1]
+                    ):
+                        groups[i]["truncated"].append(error)
+                        count += 1
+
+                    if count == 0:
+                        groups[i]["unseen"].append(error)
+
+        return groups
 
     @logger()
     def true_positives(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
@@ -1160,6 +1257,96 @@ class Inspector:
     # endregion
 
     @logger()
+    def confusions(self, **kwargs: dict) -> Tuple[Dict[int, List[Dict]], bytes]:
+        """Generate a section visualizing the classification errors in the dataset.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Additional keyword arguments to pass to `error_classwise_dict`
+
+        Returns
+        -------
+        Section
+            The section containing the visualizations
+        """
+
+        section_id = "Confusions"
+        title = "Confusions"
+        description = """
+        Confusions are the errors where the predicted class is different from the ground truth class. The following plot shows the number of confusions per class.
+        """
+
+        if self.overall_summary.get(section_id, -1) == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
+
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
+
+        def add_metadata_func(x: dict, error: ClassificationError) -> dict:
+            x.update(
+                {
+                    "caption": " | ".join(
+                        [
+                            x["image_name"],
+                            f"Pred: Class {x['pred_class']}",
+                            f"Conf { x['confidence'] }",
+                            f"Cluster { x['cluster'] }",
+                        ]
+                    ),
+                }
+            )
+
+            return x
+
+        kwargs.update(
+            dict(
+                error_type=ClassificationError,
+                color=ErrorColor.CLS,
+                axis=1,
+                label_attr="gt_label",
+                get_label_func=get_label_func,
+                add_metadata_func=add_metadata_func,
+            )
+        )
+
+        classwise_dict = self.error_classwise_dict(**kwargs)
+        fig = self.error_classwise_ranking(ClassificationError)
+
+        contents = [
+            Content(
+                type=ContentType.PLOT,
+                header="Ranking",
+                description=(
+                    "The following plot shows the distribution of classification"
+                    " errors."
+                ),
+                content=dict(plot=fig),
+            ),
+            Content(
+                type=ContentType.IMAGES,
+                header="Visualizations",
+                description="The following is a montage of the classification.",
+                content=classwise_dict,
+            ),
+        ]
+
+        return Section(
+            id="ClassificationError",
+            title="Classification Errors",
+            description="""
+                    List of all the false positive detections with <span class="code">iou > fg_iou_threshold</span> but with predicted classes not equal to the class of the corresponding ground truth.
+                    """,
+            contents=contents,
+        )
+
+    @logger()
     def inspect(self) -> Tuple[Dict[str, Any], Dict[str, str]]:
         """Generate figures and plots for the errors.
 
@@ -1171,7 +1358,7 @@ class Inspector:
 
         results = {
             "overview": self.summary([0]),
-            "distractions": self.background_error(),
+            "distractions": self.background_error(),  # TODO: order by cluster size
             "confusions": self.classification_error(),
             "misses": self.missed_error(),
             "duplicates": self.duplicate_error(),
