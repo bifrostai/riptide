@@ -151,24 +151,29 @@ class Inspector:
         return encode_base64(fig)
 
     @logger()
-    def summary(self, ids: List[int] = None) -> Section:
+    def summary(self, ids: List[int] = None, summaries: List[dict] = None) -> Section:
         """Generate a summary of the evaluation results for each model."""
         evaluators = (
             self.evaluators
             if ids is None
-            else [self.evaluators[min(i, len(self.evaluators) - 1)] for i in ids]
+            else [self.evaluators[i] for i in ids if 0 <= i < len(self.evaluators)]
         )
+        summaries = summaries or [{} for _ in evaluators]
+        assert len(evaluators) == len(
+            summaries
+        ), "Number of models and summaries differ."
 
         content = [
             {
                 "No. of Images": self.num_images,
+                "No. of Objects": len(self.gt_data),
                 "Conf. Threshold": self.conf_threshold,
                 "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
             },
             [None] * len(evaluators),
         ]
         for i, evaluator in enumerate(evaluators):
-            summary = evaluator.summarize()
+            summary = summaries[i] or evaluator.summarize()
 
             counts = {
                 "TP": summary.get("true_positives", 0),
