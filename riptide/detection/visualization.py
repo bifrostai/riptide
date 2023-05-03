@@ -1257,36 +1257,6 @@ class Inspector:
     # endregion
 
     @logger()
-    def inspect(self) -> Tuple[Dict[str, Any], Dict[str, str]]:
-        """Generate figures and plots for the errors.
-
-        Returns
-        -------
-        Dict
-            A dictionary containing the generated figures and plots.
-        """
-
-        results = {
-            "overview": self.summary([0]),
-            "distractions": self.background_error(),  # TODO: order by cluster size
-            "confusions": self.classification_error(),
-            "misses": self.missed_error(),
-            "duplicates": self.duplicate_error(),
-            "true_positives": self.true_positives(),
-        }
-
-        section_names = {
-            "Overview": "Overview",
-            "Distractions": "Distractions",
-            "Confusions": "Confusions",
-            "Misses": "Misses",
-            "Duplicates": "Duplicates",
-            "TruePositive": "True Positives",
-        }
-
-        return results, section_names
-
-    @logger()
     def inspect(self) -> Dict[str, Any]:
         """Generate figures and plots for the errors.
 
