@@ -1,11 +1,15 @@
+import logging
 import math
 from typing import Any, Callable, Dict, Iterable, List, Set, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch.nn.functional import conv2d
 from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
+from torchvision.transforms import Grayscale
+from torchvision.transforms.functional import crop
 
 from riptide.detection.characterization import (
     compute_aspect_variance,
@@ -58,6 +62,7 @@ def empty_section(section_id: str, title: str, description: str = None):
 
 
 class Inspector:
+    @logger("Initializing Inspector", "Initialized Inspector")
     def __init__(
         self,
         evaluators: Union[ObjectDetectionEvaluator, List[ObjectDetectionEvaluator]],
@@ -101,54 +106,33 @@ class Inspector:
             }
             for evaluator in self.evaluators
         }
-
-        pred_crops: List[torch.Tensor] = []
-        pred_errors: List[List[Error]] = []
-        gt_crops: List[torch.Tensor] = []
-        gt_errors: List[List[Error]] = []
+        bkg_crops: List[torch.Tensor] = []
+        bkg_errors: List[List[Error]] = []
 
         for evaluator in evaluators:
-            model_crops, model_errors = evaluator.crop_objects()
-            pred_crops.extend(model_crops)
-            pred_errors.append(model_errors)
-            model_crops, model_errors = evaluator.crop_objects(axis=0)
-            gt_crops.extend(model_crops)
-            gt_errors.append(model_errors)
+            model_crops, model_errors = evaluator.crop_objects(by_type=BackgroundError)
+            bkg_crops.extend(model_crops)
+            bkg_errors.append(model_errors)
 
-        self.pred_projector = CropProjector(
-            name=f"Predictions",
-            images=pred_crops,
-            encoder_mode="preconv",
-            normalize_embeddings=True,
-            labels=[
-                (i, error.code if error is not None else "NON")
-                for i, model_errors in enumerate(pred_errors)
-                for error in model_errors
-            ],
-            device=torch.device("cpu"),
-        )
-        self.gt_projector = CropProjector(
-            name=f"Ground truths",
-            images=gt_crops,
-            encoder_mode="preconv",
-            normalize_embeddings=True,
-            labels=[
-                (i, error.code if error is not None else "NON")
-                for i, model_errors in enumerate(gt_errors)
-                for error in model_errors
-            ],
-            device=torch.device("cpu"),
-        )
+        bkg_labels = [
+            (i, error.pred_label)
+            for i, model_errors in enumerate(bkg_errors)
+            for error in model_errors
+        ]
 
         self.gt_data = evaluators[0].get_gt_data()
-        self.actual_projector = CropProjector(
-            name=f"Ground truths",
-            images=self.gt_data.crops,
+        actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
+
+        self.projector = CropProjector(
+            name=f"Crops",
+            images=self.gt_data.crops + bkg_crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=self.gt_data.gt_ids.tolist(),
+            labels=actual_labels + bkg_labels,
             device=torch.device("cpu"),
         )
+
+        self.clusters = self.projector.cluster()
 
         self.overview()
 
@@ -167,17 +151,23 @@ class Inspector:
         return encode_base64(fig)
 
     @logger()
-    def summary(self) -> Section:
+    def summary(self, ids: List[int] = None) -> Section:
         """Generate a summary of the evaluation results for each model."""
+        evaluators = (
+            self.evaluators
+            if ids is None
+            else [self.evaluators[min(i, len(self.evaluators) - 1)] for i in ids]
+        )
+
         content = [
             {
                 "No. of Images": self.num_images,
                 "Conf. Threshold": self.conf_threshold,
                 "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
             },
-            [None] * len(self.evaluators),
+            [None] * len(evaluators),
         ]
-        for i, evaluator in enumerate(self.evaluators):
+        for i, evaluator in enumerate(evaluators):
             summary = evaluator.summarize()
 
             counts = {
@@ -339,7 +329,6 @@ class Inspector:
         preview_size: int = 192,
         bbox_attr: str = None,
         label_attr: str = None,
-        projector_attr: str = None,
         get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
         get_label_func: Callable[[int], str] = None,
         add_metadata_func: Callable[[dict, Error], dict] = None,
@@ -369,9 +358,6 @@ class Inspector:
 
         label_attr : str, default=None
             Attribute name for the label. If None, attribute is determined by `axis`
-
-        projector_attr : str, default=None
-            Attribute name for the projector. If None, attribute is determined by `axis`
 
         get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], default=None
             Function to get the bounding box from the error, by default a function that returns the bounding box specified by `bbox_attr`
@@ -404,26 +390,26 @@ class Inspector:
 
         color = [c.colorstr if isinstance(c, ErrorColor) else c for c in color]
 
-        if axis == 0:
-            bbox_attr = bbox_attr or "gt_bbox"
-            label_attr = label_attr or "gt_label"
-            projector_attr = projector_attr or "gt_projector"
-        else:
-            bbox_attr = bbox_attr or "pred_bbox"
-            label_attr = label_attr or "pred_label"
-            projector_attr = projector_attr or "pred_projector"
+        attr_prefix = "gt" if axis == 0 else "pred"
+        bbox_attr = bbox_attr or f"{attr_prefix}_bbox"
+        label_attr = label_attr or f"{attr_prefix}_label"
 
         get_bbox_func = get_bbox_func or get_bbox_by_attr
         add_metadata_func = add_metadata_func or add_metadata
         get_label_func = get_label_func or (lambda label: f"Predicted: Class {label}")
 
         if clusters is None:
-            projector: CropProjector = getattr(self, projector_attr)
+            projector = self.projector
 
-            code = "TP" if error_type is NonError else error_type.code
+            # code = "TP" if error_type is NonError else error_type.code
 
-            mask = [label == (evaluator_id, code) for label in projector.labels]
+            mask = (
+                [label[0] == -1 for label in projector.labels]
+                if error_type is not BackgroundError
+                else [label[0] != -1 for label in projector.labels]
+            )
 
+            # clusters = self.clusters[mask]
             clusters = projector.cluster(mask=mask)
 
         else:
@@ -433,9 +419,19 @@ class Inspector:
 
         # endregion
 
+        if error_type is BackgroundError:
+
+            def get_cluster(idx, bkg_idx):
+                return clusters[bkg_idx].item()
+
+        else:
+
+            def get_cluster(idx, bkg_idx):
+                return clusters[idx].item()
+
         classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
         label_set = set()
-        idx = 0
+        bkg_idx = 0
         for image_path, image_errors in errors.items():
             image_tensor = read_image(image_path)
             image_name = image_path.split("/")[-1]
@@ -449,7 +445,7 @@ class Inspector:
                         dict(),
                     )
 
-                cluster = clusters[idx].item()
+                cluster = get_cluster(error.idx, bkg_idx)
                 if cluster not in classwise_dict[label][1]:
                     classwise_dict[label][1][cluster] = [[]]
 
@@ -465,13 +461,14 @@ class Inspector:
                     add_metadata_func=add_metadata_func,
                 )
 
-                crop_key = (evaluator_id, label, error.gt_idx, error.pred_idx, 1)
-                # assert crop_key not in self.crops, "Duplicate crop"
+                crop_key = (evaluator_id, error)
+                if crop_key in self.crops:
+                    logging.warn(f"Duplicate crop: {crop_key}")
 
                 self.crops[crop_key] = fig
 
                 classwise_dict[label][1][cluster][0].append(fig)
-                idx += 1
+                bkg_idx += 1
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
@@ -598,6 +595,8 @@ class Inspector:
 
         if data is None:
             data = {}
+        data["grouped"] = data.get("grouped", True)
+        data["compact"] = data.get("compact", True)
 
         kwargs.update(
             dict(
@@ -1036,52 +1035,150 @@ class Inspector:
                 axis=0,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
+                evaluator_id=1,
             )
         )
 
         classwise_dict = self.error_classwise_dict(**kwargs)
+        box = self.boxplot(classwise_dict)
 
-        fig = self.boxplot(classwise_dict)
+        sections = {
+            "crowded": (
+                "Crowded",
+                "List of all the missed detections that overlap with other objects.",
+            ),
+            "low_feat": (
+                "Not Enough Visual Features",
+                "List of all the missed detections that are blurry or too small.",
+            ),
+            "occluded": (
+                "Occluded",
+                "List of all the missed detections that are occluded.",
+            ),
+            "truncated": (
+                "Truncated",
+                "List of all the missed detections that occur at the edge of the"
+                " image.",
+            ),
+            "bad_label": (
+                "Bad Labels",
+                "List of all the missed detections that have bad labels.",
+            ),
+            "unseen": ("Unseen", "List of all other missed detections."),
+        }
 
-        # evaluator = self.evaluators[0]
-        # missed_size_var = compute_size_variance(evaluator)
-        # missed_aspect_var = compute_aspect_variance(evaluator)
+        groups: Dict[str, List[Error]] = self.missed_groups()[kwargs["evaluator_id"]]
+
+        figs: Dict[str, Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]] = {
+            k: {} for k in groups
+        }
+
+        for group, errors in groups.items():
+            for error in errors:
+                fig: dict = self.crops.get((kwargs["evaluator_id"], error))
+                if fig is None:
+                    logging.warn(f"Could not find crop for {error}")
+                    continue
+                if error.gt_label not in figs[group]:
+                    figs[group][error.gt_label] = (
+                        f"Missed: Class {error.gt_label}",
+                        {},
+                    )
+
+                cluster = fig.get("cluster")
+                if cluster not in figs[group][error.gt_label][1]:
+                    figs[group][error.gt_label][1][cluster] = [[]]
+
+                figs[group][error.gt_label][1][cluster][0].append(fig)
 
         return Section(
             id=section_id,
             title=title,
             description=description,
             contents=[
-                # Content(
-                #     type=ContentType.RECALL,
-                #     header="Classwise Missed Errors and recall",
-                #     description="Number of Missed Errors per class | number of total objects per class",
-                #     content=[self.classwise_summary, "MissedError"],
-                # ),
-                # Content(
-                #     type=ContentType.AR_SIZE,
-                #     header="Aspect ratio and size variance",
-                #     description="Variance of aspect ratios across Missed Errors",
-                #     content=[missed_aspect_var, missed_size_var],
-                # ),
                 Content(
                     type=ContentType.PLOT,
                     header="Ranking",
                     description="""
                     The following plot shows the size (area) distribution of missed errors for each class. The presence of outliers in this plot indicates the misses may be caused by extreme object sizes.
                     """,
-                    content=dict(plot=fig),
+                    content=dict(plot=box),
                 ),
-                Content(
-                    type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description=f"""
-                    List of all the false negative detections. No prediction was made above <span class="code">conf_threshold={ self.overall_summary['conf_threshold'] }</span> that had IoU above <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span> (otherwise it would be considered a Localization Error).
-                    """,
-                    content=classwise_dict,
-                ),
+                *[
+                    Content(
+                        type=ContentType.IMAGES,
+                        header=sections[key][0],
+                        description=sections[key][1],
+                        content=fig,
+                    )
+                    for key, fig in figs.items()
+                    if len(fig) > 0
+                ],
             ],
         )
+
+    @logger()
+    def missed_groups(
+        self,
+        ids: List[int] = None,
+        *,
+        min_size: int = 32,
+        var_threshold: float = 100,
+    ):
+        KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
+
+        errorlist_dicts = (
+            self.errorlist_dicts
+            if ids is None
+            else [self.errorlist_dicts[i] for i in ids if i < len(self.errorlist_dicts)]
+        )
+        errorlist: List[Dict[str, List[MissedError]]] = [
+            d["MissedError"] for d in errorlist_dicts
+        ]
+        groups = [
+            {
+                "crowded": [],
+                "low_feat": [],
+                "occluded": [],
+                "truncated": [],
+                "bad_label": [],  # subjective
+                "unseen": [],
+            }
+            for _ in range(len(errorlist))
+        ]
+        for i, model_errors in enumerate(errorlist):
+            for image_path, errors in model_errors.items():
+                image_tensor = read_image(image_path)
+                for error in errors:
+                    count = 0
+                    if error.crowd_ids().shape[0] > 0:
+                        groups[i]["crowded"].append(error)
+                        # TODO: plot crowd
+                        count += 1
+                    bbox = error.gt_bbox.long()
+                    image_crop: torch.Tensor = crop(
+                        image_tensor, bbox[1], bbox[0], bbox[3], bbox[2]
+                    )
+                    image_crop = Grayscale()(image_crop).unsqueeze(0).float()
+                    if (
+                        torch.min(bbox[2:] - bbox[:2]) < min_size
+                        or conv2d(image_crop, KERNEL).var() < var_threshold
+                    ):
+                        groups[i]["low_feat"].append(error)
+                        count += 1
+
+                    if (
+                        bbox.min() <= min_size // 2
+                        or bbox[2] >= image_tensor.shape[2] - min_size // 2
+                        or bbox[3] >= image_tensor.shape[1] - min_size // 2
+                    ):
+                        groups[i]["truncated"].append(error)
+                        count += 1
+
+                    if count == 0:
+                        groups[i]["unseen"].append(error)
+
+        return groups
 
     @logger()
     def true_positives(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
@@ -1171,15 +1268,14 @@ class Inspector:
 
         results = dict()
 
-        results["background_error_figs"] = self.background_error()
-        results["classification_error_figs"] = self.classification_error()
-        results["localization_error_figs"] = self.localization_error()
-        results[
-            "classification_and_localization_error_figs"
-        ] = self.classification_and_localization_error()
-        results["duplicate_error_figs"] = self.duplicate_error()
-        results["missed_error_figs"] = self.missed_error()
-        results["true_positive_figs"] = self.true_positives()
+        results["overview"] = self.summary([0])
+        results["BKG"] = self.background_error()
+        results["CLS"] = self.classification_error()
+        results["LOC"] = self.localization_error()
+        results["CLL"] = self.classification_and_localization_error()
+        results["DUP"] = self.duplicate_error()
+        results["MIS"] = self.missed_error()
+        results["TP"] = self.true_positives()
 
         return results
 
@@ -1193,9 +1289,13 @@ class Inspector:
             The section containing the visualizations
         """
 
-        matched_clusters = self.pred_projector.match_clusters(
-            [(model_id, "BKG") for model_id in range(len(self.evaluators))]
-        )
+        mask = [label[0] != -1 for label in self.projector.labels]
+
+        clusters = self.projector.cluster(mask=mask)
+        submasks = [
+            [label[0] == idx for label in self.projector.labels if label[0] != -1]
+            for idx in range(len(self.evaluators))
+        ]
 
         figs = [
             self.error_classwise_dict(
@@ -1203,7 +1303,7 @@ class Inspector:
                 color=ErrorColor.BKG,
                 axis=1,
                 evaluator_id=idx,
-                clusters=matched_clusters[idx],
+                clusters=clusters[submasks[idx]],
             )
             for idx in range(len(self.evaluators))
         ]
@@ -1278,16 +1378,15 @@ class Inspector:
         if error_type is BackgroundError:
             return self.compare_background_errors()
 
-        gt_clusters = self.actual_projector.cluster()
+        mask = [label[0] == -1 for label in self.projector.labels]
+        gt_clusters = self.projector.cluster(mask=mask)
 
         evaluators = [self.evaluators[idx] for idx in ids]
 
         # gt_errors keys: class_idx -> gt_id : (image_path, [errors for each model])
         gt_errors: Dict[int, Dict[int, Tuple[str, List[List[Error]]]]] = {}
-        gt_data_list = [None for _ in evaluators]  # NOTE: not currently used
         for i, evaluator in enumerate(evaluators):
             gt_data = evaluator.get_gt_data()
-            gt_data_list[i] = gt_data
             for (gt_id, errors), gt_label, image_path in zip(
                 gt_data.gt_errors.items(), gt_data.gt_labels, gt_data.images
             ):
@@ -1301,10 +1400,12 @@ class Inspector:
                     )
                 gt_errors[gt_label][gt_id][1][i] = errors
 
-        gt_data = GTData.combine(*gt_data_list)
         gt_ids = gt_data.gt_ids.tolist()
 
+        logging.info("Collated errors")
+
         ## generate crops
+        # TODO: Slowest part of the pipeline. Can we parallelize this?
         # figs keys: gt_id : list of images for each model
         figs: Dict[int, List[list]] = {}
         for errors in gt_errors.values():
@@ -1330,6 +1431,17 @@ class Inspector:
                                 add_metadata_func=crop_options["add_metadata_func"],
                             )
                         )
+
+                    # TODO: this sorting is repeated in Evaluation().get_pred_status(). Use that instead
+                    figs[gt_id][i] = [
+                        sorted(
+                            figs[gt_id][i],
+                            key=lambda x: (x["iou"] or 0, x["confidence"]),
+                            reverse=True,
+                        )[0]
+                    ]
+
+        logging.info("Generated crops")
 
         ## Prepare sections
         """
@@ -1385,6 +1497,8 @@ class Inspector:
                     contents[cluster] = (f"Cluster {cluster}", {})
                 contents[cluster][1][gt_id] = gt_figs
 
+        logging.info("Prepared sections")
+
         return [
             Section(
                 id=section_content["id"],
@@ -1395,7 +1509,7 @@ class Inspector:
                         type=ContentType.IMAGES,
                         header=f"Errors in Class {class_idx}",
                         content=section_content["contents"][class_idx],
-                        data=dict(grouped=True),
+                        data=dict(grouped=True, compact=True),
                     )
                     for class_idx in section_content["contents"]
                 ],

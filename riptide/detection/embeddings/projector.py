@@ -135,7 +135,7 @@ class CropProjector:
     def match_clusters(
         self, labels: list, eps: float = 0.4, min_samples: int = 2
     ) -> List[torch.Tensor]:
-        """COmpute clusters for a subset of labels
+        """Compute clusters for a subset of labels
 
         Parameters
         ----------
@@ -151,6 +151,7 @@ class CropProjector:
         List[torch.Tensor]
             List of cluster labels for each label
         """
+        labels = list(set(labels))
 
         mask = []
         ids = []

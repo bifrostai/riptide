@@ -26,15 +26,14 @@ class GTData(BaseModel):
         try:
             gt_ids = set(gt_data[0].gt_ids.tolist())
             for gt in gt_data[1:]:
-                curr_gt_ids = set(gt.gt_ids.tolist())
-                assert gt_ids == curr_gt_ids
+                assert gt_ids == set(gt.gt_ids.tolist())
         except AssertionError:
             raise ValueError("GTData objects must have the same gt_ids")
 
         crops = []
         gt_ids = []
         gt_labels = []
-        gt_errors = {}
+        gt_errors: Dict[int, list] = {}
         images = []
         for gt in gt_data:
             crops.extend(gt.crops)
@@ -52,3 +51,6 @@ class GTData(BaseModel):
             gt_errors=gt_errors,
             images=images,
         )
+
+    def __len__(self) -> int:
+        return len(self.crops)

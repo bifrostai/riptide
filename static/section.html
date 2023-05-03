@@ -123,16 +123,33 @@
 {%- endmacro -%}
 
 {%- macro render_images(content) -%}
-{%- set grouped = content.data.get("grouped", false) -%}
+{%- set grouped = content.data.get("grouped", true) -%}
+{%- set compact = content.data.get("compact", true) -%}
 {%- set images = content.content -%}
 <div class="class-images">
     {%- if images.get("group_headers") is not none -%}
     <div class="class-images-groups"></div>
     {%- endif -%}
     {%- for _, (class_info, clusters) in images.items() -%}
-        <div class="class-images-container">
-            <div class="class-name">{{ class_info }}</div>
+        <div class="class-images-container {% if compact %}compact{% endif %}">
+            <div class="class-name break">{{ class_info }}</div>
             {%- if grouped -%}
+            {%- if compact -%}
+            {%- for idx, cluster in clusters.items() -%}
+            <div class="class-image-container bg">
+                <span class="class-image-group-header break">{{ idx }}</span>
+                {%- for image_list in cluster -%}
+                <div class="class-image-container row">
+                    {%- for image_dict in image_list -%}
+                    <div class="class-image-wrapper">
+                        {{ render_image(image_dict) }}
+                    </div>
+                    {%- endfor -%}
+                </div>
+                {%- endfor -%}
+            </div>
+            {%- endfor -%}
+            {%- else -%}
             {%- for idx, cluster in clusters.items() -%}
             <div class="class-image-container bg">
                 <span class="class-image-group-header break">{{ idx }}</span>
@@ -147,6 +164,7 @@
                 {%- endfor -%}
             </div>
             {%- endfor -%}
+            {%- endif -%}
             {%- else -%}
             <div class="class-image-container">
                 {%- for cluster in clusters.values() -%}
