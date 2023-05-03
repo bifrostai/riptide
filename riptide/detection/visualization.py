@@ -1168,9 +1168,9 @@ class Inspector:
                         count += 1
 
                     if (
-                        bbox.min() <= 0
-                        or bbox[2] >= image_tensor.shape[2]
-                        or bbox[3] >= image_tensor.shape[1]
+                        bbox.min() <= min_size // 2
+                        or bbox[2] >= image_tensor.shape[2] - min_size // 2
+                        or bbox[3] >= image_tensor.shape[1] - min_size // 2
                     ):
                         groups[i]["truncated"].append(error)
                         count += 1
