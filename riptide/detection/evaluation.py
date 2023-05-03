@@ -305,6 +305,7 @@ class ObjectDetectionEvaluation(Evaluation):
 
                 background_error = BackgroundError(
                     -1,
+                    evaluation=self,
                     pred_idx=pred_idx,
                     pred_label=pred_label,
                     pred_bbox=pred_bbox,
@@ -326,6 +327,7 @@ class ObjectDetectionEvaluation(Evaluation):
             for gt_idx, (gt_label, gt_bbox) in enumerate(zip(gt_labels, gt_bboxes)):
                 missed_error = MissedError(
                     gt_ids[gt_idx],
+                    evaluation=self,
                     gt_idx=gt_idx,
                     gt_label=gt_label,
                     gt_bbox=gt_bbox,
@@ -351,6 +353,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 ):
                     true_positive = NonError(
                         gt_ids[idx_of_best_gt_match],
+                        evaluation=self,
                         pred_idx=pred_idx,
                         gt_idx=idx_of_best_gt_match,
                         pred_label=pred_label,
@@ -386,6 +389,7 @@ class ObjectDetectionEvaluation(Evaluation):
             if self.is_background_error(pred_iou):
                 background_error = BackgroundError(
                     -1,
+                    evaluation=self,
                     pred_idx=pred_idx,
                     pred_label=pred_label,
                     pred_bbox=pred_bbox,
@@ -414,6 +418,7 @@ class ObjectDetectionEvaluation(Evaluation):
             ):
                 localization_error = LocalizationError(
                     idx,
+                    evaluation=self,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
                     pred_label=pred_label,
@@ -447,6 +452,7 @@ class ObjectDetectionEvaluation(Evaluation):
             ):
                 classification_error = ClassificationError(
                     idx,
+                    evaluation=self,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
                     pred_label=pred_label,
@@ -478,6 +484,7 @@ class ObjectDetectionEvaluation(Evaluation):
             ):
                 classification_localization_error = ClassificationAndLocalizationError(
                     idx,
+                    evaluation=self,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
                     pred_label=pred_label,
@@ -521,6 +528,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 best_confidence = self.pred_scores[idx_of_best_pred_match]
                 duplicate_error = DuplicateError(
                     idx,
+                    evaluation=self,
                     pred_idx=pred_idx,
                     best_pred_idx=idx_of_best_pred_match,
                     gt_idx=idx_of_best_gt_match,
@@ -544,6 +552,7 @@ class ObjectDetectionEvaluation(Evaluation):
             # Error canditates that are not actually errors are true positives
             true_positive = NonError(
                 idx,
+                evaluation=self,
                 pred_idx=pred_idx,
                 gt_idx=idx_of_best_gt_match,
                 pred_label=pred_label,
@@ -594,6 +603,7 @@ class ObjectDetectionEvaluation(Evaluation):
             if all(i is None for i in pred_idx_matches):
                 missed_error = MissedError(
                     gt_ids[gt_idx],
+                    evaluation=self,
                     gt_idx=gt_idx,
                     gt_label=gt_labels[gt_idx],
                     gt_bbox=gt_bboxes[gt_idx],

@@ -73,6 +73,7 @@ class Error:
         self,
         idx: int,
         /,
+        evaluation,
         pred_idx: int = None,
         gt_idx: int = None,
         pred_label: int = None,
@@ -80,7 +81,6 @@ class Error:
         pred_bbox: torch.Tensor = None,
         gt_bbox: torch.Tensor = None,
         confidence: float = None,
-        code: str = None,
     ) -> None:
         self.idx = idx.item() if isinstance(idx, torch.Tensor) else idx
         self.pred_idx = (
@@ -100,10 +100,15 @@ class Error:
         self.confidence = (
             confidence.item() if isinstance(confidence, torch.Tensor) else confidence
         )
-        self.code = code or self.code
+
+        self._evaluation = evaluation
 
     def __repr__(self) -> str:
-        attrs = [f"{x}={getattr(self, x)}" for x in dir(self) if not x.startswith("_")]
+        attrs = [
+            f"{x}={getattr(self, x)}"
+            for x in dir(self)
+            if not x.startswith("_") and not callable(getattr(self, x))
+        ]
         attrs = ", ".join(attrs)
         return f"{self.__class__.__name__}({attrs})"
 
@@ -327,12 +332,12 @@ class BackgroundError(Error):
         self,
         idx: int,
         /,
-        pred_idx: int,
-        pred_label: int,
-        pred_bbox: torch.Tensor,
-        confidence: float,
         conf_threshold: float = 0.5,
+        **kwargs,
     ) -> None:
+        assert conf_threshold > 0, "Confidence threshold must be > 0"
+        pred_label = kwargs.get("pred_label", 0)
+        confidence = kwargs.get("confidence", 0)
         if pred_label == 0:
             raise WrongCategoryException(
                 "Background errors must have prediction category > 0 (zero is "
@@ -344,13 +349,7 @@ class BackgroundError(Error):
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
 
-        super().__init__(
-            idx,
-            pred_idx=pred_idx,
-            pred_label=pred_label,
-            pred_bbox=pred_bbox,
-            confidence=confidence,
-        )
+        super().__init__(idx, **kwargs)
         self.conf_threshold = conf_threshold
 
 
@@ -362,16 +361,23 @@ class MissedError(Error):
         self,
         idx: int,
         /,
-        gt_idx: int,
-        gt_label: int,
-        gt_bbox: torch.Tensor,
+        **kwargs,
     ) -> None:
+        gt_label = kwargs.get("gt_label", 0)
         if gt_label == 0:
             raise WrongCategoryException(
                 f"The ground truth category must have value > 0, got {gt_label}"
             )
 
-        super().__init__(idx, gt_idx=gt_idx, gt_label=gt_label, gt_bbox=gt_bbox)
+        super().__init__(idx, **kwargs)
+
+    def crowd_ids(self, threshold=0.4) -> torch.Tensor:
+        """Get the indices of neighbouring ground truths that overlap with the ground truth associated with this error."""
+        crowd_iou = box_iou(
+            self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
+        ).squeeze(1)
+        crowd_iou[self.gt_idx] = 0
+        return torch.nonzero(crowd_iou > threshold).squeeze(1)
 
 
 class NonError(Error):
