@@ -874,12 +874,18 @@ class ObjectDetectionEvaluation(Evaluation):
 
 
 class Evaluator:
-    def __init__(self, evaluations: list[Evaluation], name: str = "Model") -> None:
+    def __init__(
+        self,
+        evaluations: list[Evaluation],
+        name: str = "Model",
+        gt_ids_map: torch.Tensor = None,
+    ) -> None:
         self.created_datetime = datetime.now()
         self.updated_datetime = self.created_datetime
         self.evaluations = evaluations
         self.name = name
         self._errorlist_dict = None
+        self._gt_ids_map = gt_ids_map
 
     @classmethod
     def from_coco(
@@ -982,7 +988,6 @@ class ObjectDetectionEvaluator(Evaluator):
         self.num_errors = sum([len(e.instances) for e in evaluations])
 
         self._crops: List[torch.Tensor] = None
-        self._gt_ids: torch.Tensor = None
         self._gt_errors: Dict[int, List[Error]] = None
 
         self.gt_data: GTData = None
@@ -1240,7 +1245,7 @@ class ObjectDetectionEvaluator(Evaluator):
         images: list = []
         for evaluation in self.evaluations:
             image = read_image(evaluation.image_path)
-            bboxes = evaluation.gt_bboxes.long()
+            bboxes = evaluation.gt_bboxes.long().clone()
             gt_ids.append(evaluation.gt_ids)
             gt_labels.append(evaluation.gt_labels)
             bboxes[:, 2:] = (

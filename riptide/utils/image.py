@@ -94,12 +94,14 @@ def get_padded_bbox_crop(
         Cropped image and translation tensor to apply to bounding boxes
     """
     hull, _ = convex_hull(bbox)
-    x1, y1, x2, y2 = hull
+    x1, y1, x2, y2 = hull.tolist()
     long_edge = torch.argmax(hull[2:] - hull[:2])  # 0 is w, 1 is h
     if long_edge == 0:
         x1 -= PREVIEW_PADDING
         x2 += PREVIEW_PADDING
-        short_edge_padding = torch.div((x2 - x1) - (y2 - y1), 2, rounding_mode="floor")
+        short_edge_padding = torch.div(
+            (x2 - x1) - (y2 - y1), 2, rounding_mode="floor"
+        ).item()
         y1 = max(0, y1 - short_edge_padding)
         y2 = min(image_tensor.size(1), y2 + short_edge_padding)
     else:
@@ -107,14 +109,14 @@ def get_padded_bbox_crop(
         y2 += PREVIEW_PADDING
         short_edge_padding = torch.div(
             ((y2 - y1) - (x2 - x1)), 2, rounding_mode="floor"
-        )
+        ).item()
         x1 = max(0, x1 - short_edge_padding)
         x2 = min(image_tensor.size(2), x2 + short_edge_padding)
 
-    return (
-        crop(image_tensor, y1, x1, y2 - y1, x2 - x1),
-        torch.tensor([x1, y1, x2, y2]) - hull,
-    )
+    cropped = crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
+    translation = torch.tensor([x1, y1, x2, y2]) - hull
+
+    return cropped, translation
 
 
 def get_bbox_stats(bbox: torch.Tensor) -> Tuple[int, int, int]:
