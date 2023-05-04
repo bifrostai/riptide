@@ -132,11 +132,12 @@ class Inspector:
             device=torch.device("cpu"),
         )
 
-        self.clusters = self.projector.cluster()
+        self.clusters = self.projector.subcluster()
 
         self.overview()
 
         self.crops = {}
+        self._generated_crops = False
 
     def _confidence_hist(
         self, confidence_list: List[float], error_name: str = "Error"
@@ -405,17 +406,14 @@ class Inspector:
 
         if clusters is None:
             projector = self.projector
-
-            # code = "TP" if error_type is NonError else error_type.code
-
             mask = (
                 [label[0] == -1 for label in projector.labels]
                 if error_type is not BackgroundError
                 else [label[0] != -1 for label in projector.labels]
             )
 
-            # clusters = self.clusters[mask]
-            clusters = projector.cluster(mask=mask)
+            clusters = self.clusters[mask]
+            # clusters = projector.subcluster(mask=mask)
 
         else:
             assert (
@@ -427,12 +425,12 @@ class Inspector:
         if error_type is BackgroundError:
 
             def get_cluster(idx, bkg_idx):
-                return clusters[bkg_idx].item()
+                return tuple(clusters[bkg_idx].tolist())
 
         else:
 
             def get_cluster(idx, bkg_idx):
-                return clusters[idx].item()
+                return tuple(clusters[idx].tolist())
 
         classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
         label_set = set()
@@ -451,8 +449,8 @@ class Inspector:
                     )
 
                 cluster = get_cluster(error.idx, bkg_idx)
-                if cluster not in classwise_dict[label][1]:
-                    classwise_dict[label][1][cluster] = [[]]
+                if cluster[0] not in classwise_dict[label][1]:
+                    classwise_dict[label][1][cluster[0]] = [[]]
 
                 fig = generate_fig(
                     image_tensor=image_tensor,
@@ -467,12 +465,12 @@ class Inspector:
                 )
 
                 crop_key = (evaluator_id, error)
-                if crop_key in self.crops:
+                if not self._generated_crops and crop_key in self.crops:
                     logging.warn(f"Duplicate crop: {crop_key}")
 
                 self.crops[crop_key] = fig
 
-                classwise_dict[label][1][cluster][0].append(fig)
+                classwise_dict[label][1][cluster[0]][0].append(fig)
                 bkg_idx += 1
 
         for label in label_set:
@@ -1090,7 +1088,8 @@ class Inspector:
                         {},
                     )
 
-                cluster = fig.get("cluster")
+                cluster = fig.get("cluster")[0]
+                fig["caption"] += f" | Sub {fig.get('cluster')[1]}"
                 if cluster not in figs[group][error.gt_label][1]:
                     figs[group][error.gt_label][1][cluster] = [[]]
 
@@ -1281,6 +1280,8 @@ class Inspector:
         results["DUP"] = self.duplicate_error()
         results["MIS"] = self.missed_error()
         results["TP"] = self.true_positives()
+
+        self._generated_crops = True
 
         return results
 
@@ -1540,5 +1541,7 @@ class Inspector:
         results["degradations"], results["improvements"] = self.compare_errors(
             error_type=Error
         )
+
+        self._generated_crops = True
 
         return results

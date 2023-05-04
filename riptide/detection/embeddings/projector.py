@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Any, List
 
 import torch
-from sklearn.cluster import DBSCAN
+from hdbscan import HDBSCAN
 from torchvision.transforms import Compose
 from torchvision.transforms.functional import resize
 from tqdm import tqdm
@@ -47,6 +47,9 @@ class CropProjector:
             1
         )
 
+        self._clusterer = None
+        self._mask = None
+
     def project(self):
         raise NotImplementedError(
             "Exporting to Tensorboard is not currently supported for CropProjector"
@@ -71,7 +74,7 @@ class CropProjector:
         preview = torch.stack(preview, dim=0)
 
         image_sizes = torch.tensor([image.shape[-2:] for image in self.images])
-        hw_ratios = torch.nan_to_num(image_sizes[:, 0] / image_sizes[:, 1])
+        hw_ratios = torch.nan_to_num(image_sizes[:, 0] / image_sizes[:, 1]).pow(2)
         embeddings = torch.cat([embeddings, hw_ratios.unsqueeze(1)], dim=1)
 
         return embeddings, preview, None
@@ -99,13 +102,38 @@ class CropProjector:
 
         return self._embeddings
 
-    def cluster(
+    def get_clusterer(
         self,
-        eps: float = 0.4,
-        min_samples: int = 2,
+        *,
+        eps: float = 0.3,
+        min_cluster_size: int = 2,
         mask: List[bool] = None,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> HDBSCAN:
+        embeddings = self.get_embeddings()
+        if mask is not None:
+            embeddings = embeddings[mask]
+
+        if (
+            self._clusterer is None
+            or self._clusterer.min_cluster_size != min_cluster_size
+            or self._clusterer.cluster_selection_epsilon != eps
+        ):
+            kwargs["prediction_data"] = True
+            self._clusterer = HDBSCAN(
+                min_cluster_size=min_cluster_size,
+                min_samples=1,
+                cluster_selection_epsilon=eps,
+                **kwargs,
+            ).fit(embeddings)
+        elif self._mask != mask:
+            self._clusterer.fit(embeddings)
+
+        self._mask = mask
+
+        return self._clusterer
+
+    def cluster(self, **kwargs) -> torch.Tensor:
         """Cluster embeddings. Provide a mask to perform clustering on a subset of embeddings.
 
         Parameters
@@ -116,21 +144,36 @@ class CropProjector:
             DBSCAN min_samples parameter, by default 2
         mask : List[bool], optional
             Mask to apply to embeddings, by default None
+        **kwargs
+            Additional arguments to pass to HDBSCAN
 
         Returns
         -------
         torch.Tensor
             Cluster labels
         """
-        embeddings = self.get_embeddings()
-        if mask is not None:
-            embeddings = embeddings[mask]
-        if len(embeddings) == 0:
-            return torch.zeros(0, dtype=torch.long)
 
-        return torch.tensor(
-            DBSCAN(eps=eps, min_samples=min_samples).fit(embeddings).labels_
-        )
+        return torch.tensor(self.get_clusterer(**kwargs).labels_)
+
+    def subcluster(self, **kwargs) -> torch.Tensor:
+        """Subdivide clusters into subclusters"""
+        clusterer = self.get_clusterer(**kwargs)
+        embeddings = self.get_embeddings()
+        if self._mask is not None:
+            embeddings = embeddings[self._mask]
+
+        labels = torch.tensor(clusterer.labels_)
+        subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
+
+        for cluster in range(clusterer.labels_.max() + 1):
+            cluster_mask = clusterer.labels_ == cluster
+            cluster_embeddings = embeddings[cluster_mask]
+            subclusterer = HDBSCAN(min_cluster_size=2, min_samples=1).fit(
+                cluster_embeddings
+            )
+            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_)
+
+        return torch.stack([labels, subclusters], dim=1)
 
     def match_clusters(
         self, labels: list, eps: float = 0.4, min_samples: int = 2
