@@ -151,18 +151,55 @@ class Inspector:
         ax.set_ylabel("Number of Occurences")
         return encode_base64(fig)
 
-    @logger()
-    def summary(self, ids: List[int] = None, summaries: List[dict] = None) -> Section:
-        """Generate a summary of the evaluation results for each model."""
-        evaluators = (
-            self.evaluators
+    def recalculate_summaries(self, ids: List[int] = None):
+        summaries = (
+            self.summaries
             if ids is None
-            else [self.evaluators[i] for i in ids if 0 <= i < len(self.evaluators)]
+            else [self.summaries[i] for i in ids if 0 <= i < len(self.summaries)]
         )
-        summaries = summaries or [{} for _ in evaluators]
-        assert len(evaluators) == len(
-            summaries
-        ), "Number of models and summaries differ."
+
+        for summary in summaries:
+            tp = summary.get("true_positives", 0)
+            fn = summary.get("false_negatives", 0)
+            fp = sum(
+                [
+                    summary.get(error_name, 0)
+                    for error_name in [
+                        "ClassificationError",
+                        "LocalizationError",
+                        "ClassificationLocalizationError",
+                        "DuplicateError",
+                        "BackgroundError",
+                    ]
+                ]
+            )
+
+            precision = tp / (tp + fp + 1e-7)
+            recall = tp / (tp + fn + 1e-7)
+            f1 = 2 * precision * recall / (precision + recall + 1e-7)
+
+            summary.update(
+                {
+                    "false_positives": fp,
+                    "precision": precision,
+                    "recall": recall,
+                    "f1": f1,
+                }
+            )
+
+    @logger()
+    def summary(self, ids: List[int] = None) -> Section:
+        """Generate a summary of the evaluation results for each model."""
+
+        evaluators_and_summaries = (
+            list(zip(self.evaluators, self.summaries))
+            if ids is None
+            else [
+                (self.evaluators[i], self.summaries[i])
+                for i in ids
+                if 0 <= i < len(self.evaluators)
+            ]
+        )
 
         content = [
             {
@@ -171,11 +208,9 @@ class Inspector:
                 "Conf. Threshold": self.conf_threshold,
                 "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
             },
-            [None] * len(evaluators),
+            [None] * len(evaluators_and_summaries),
         ]
-        for i, evaluator in enumerate(evaluators):
-            summary = summaries[i] or evaluator.summarize()
-
+        for i, (evaluator, summary) in enumerate(evaluators_and_summaries):
             counts = {
                 "TP": summary.get("true_positives", 0),
                 "FP": summary.get("false_positives", 0),
@@ -436,6 +471,7 @@ class Inspector:
         classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
         label_set = set()
         bkg_idx = 0
+        count = 0
         for image_path, image_errors in errors.items():
             image_tensor = read_image(image_path)
             image_name = image_path.split("/")[-1]
@@ -477,6 +513,10 @@ class Inspector:
                 else:
                     subclusters[cluster] = fig
                     classwise_dict[label][1][cluster[0]][0].append(fig)
+                    count += 1
+
+        if error_type not in [NonError, MissedError]:
+            self.summaries[evaluator_id][error_type_name] = count
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
@@ -1286,7 +1326,6 @@ class Inspector:
 
         results = dict()
 
-        results["overview"] = self.summary([0])
         results["BKG"] = self.background_error()
         results["CLS"] = self.classification_error()
         results["LOC"] = self.localization_error()
@@ -1294,6 +1333,9 @@ class Inspector:
         results["DUP"] = self.duplicate_error()
         results["MIS"] = self.missed_error()
         results["TP"] = self.true_positives()
+
+        self.recalculate_summaries([0])
+        results["overview"] = self.summary([0])
 
         self._generated_crops = True
 
