@@ -413,7 +413,6 @@ class Inspector:
             )
 
             clusters = self.clusters[mask]
-            # clusters = projector.subcluster(mask=mask)
 
         else:
             assert (
@@ -421,6 +420,8 @@ class Inspector:
             ), "Number of clusters does not match number of errors"
 
         # endregion
+
+        subclusters = {}
 
         if error_type is BackgroundError:
 
@@ -469,9 +470,13 @@ class Inspector:
                     logging.warn(f"Duplicate crop: {crop_key}")
 
                 self.crops[crop_key] = fig
-
-                classwise_dict[label][1][cluster[0]][0].append(fig)
                 bkg_idx += 1
+
+                if -1 not in cluster and cluster in subclusters:
+                    subclusters[cluster]["similar"].append(error)
+                else:
+                    subclusters[cluster] = fig
+                    classwise_dict[label][1][cluster[0]][0].append(fig)
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
@@ -1038,7 +1043,7 @@ class Inspector:
                 axis=0,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
-                evaluator_id=1,
+                evaluator_id=0,
             )
         )
 
@@ -1076,19 +1081,28 @@ class Inspector:
             k: {} for k in groups
         }
 
+        subclusters = set()
+
         for group, errors in groups.items():
             for error in errors:
                 fig: dict = self.crops.get((kwargs["evaluator_id"], error))
                 if fig is None:
                     logging.warn(f"Could not find crop for {error}")
                     continue
+                fig = fig.copy()
                 if error.gt_label not in figs[group]:
                     figs[group][error.gt_label] = (
                         f"Missed: Class {error.gt_label}",
                         {},
                     )
 
-                cluster = fig.get("cluster")[0]
+                cluster = fig.get("cluster")
+                if -1 not in cluster and cluster in subclusters:
+                    continue
+                subclusters.add(cluster)
+
+                cluster = cluster[0]
+
                 fig["caption"] += f" | Sub {fig.get('cluster')[1]}"
                 if cluster not in figs[group][error.gt_label][1]:
                     figs[group][error.gt_label][1][cluster] = [[]]

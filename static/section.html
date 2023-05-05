@@ -170,9 +170,7 @@
                 {%- for cluster in clusters.values() -%}
                 {%- for image_list in cluster -%}
                 {%- for image_dict in image_list -%}
-                <div class="class-image-wrapper">
                     {{ render_image(image_dict) }}
-                </div>
                 {%- endfor -%}
                 {%- endfor -%}
                 {%- endfor -%}
@@ -184,8 +182,13 @@
 {%- endmacro -%}
 
 {%- macro render_image(image) -%}
+<div class="class-image-wrapper
+{%- if image.get('similar') | length > 0 %} stack{% endif %}
+{%- if image.get('similar') | length > 1 %} multi{% endif %}">
     <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">
     {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"]}}</span>{% endif %}
+    {% if image.get("similar") | length > 1 %}<span class="badge">{{ image["similar"] | length + 1}}</span>{% endif %}
+</div>
 {%- endmacro -%}
 
 {%- macro render_plot(content) -%}

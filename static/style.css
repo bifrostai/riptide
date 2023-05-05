@@ -181,6 +181,7 @@ body {
 }
 
 .class-image-wrapper {
+    position: relative;
     display: flex;
     flex-direction: column;
 }
@@ -188,19 +189,22 @@ body {
 .class-image {
     height: 10vh;
     width: 10vh;
-    border-radius: 0.6em;
+    border-radius: 1.5vh;
     padding: 0.4vh;
+    z-index: 2;
 }
 
 .class-image:hover{
     border-radius: 0;
     transform: scale(2);
     transition: 0.1s;
+    z-index: 100;
 }
 
 .class-image:hover + .data-tooltip {
     transform: scale(1.7);
     transition: 0.1s;
+    z-index: 100;
 }
 
 .data-tooltip {
@@ -209,6 +213,51 @@ body {
     width: 10vh;
     text-align: center;
     word-wrap: break-word;
+}
+
+.stack::before {
+    content: "";
+    position: absolute;
+    background-color: #064d4d;
+    width: 10vh;
+    height: 10vh;
+    border-radius: 0.5vh;
+    z-index: 1;
+    top: 0.1vh;
+    left: 0.7vh;
+
+}
+.stack.multi::after {
+    content: "";
+    position: absolute;
+    background-color: #073838;
+    width: 10vh;
+    height: 10vh;
+    border-radius: 0.5vh;
+    z-index: 0;
+    top: 0;
+    left: 1vh;
+}
+
+.badge {
+    --badge-color: #2c2c2c;
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 2.5vh;
+    min-height: 2.5vh;
+    border-radius: 1.25vh;
+    background-color: var(--badge-color);
+    outline: solid 0.3em var(--badge-color);
+    outline-offset: -0.05em;
+    font-size: 1.5vh;
+    text-align: center;
+    line-height: 2.5vh;
+    z-index: 3;
+}
+
+.class-image:hover ~ .badge {
+    visibility: hidden;
 }
 
 .plot-image {

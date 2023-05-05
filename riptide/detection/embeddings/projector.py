@@ -119,11 +119,11 @@ class CropProjector:
             or self._clusterer.min_cluster_size != min_cluster_size
             or self._clusterer.cluster_selection_epsilon != eps
         ):
+            kwargs["cluster_selection_epsilon"] = eps
             kwargs["prediction_data"] = True
             self._clusterer = HDBSCAN(
                 min_cluster_size=min_cluster_size,
                 min_samples=1,
-                cluster_selection_epsilon=eps,
                 **kwargs,
             ).fit(embeddings)
         elif self._mask != mask:
@@ -155,7 +155,7 @@ class CropProjector:
 
         return torch.tensor(self.get_clusterer(**kwargs).labels_)
 
-    def subcluster(self, **kwargs) -> torch.Tensor:
+    def subcluster(self, *, sub_lambda: float = 0.8, **kwargs) -> torch.Tensor:
         """Subdivide clusters into subclusters"""
         clusterer = self.get_clusterer(**kwargs)
         embeddings = self.get_embeddings()
@@ -164,13 +164,14 @@ class CropProjector:
 
         labels = torch.tensor(clusterer.labels_)
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
+        sub_eps = sub_lambda * clusterer.cluster_selection_epsilon
 
         for cluster in range(clusterer.labels_.max() + 1):
             cluster_mask = clusterer.labels_ == cluster
             cluster_embeddings = embeddings[cluster_mask]
-            subclusterer = HDBSCAN(min_cluster_size=2, min_samples=1).fit(
-                cluster_embeddings
-            )
+            subclusterer = HDBSCAN(
+                min_cluster_size=2, min_samples=1, cluster_selection_epsilon=sub_eps
+            ).fit(cluster_embeddings)
             subclusters[cluster_mask] = torch.tensor(subclusterer.labels_)
 
         return torch.stack([labels, subclusters], dim=1)
