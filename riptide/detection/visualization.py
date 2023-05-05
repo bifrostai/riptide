@@ -132,11 +132,12 @@ class Inspector:
             device=torch.device("cpu"),
         )
 
-        self.clusters = self.projector.cluster()
+        self.clusters = self.projector.subcluster()
 
         self.overview()
 
         self.crops = {}
+        self._generated_crops = False
 
     def _confidence_hist(
         self, confidence_list: List[float], error_name: str = "Error"
@@ -150,26 +151,66 @@ class Inspector:
         ax.set_ylabel("Number of Occurences")
         return encode_base64(fig)
 
+    def recalculate_summaries(self, ids: List[int] = None):
+        summaries = (
+            self.summaries
+            if ids is None
+            else [self.summaries[i] for i in ids if 0 <= i < len(self.summaries)]
+        )
+
+        for summary in summaries:
+            tp = summary.get("true_positives", 0)
+            fn = summary.get("false_negatives", 0)
+            fp = sum(
+                [
+                    summary.get(error_name, 0)
+                    for error_name in [
+                        "ClassificationError",
+                        "LocalizationError",
+                        "ClassificationLocalizationError",
+                        "DuplicateError",
+                        "BackgroundError",
+                    ]
+                ]
+            )
+
+            precision = tp / (tp + fp + 1e-7)
+            recall = tp / (tp + fn + 1e-7)
+            f1 = 2 * precision * recall / (precision + recall + 1e-7)
+
+            summary.update(
+                {
+                    "false_positives": fp,
+                    "precision": precision,
+                    "recall": recall,
+                    "f1": f1,
+                }
+            )
+
     @logger()
     def summary(self, ids: List[int] = None) -> Section:
         """Generate a summary of the evaluation results for each model."""
-        evaluators = (
-            self.evaluators
+
+        evaluators_and_summaries = (
+            list(zip(self.evaluators, self.summaries))
             if ids is None
-            else [self.evaluators[min(i, len(self.evaluators) - 1)] for i in ids]
+            else [
+                (self.evaluators[i], self.summaries[i])
+                for i in ids
+                if 0 <= i < len(self.evaluators)
+            ]
         )
 
         content = [
             {
                 "No. of Images": self.num_images,
+                "No. of Objects": len(self.gt_data),
                 "Conf. Threshold": self.conf_threshold,
                 "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
             },
-            [None] * len(evaluators),
+            [None] * len(evaluators_and_summaries),
         ]
-        for i, evaluator in enumerate(evaluators):
-            summary = evaluator.summarize()
-
+        for i, (evaluator, summary) in enumerate(evaluators_and_summaries):
             counts = {
                 "TP": summary.get("true_positives", 0),
                 "FP": summary.get("false_positives", 0),
@@ -400,17 +441,13 @@ class Inspector:
 
         if clusters is None:
             projector = self.projector
-
-            # code = "TP" if error_type is NonError else error_type.code
-
             mask = (
                 [label[0] == -1 for label in projector.labels]
                 if error_type is not BackgroundError
                 else [label[0] != -1 for label in projector.labels]
             )
 
-            # clusters = self.clusters[mask]
-            clusters = projector.cluster(mask=mask)
+            clusters = self.clusters[mask]
 
         else:
             assert (
@@ -419,19 +456,22 @@ class Inspector:
 
         # endregion
 
+        subclusters = {}
+
         if error_type is BackgroundError:
 
             def get_cluster(idx, bkg_idx):
-                return clusters[bkg_idx].item()
+                return tuple(clusters[bkg_idx].tolist())
 
         else:
 
             def get_cluster(idx, bkg_idx):
-                return clusters[idx].item()
+                return tuple(clusters[idx].tolist())
 
         classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
         label_set = set()
         bkg_idx = 0
+        count = 0
         for image_path, image_errors in errors.items():
             image_tensor = read_image(image_path)
             image_name = image_path.split("/")[-1]
@@ -446,8 +486,8 @@ class Inspector:
                     )
 
                 cluster = get_cluster(error.idx, bkg_idx)
-                if cluster not in classwise_dict[label][1]:
-                    classwise_dict[label][1][cluster] = [[]]
+                if cluster[0] not in classwise_dict[label][1]:
+                    classwise_dict[label][1][cluster[0]] = [[]]
 
                 fig = generate_fig(
                     image_tensor=image_tensor,
@@ -462,13 +502,21 @@ class Inspector:
                 )
 
                 crop_key = (evaluator_id, error)
-                if crop_key in self.crops:
+                if not self._generated_crops and crop_key in self.crops:
                     logging.warn(f"Duplicate crop: {crop_key}")
 
                 self.crops[crop_key] = fig
-
-                classwise_dict[label][1][cluster][0].append(fig)
                 bkg_idx += 1
+
+                if -1 not in cluster and cluster in subclusters:
+                    subclusters[cluster]["similar"].append(error)
+                else:
+                    subclusters[cluster] = fig
+                    classwise_dict[label][1][cluster[0]][0].append(fig)
+                    count += 1
+
+        if error_type not in [NonError, MissedError]:
+            self.summaries[evaluator_id][error_type_name] = count
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
@@ -1035,7 +1083,7 @@ class Inspector:
                 axis=0,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
-                evaluator_id=1,
+                evaluator_id=0,
             )
         )
 
@@ -1073,12 +1121,15 @@ class Inspector:
             k: {} for k in groups
         }
 
+        subclusters = set()
+
         for group, errors in groups.items():
             for error in errors:
                 fig: dict = self.crops.get((kwargs["evaluator_id"], error))
                 if fig is None:
                     logging.warn(f"Could not find crop for {error}")
                     continue
+                fig = fig.copy()
                 if error.gt_label not in figs[group]:
                     figs[group][error.gt_label] = (
                         f"Missed: Class {error.gt_label}",
@@ -1086,6 +1137,13 @@ class Inspector:
                     )
 
                 cluster = fig.get("cluster")
+                if -1 not in cluster and cluster in subclusters:
+                    continue
+                subclusters.add(cluster)
+
+                cluster = cluster[0]
+
+                fig["caption"] += f" | Sub {fig.get('cluster')[1]}"
                 if cluster not in figs[group][error.gt_label][1]:
                     figs[group][error.gt_label][1][cluster] = [[]]
 
@@ -1268,7 +1326,6 @@ class Inspector:
 
         results = dict()
 
-        results["overview"] = self.summary([0])
         results["BKG"] = self.background_error()
         results["CLS"] = self.classification_error()
         results["LOC"] = self.localization_error()
@@ -1276,6 +1333,11 @@ class Inspector:
         results["DUP"] = self.duplicate_error()
         results["MIS"] = self.missed_error()
         results["TP"] = self.true_positives()
+
+        self.recalculate_summaries([0])
+        results["overview"] = self.summary([0])
+
+        self._generated_crops = True
 
         return results
 
@@ -1535,5 +1597,7 @@ class Inspector:
         results["degradations"], results["improvements"] = self.compare_errors(
             error_type=Error
         )
+
+        self._generated_crops = True
 
         return results

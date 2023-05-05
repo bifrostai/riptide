@@ -38,6 +38,7 @@ def add_metadata(metadata: dict, error: Error) -> dict:
                     f"Conf { metadata['confidence'] }",
                     f"W{ metadata['bbox_width'] }",
                     f"H{ metadata['bbox_height'] }",
+                    f"Cluster { metadata['cluster'] }",
                 ]
             ),
         }
@@ -299,7 +300,7 @@ def generate_fig(
     get_bbox_func: Callable[[Error, str], Any],
     add_metadata_func: Callable[[dict, Error], dict],
     *,
-    cluster: int = 0,
+    cluster: Any = 0,
     preview_size: int = 192,
 ) -> dict:
     bbox: torch.Tensor = getattr(error, bbox_attr)
@@ -341,6 +342,7 @@ def generate_fig(
         "bbox_area": area,
         "iou": iou,
         "cluster": cluster,
+        "similar": [],
     }
 
     return add_metadata_func(data, error)
