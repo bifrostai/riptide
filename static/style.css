@@ -273,10 +273,14 @@ body {
     color: #7b949b;
 }
 
+.tooltip:hover::after {
+    color: #FFFFFF;
+}
+
 .tooltiptext {
     --tooltip-width: 120px;
     --tooltip-opacity: 1;
-    width: calc(var(--tooltip-width));
+    min-width: calc(var(--tooltip-width));
     background-color: rgba(85, 85, 85, var(--tooltip-opacity));
     color: #fff;
     text-align: center;

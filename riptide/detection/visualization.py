@@ -203,10 +203,13 @@ class Inspector:
 
         content = [
             {
-                "No. of Images": self.num_images,
-                "No. of Objects": len(self.gt_data),
-                "Conf. Threshold": self.conf_threshold,
-                "IoU Threshold": f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
+                "No. of Images": (self.num_images, None),
+                "No. of Objects": (len(self.gt_data), None),
+                "Conf. Threshold": (self.conf_threshold, None),
+                "IoU Threshold": (
+                    f"{self.iou_threshold[0]} - {self.iou_threshold[1]}",
+                    None,
+                ),
             },
             [None] * len(evaluators_and_summaries),
         ]
@@ -241,10 +244,13 @@ class Inspector:
             content[1][i] = (
                 evaluator.name,
                 {
-                    "Precision": round(summary["precision"], 2),
-                    "Recall": round(summary["recall"], 2),
-                    "F1": round(summary["f1"], 2),
-                    "Unused": summary["unused"],
+                    "Precision": (round(summary["precision"], 2), None),
+                    "Recall": (round(summary["recall"], 2), None),
+                    "F1": (round(summary["f1"], 2), None),
+                    "Unused": (
+                        summary["unused"],
+                        "No. of detections below conf. threshold",
+                    ),
                     "Ground Truths": {
                         "total": summary["total_count"],
                         "bar": [v for v in gt_bar if v[1] > 0],

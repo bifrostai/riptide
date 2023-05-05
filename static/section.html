@@ -31,9 +31,12 @@
 {%- macro render_overview(content) -%}
 <div class="summary-container">
     <div class="summary-row">
-        {%- for metric, value in content[0].items() -%}
+        {%- for metric, (value, info) in content[0].items() -%}
         <div class="summary-item">
-            <div class="summary-metric-title gradient">{{ metric }}</div>
+            <div class="summary-metric-title gradient {%- if info is not none %} tooltip{%- endif %}">
+                {{ metric }}
+                {%- if info is not none -%}<span class="tooltiptext">{{ info }}</span>{%- endif -%}
+            </div>
             <div class="summary-metric-value">{{ value }}</div>
         </div>
         {%- endfor -%}
@@ -64,8 +67,11 @@
         </div>
         {% else %}
         <div class="summary-item">
-            <div class="summary-metric-title gradient">{{ metric }}</div>
-            <div class="summary-metric-value">{{ value }}</div>
+            <div class="summary-metric-title gradient {%- if value[1] is not none %} tooltip{%- endif %}">
+                {{ metric }}
+                {%- if value[1] is not none -%}<span class="tooltiptext">{{ value[1] }}</span>{%- endif -%}
+            </div>
+            <div class="summary-metric-value">{{ value[0] }}</div>
         </div>
         {% endif %}
         {% endfor %}
