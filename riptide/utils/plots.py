@@ -100,6 +100,7 @@ def boxplot(
                     for a in part_area
                 ],
                 edgecolors="none",
+                zorder=2.5,
             )
 
             data[j].append(part_area)
