@@ -338,7 +338,10 @@ class Inspector:
         return confidence_hists
 
     def boxplot(
-        self, classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]
+        self,
+        classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]],
+        *,
+        threshold: bool = False,
     ) -> bytes:
         """Generate a boxplot of the area of the bounding boxes for each class.
 
@@ -355,14 +358,26 @@ class Inspector:
         # Plot the barplots of the classwise area
         area_info = {}
         for class_idx, (_, clusters) in classwise_dict.items():
+            areas = []
             for cluster in clusters.values():
                 # TODO: change this for multi model comparison
-                areas = [m["bbox_area"] for info_dicts in cluster for m in info_dicts]
-                area_info[class_idx] = areas
+                areas.extend(
+                    [m["bbox_area"] for info_dicts in cluster for m in info_dicts]
+                )
+            area_info[class_idx] = np.array(areas)
+
+        if threshold:
+            thresholds = [16, 32, 96, 288]
+            quantiles = [0.0] + [t**2 for t in thresholds]
+        else:
+            quantiles = None
 
         setup_mpl_params()
         fig, ax = plt.subplots(figsize=(6, 6), dpi=150, constrained_layout=True)
-        boxplot(area_info=area_info, ax=ax)
+        boxplot(area_info=area_info, ax=ax, quantiles=quantiles)
+        ax.set_yscale("log")
+        ax.set_ylabel("Area (px)")
+        ax.set_xlabel("Class")
 
         return encode_base64(fig)
 

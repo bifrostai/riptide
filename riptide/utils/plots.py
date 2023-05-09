@@ -39,7 +39,13 @@ def setup_mpl_params():
 # endregion
 
 
-def boxplot(area_info: Dict[Any, List[list]], ax: plt.Axes = None) -> None:
+def boxplot(
+    area_info: Dict[Any, list],
+    ax: plt.Axes = None,
+    quantiles: List[float] = None,
+    *,
+    yscale: str = "linear",
+) -> plt.Axes:
     """Plot a boxplot of the area of each class
 
     Parameters
@@ -52,38 +58,66 @@ def boxplot(area_info: Dict[Any, List[list]], ax: plt.Axes = None) -> None:
     if ax is None:
         ax = plt.gca()
 
-    data = []
-    positions = []
+    if quantiles is None:
+        quantiles = [0.0]
+
+        def partition(
+            arr: np.ndarray, pos: np.ndarray
+        ) -> List[Tuple[np.ndarray, np.ndarray]]:
+            return [(arr, pos)]
+
+    else:
+
+        def partition(
+            arr: np.ndarray, pos: np.ndarray
+        ) -> List[Tuple[np.ndarray, np.ndarray]]:
+            res = []
+
+            for i in range(1, len(quantiles)):
+                mask = (arr >= quantiles[i - 1]) & (arr < quantiles[i])
+                res.append((arr[mask], pos[mask]))
+            outliers = arr >= quantiles[-1]
+            res.append((arr[outliers], pos[outliers]))
+            return res
+
+    data = [[] for _ in quantiles]
+    positions = [[] for _ in quantiles]
     n = len(list(area_info.values())[0])
     pos_pad = 1 if n == 1 else n + 1
 
     for i, (class_idx, area) in enumerate(area_info.items(), start=1):
-        j = 0
-        # for j, area in enumerate(areas):
-        ax.scatter(
-            np.full_like(area, class_idx),
-            area,
-            color=[gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(area)) for a in area],
-            edgecolors="none",
+        points = np.full_like(area, class_idx) + np.random.normal(0, 0.04, len(area))
+        partitions = partition(area, points)
+
+        for j, (part_area, pos) in enumerate(partitions):
+            if part_area.size == 0:
+                continue
+            ax.scatter(
+                pos,
+                part_area,
+                color=[
+                    gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(part_area))
+                    for a in part_area
+                ],
+                edgecolors="none",
+            )
+
+            data[j].append(part_area)
+            positions[j].append(class_idx)
+
+    [
+        ax.violinplot(
+            d,
+            positions=p,
+            widths=0.25,
+            showmedians=True,
         )
-        data.append(area)
-        positions.append(class_idx)
+        for d, p in zip(data, positions)
+        if len(d) > 0
+    ]
 
-    boxplot_dict = ax.boxplot(
-        data,
-        positions=positions,
-        patch_artist=True,
-    )
-
-    for cap in boxplot_dict["caps"]:
-        cap.set_color(PALETTE_LIGHT)
-    for whisker in boxplot_dict["whiskers"]:
-        whisker.set_color(PALETTE_LIGHT)
-    for median in boxplot_dict["medians"]:
-        median.set_color(PALETTE_GREEN)
-        median.set_linewidth(2)
-    for box in boxplot_dict["boxes"]:
-        box.set(color=PALETTE_LIGHT, facecolor=TRANSPARENT)
+    ax.set_xticks(list(area_info.keys()))
+    ax.set_xbound(min(area_info.keys()) - 0.5, max(area_info.keys()) + 0.5)
 
     return ax
 
