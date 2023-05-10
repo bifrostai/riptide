@@ -10,6 +10,7 @@ from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
 from torchvision.transforms import Grayscale
 from torchvision.transforms.functional import crop
+from tqdm import tqdm
 
 from riptide.detection.characterization import (
     compute_aspect_variance,
@@ -150,7 +151,7 @@ class Inspector:
         self.overview()
 
         self.crops = {}
-        self._generated_crops = False
+        self._generated_crops = set()
 
     def _confidence_hist(
         self, confidence_list: List[float], error_name: str = "Error"
@@ -257,8 +258,22 @@ class Inspector:
             }
 
     @logger()
-    def summary(self, ids: List[int] = None) -> Section:
+    def summary(
+        self, ids: List[int] = None, *, display_weights: bool = False
+    ) -> Section:
         """Generate a summary of the evaluation results for each model."""
+
+        code_mapping = {
+            "TP": "True Positives",
+            "FN": "False Negatives",
+            "FP": "False Positives",
+            "BKG": "Background",
+            "CLS": "Classification",
+            "LOC": "Localization",
+            "CLL": "Classification and Localization",
+            "MIS": "Missed",
+            "DUP": "Duplicate",
+        }
 
         evaluators_and_summaries = (
             list(zip(self.evaluators, self.summaries))
@@ -309,7 +324,7 @@ class Inspector:
 
             weights = {}
 
-            if "weighted" in summary:
+            if display_weights and "weighted" in summary:
                 weighted: dict = summary["weighted"]
                 precision = (
                     f" {round(weighted['precision'], 2)} <span class='text-dark"
@@ -351,7 +366,7 @@ class Inspector:
                 (
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
-                    code,
+                    code_mapping[code],
                     weights.get(code),
                 )
                 for code in ["TP", "MIS", "FN"]
@@ -361,7 +376,7 @@ class Inspector:
                 (
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
-                    code,
+                    code_mapping[code],
                     weights.get(code),
                 )
                 for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
@@ -383,6 +398,10 @@ class Inspector:
                     "Predictions": {
                         "total": summary["true_positives"] + summary["false_positives"],
                         "bar": [v for v in pred_bar if v[1] > 0],
+                        "tooltip": (
+                            "Similar false positive detections are suppressed from"
+                            " count."
+                        ),
                     },
                 },
             )
@@ -590,7 +609,7 @@ class Inspector:
             mask = (
                 [label[0] == -1 for label in projector.labels]
                 if error_type is not BackgroundError
-                else [label[0] != -1 for label in projector.labels]
+                else [label[0] == evaluator_id for label in projector.labels]
             )
 
             clusters = self.clusters[mask]
@@ -648,8 +667,8 @@ class Inspector:
                 )
 
                 crop_key = (evaluator_id, error)
-                if not self._generated_crops and crop_key in self.crops:
-                    logging.warn(f"Duplicate crop: {crop_key}")
+                if evaluator_id not in self._generated_crops and crop_key in self.crops:
+                    logging.debug(f"Generated duplicate crop: {crop_key}")
 
                 self.crops[crop_key] = fig
                 bkg_idx += 1
@@ -752,7 +771,7 @@ class Inspector:
     # region: Error Sections
     @logger()
     def background_error(
-        self, data: dict = None, clusters: torch.Tensor = None, **kwargs
+        self, *, data: dict = None, clusters: torch.Tensor = None, **kwargs
     ) -> Section:
         """Generate a section visualizing the background errors in the dataset.
 
@@ -761,7 +780,7 @@ class Inspector:
         data : dict, optional
             Metadata to attach to content, by default None
         clusters : torch.Tensor, optional
-            The cluster assignments for each error, if None then clusters are computed by `error_classwise_dict`, by default None
+            The cluster assignments for each error, if None then clusters are computed by `self.projector`, by default None
 
         kwargs : dict
             Additional keyword arguments to pass to `error_classwise_dict`
@@ -1465,7 +1484,8 @@ class Inspector:
         self,
         *,
         order: dict = None,
-        weights: Union[dict, ErrorWeights] = ErrorWeights.PRECISION,
+        weights: Union[dict, ErrorWeights] = ErrorWeights.F1,
+        **kwargs: dict,
     ) -> Tuple[dict, dict]:
         """Generate figures and plots for the errors.
 
@@ -1487,18 +1507,25 @@ class Inspector:
 
         results = dict()
 
-        results["BKG"] = self.background_error()
-        results["CLS"] = self.classification_error()
-        results["LOC"] = self.localization_error()
-        results["CLL"] = self.classification_and_localization_error()
-        results["DUP"] = self.duplicate_error()
-        results["MIS"] = self.missed_error()
-        results["TP"] = self.true_positives()
+        func_mapping = {
+            "BKG": self.background_error,
+            "CLS": self.classification_error,
+            "LOC": self.localization_error,
+            "CLL": self.classification_and_localization_error,
+            "DUP": self.duplicate_error,
+            "MIS": self.missed_error,
+            "TP": self.true_positives,
+        }
 
-        weights_by_code = self.recalculate_summaries([0], weights=weights)
+        for code, func in func_mapping.items():
+            results[code] = func(**kwargs)
+
+        evaluator_id = kwargs.get("evaluator_id", 0)
+
+        weights_by_code = self.recalculate_summaries([evaluator_id], weights=weights)
         weights_by_code.update(order)
 
-        results["overview"] = self.summary([0])
+        results["overview"] = self.summary([evaluator_id])
 
         sections = dict(
             sorted(
@@ -1521,7 +1548,7 @@ class Inspector:
             "TP": ("TruePositive", "True Positives"),
         }
 
-        self._generated_crops = True
+        self._generated_crops.add(evaluator_id)
         return sections, section_names
 
     @logger()
@@ -1536,19 +1563,12 @@ class Inspector:
 
         mask = [label[0] != -1 for label in self.projector.labels]
 
-        clusters = self.projector.cluster(mask=mask)
-        submasks = [
-            [label[0] == idx for label in self.projector.labels if label[0] != -1]
-            for idx in range(len(self.evaluators))
-        ]
-
         figs = [
             self.error_classwise_dict(
                 BackgroundError,
                 color=ErrorColor.BKG,
                 axis=1,
                 evaluator_id=idx,
-                clusters=clusters[submasks[idx]],
             )
             for idx in range(len(self.evaluators))
         ]
@@ -1624,7 +1644,7 @@ class Inspector:
             return self.compare_background_errors()
 
         mask = [label[0] == -1 for label in self.projector.labels]
-        gt_clusters = self.projector.cluster(mask=mask)
+        gt_clusters = self.clusters[mask]
 
         evaluators = [self.evaluators[idx] for idx in ids]
 
@@ -1653,29 +1673,35 @@ class Inspector:
         # TODO: Slowest part of the pipeline. Can we parallelize this?
         # figs keys: gt_id : list of images for each model
         figs: Dict[int, List[list]] = {}
-        for errors in gt_errors.values():
-            for gt_id, (image_path, error_list) in errors.items():
+        for gt_label, errors in gt_errors.items():
+            for gt_id, (image_path, error_list) in tqdm(
+                errors.items(), desc=f"Generating crops (Class {gt_label})"
+            ):
                 if gt_id not in figs:
                     figs[gt_id] = [[] for _ in evaluators]
                 image_tensor = read_image(image_path)
                 image_name = image_path.split("/")[-1]
-                cluster = gt_clusters[gt_ids.index(gt_id)].item()
-                for i, model_errors in enumerate(error_list):
+                cluster = tuple(gt_clusters[gt_ids.index(gt_id)].tolist())
+                for i, model_errors in zip(ids, error_list):
                     for error in model_errors:
-                        crop_options = get_crop_options(error.__class__)
+                        crop_key = (i, error)
+                        if crop_key in self.crops:
+                            figs[gt_id][i].append(self.crops[crop_key])
+                            continue
 
-                        figs[gt_id][i].append(
-                            generate_fig(
-                                image_tensor=image_tensor,
-                                image_name=image_name,
-                                error=error,
-                                color=crop_options["color"],
-                                bbox_attr=crop_options["bbox_attr"],
-                                cluster=cluster,
-                                get_bbox_func=crop_options["get_bbox_func"],
-                                add_metadata_func=crop_options["add_metadata_func"],
-                            )
+                        crop_options = get_crop_options(error.__class__)
+                        fig = generate_fig(
+                            image_tensor=image_tensor,
+                            image_name=image_name,
+                            error=error,
+                            color=crop_options["color"],
+                            bbox_attr=crop_options["bbox_attr"],
+                            cluster=cluster,
+                            get_bbox_func=crop_options["get_bbox_func"],
+                            add_metadata_func=crop_options["add_metadata_func"],
                         )
+                        self.crops[crop_key] = fig
+                        figs[gt_id][i].append(fig)
 
                     # TODO: this sorting is repeated in Evaluation().get_pred_status(). Use that instead
                     figs[gt_id][i] = [
@@ -1726,7 +1752,7 @@ class Inspector:
             for gt_id in section_gt_ids:
                 gt_ref = gt_ids.index(gt_id)
                 class_idx = gt_data.gt_labels[gt_ref].item()
-                cluster = gt_clusters[gt_ref].item()
+                cluster = tuple(gt_clusters[gt_ref].tolist())
                 gt_figs = figs.get(gt_id)
                 if gt_figs is None:
                     continue
@@ -1739,7 +1765,7 @@ class Inspector:
                 ] = section_contents[i]["contents"][class_idx]
 
                 if cluster not in contents:
-                    contents[cluster] = (f"Cluster {cluster}", {})
+                    contents[cluster] = (f"Cluster {cluster[0]}", {})
                 contents[cluster][1][gt_id] = gt_figs
 
         logging.info("Prepared sections")
@@ -1781,6 +1807,14 @@ class Inspector:
             error_type=Error
         )
 
-        self._generated_crops = True
+        section_names = {
+            "overview": ("Overview", "Overview"),
+            "flow": ("Flow", "Flow"),
+            "background_errors": ("BackgroundError", "Background Errors"),
+            "degradations": ("Degradations", "Degradations"),
+            "improvements": ("Improvements", "Improvements"),
+        }
 
-        return results
+        self._generated_crops.update({0, 1})
+
+        return results, section_names

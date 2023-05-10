@@ -77,6 +77,8 @@ class HtmlReport:
         output_dir: str,
         fname: str = "report.html",
         template: str = "evaluation.html",
+        *,
+        evaluator_id: str = 0,
     ):
         inspector = self.inspector
 
@@ -84,7 +86,7 @@ class HtmlReport:
         overall_summary, classwise_summary, _ = inspector.overview()
 
         # Error data - figures and plots for each error type
-        sections, section_names = inspector.inspect()
+        sections, section_names = inspector.inspect(evaluator_id=evaluator_id)
 
         # MissedError data - classwise false negatives
         missed_size_var = compute_size_variance(self.evaluators[0])
@@ -122,21 +124,16 @@ class HtmlReport:
         template: str = "comparison.html",
     ):
         inspector = self.inspector
-        section_names = {
-            "Overview": "Overview",
-            "Flow": "Flow",
-            "BackgroundError": "Background Errors",
-            "Degradations": "Degradations",
-            "Improvements": "Improvements",
-        }
+        for idx in [0, 1]:
+            inspector.inspect(evaluator_id=idx)
 
-        sections = inspector.compare()
+        sections, section_names = inspector.compare()
 
         logging.info("Rendering output...")
         output = self.env.get_template(template).render(
             title="Riptide",
             section_names=section_names,
-            **sections,
+            sections=sections,
         )
         os.makedirs(output_dir, exist_ok=True)
         fout = os.path.join(output_dir, fname)

@@ -2,9 +2,7 @@
 {% from "section.html" import render_section %}
 
 {% block content %}
-{{ render_section(overview) }}
-{{ render_section(flow) }}
-{{ render_section(background_errors)}}
-{{ render_section(degradations)}}
-{{ render_section(improvements)}}
+{% for section in sections.values() %}
+{{ render_section(section) }}
+{% endfor %}
 {% endblock %}
