@@ -2,19 +2,15 @@
 {% from "section.html" import render_section %}
 
 {% block content %}
-{{ render_section(overview) }}
+{% for section in sections.values() %}
+{{ render_section(section) }}
+{% endfor %}
 {% for infobox in infoboxes %}
 <div class="infobox">
     <div class="infobox-title">{{ infobox['title'] }}</div>
     <div class="infobox-content">{{ infobox['content'] }}</div>
 </div>
 {% endfor %}
-{{ render_section(BKG) }}
-{{ render_section(CLS) }}
-{{ render_section(LOC) }}
-{{ render_section(CLL) }}
-{{ render_section(DUP) }}
-{{ render_section(MIS) }}
 <div id="MissedExtra">
     <h2>Classwise MissedErrors and recall</h2>
     <p>
@@ -65,7 +61,6 @@
         {% endfor %}
     </div>
 </div>
-{{ render_section(TP) }}
 <div id="TrueExtra">
     <h2>Classwise True Positives</h2>
     <p>

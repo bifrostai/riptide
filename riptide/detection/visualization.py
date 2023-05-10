@@ -70,6 +70,26 @@ def empty_section(section_id: str, title: str, description: str = None):
     )
 
 
+def sort_sections(
+    sections: Dict[str, Section], weights: dict, mapping: Dict[str, tuple]
+) -> Dict[str, Section]:
+    """Sort sections by their weights, given a mapping from section id to weight."""
+
+    def sorter(item: Tuple[str, Section]):
+        code, _ = item
+
+        weight_keys = mapping[code]
+        if weight_keys[0] is None:
+            return weight_keys[1]
+
+        for key in weight_keys:
+            if key in weights:
+                return weights[key]
+        return -2
+
+    return dict(sorted(sections.items(), key=sorter, reverse=True))
+
+
 class Inspector:
     @logger("Initializing Inspector", "Initialized Inspector")
     def __init__(
@@ -1463,14 +1483,41 @@ class Inspector:
             "true_positives": 20,
             "false_positives": 10,
             "false_negatives": 1,
+            "BackgroundError": 2,
+            "DuplicateError": 11,
         }
 
         self.recalculate_summaries([0], weights=weights)
         results["overview"] = self.summary([0])
 
+        section_names = {
+            "overview": ("Overview", "Overview"),
+            "BKG": ("BackgroundError", "Background Errors"),
+            "CLS": ("ClassificationError", "Classification Errors"),
+            "LOC": ("LocalizationError", "Localization Errors"),
+            "CLL": (
+                "ClassificationAndLocalizationError",
+                "Classification and Localization Errors",
+            ),
+            "DUP": ("DuplicateError", "Duplicate Errors"),
+            "MIS": ("MissedError", "Missed Errors"),
+            "TP": ("TruePositive", "True Positives"),
+        }
+
+        weight_mapping = {
+            "overview": (None, math.inf),
+            "TP": (None, -1),
+            "BKG": ("BackgroundError", "false_positives"),
+            "CLS": ("ClassificationError", "false_positives"),
+            "LOC": ("LocalizationError", "false_positives"),
+            "CLL": ("ClassificationAndLocalizationError", "false_positives"),
+            "DUP": ("DuplicateError", "false_positives"),
+            "MIS": ("MissedError", "false_negatives"),
+        }
+
         self._generated_crops = True
 
-        return results
+        return sort_sections(results, weights, weight_mapping), section_names
 
     @logger()
     def compare_background_errors(self) -> Section:
