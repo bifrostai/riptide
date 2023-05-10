@@ -48,7 +48,12 @@
         {% if metric in ["Ground Truths", "Predictions"] %}
         <div class="break"></div>
         <div class="summary-item" style="flex-grow: 1">
-            <div class="summary-metric-title gradient">{{ metric }}</div>
+            <span class="summary-metric-title gradient
+            {%- if value.get('tooltip') is not none %} tooltip{% endif %}">{{ metric }}
+            {%- if value.get('tooltip') is not none -%}
+            <span class="tooltiptext" style="--tooltip-width: 200px;">{{ value["tooltip"] }}</span>
+            {%- endif -%}
+            </span>
             <div class="summary-metric-value">
                 <div class="summary-bar">
                     <span class="summary-bar-value">{{ value["total"] }}</span>
