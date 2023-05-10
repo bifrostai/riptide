@@ -52,6 +52,15 @@ from riptide.utils.plots import (
     setup_mpl_params,
 )
 
+ALL_ERRORS = [
+    "ClassificationError",
+    "LocalizationError",
+    "ClassificationAndLocalizationError",
+    "DuplicateError",
+    "MissedError",
+    "BackgroundError",
+]
+
 
 def empty_section(section_id: str, title: str, description: str = None):
     return Section(
@@ -99,13 +108,16 @@ class Inspector:
             for evaluator in self.evaluators
         ]
 
-        self.classwise_summaries = {
-            evaluator.name: {
-                class_idx: {k: round(v, 3) for k, v in individual_summary.items()}
-                for class_idx, individual_summary in evaluator.classwise_summarize().items()
+        self.classwise_summaries = [
+            {
+                "name": evaluator.name,
+                **{
+                    class_idx: {k: round(v, 3) for k, v in individual_summary.items()}
+                    for class_idx, individual_summary in evaluator.classwise_summarize().items()
+                },
             }
             for evaluator in self.evaluators
-        }
+        ]
         bkg_crops: List[torch.Tensor] = []
         bkg_errors: List[List[Error]] = []
 
@@ -151,7 +163,7 @@ class Inspector:
         ax.set_ylabel("Number of Occurences")
         return encode_base64(fig)
 
-    def recalculate_summaries(self, ids: List[int] = None):
+    def recalculate_summaries(self, ids: List[int] = None, *, weights: dict = None):
         summaries = (
             self.summaries
             if ids is None
@@ -164,13 +176,8 @@ class Inspector:
             fp = sum(
                 [
                     summary.get(error_name, 0)
-                    for error_name in [
-                        "ClassificationError",
-                        "LocalizationError",
-                        "ClassificationLocalizationError",
-                        "DuplicateError",
-                        "BackgroundError",
-                    ]
+                    for error_name in ALL_ERRORS
+                    if error_name != "MissedError"
                 ]
             )
 
@@ -186,6 +193,47 @@ class Inspector:
                     "f1": f1,
                 }
             )
+
+            if weights is not None:
+                tp *= weights.get("true_positives", 1)
+                fn_weight = weights.get("false_negatives", 1)
+                fn *= fn_weight
+
+                fp_weight = weights.get("false_positives", 1)
+
+                weighted_errors = {
+                    error_name: summary.get(error_name, 0)
+                    * weights.get(error_name, fp_weight)
+                    if error_name != "MissedError"
+                    else summary.get(error_name, 0) * weights.get(error_name, fn_weight)
+                    for error_name in ALL_ERRORS
+                }
+
+                fp = sum(
+                    [
+                        weighted_errors.get(error_name, 0)
+                        for error_name in ALL_ERRORS
+                        if error_name != "MissedError"
+                    ]
+                )
+
+                precision = tp / (tp + fp + 1e-7)
+                recall = tp / (tp + fn + 1e-7)
+                f1 = 2 * precision * recall / (precision + recall + 1e-7)
+
+                summary.update(
+                    {
+                        "weighted": {
+                            "true_positives": tp,
+                            "false_negatives": fn,
+                            "false_positives": fp,
+                            "precision": precision,
+                            "recall": recall,
+                            "f1": f1,
+                            **weighted_errors,
+                        }
+                    }
+                )
 
     @logger()
     def summary(self, ids: List[int] = None) -> Section:
@@ -230,23 +278,79 @@ class Inspector:
                 counts[code] for code in ["BKG", "CLS", "LOC", "CLL", "DUP"]
             )
 
+            precision = round(summary["precision"], 2)
+            recall = round(summary["recall"], 2)
+            f1 = round(summary["f1"], 2)
+
+            precision_tooltip = None
+            recall_tooltip = None
+            f1_tooltip = None
+
+            weights = {}
+
+            if "weighted" in summary:
+                weighted: dict = summary["weighted"]
+                precision = (
+                    f" {round(weighted['precision'], 2)} <span class='text-dark"
+                    f" text-xs'>| {precision}</span>"
+                )
+                recall = (
+                    f" {round(weighted['recall'], 2)} <span class='text-dark text-xs'>|"
+                    f" {recall}</span>"
+                )
+                f1 = (
+                    f" {round(weighted['f1'], 2)} <span class='text-dark text-xs'>|"
+                    f" {f1}</span>"
+                )
+
+                for code, key in zip(
+                    ["TP", "FP", "CLS", "LOC", "CLL", "DUP", "MIS", "BKG"],
+                    ["true_positives", "false_positives", *ALL_ERRORS],
+                ):
+                    weights[code] = (
+                        round(weighted[key] / counts[code], 2)
+                        if counts[code] > 0
+                        else 0
+                    )
+
+                weights["FN"] = (
+                    round(
+                        weighted["false_negatives"] / (counts["FN"] + counts["MIS"]), 2
+                    )
+                    if (counts["FN"] + counts["MIS"]) > 0
+                    else 0
+                )
+
+                precision_tooltip = "Weighted | Unweighted"
+                recall_tooltip = "Weighted | Unweighted"
+                f1_tooltip = "Weighted | Unweighted"
+
             opacity = 0.8
             gt_bar = [
-                (ErrorColor(code).rgb(opacity, False), counts[code], code)
+                (
+                    ErrorColor(code).rgb(opacity, False),
+                    counts[code],
+                    code,
+                    weights.get(code),
+                )
                 for code in ["TP", "MIS", "FN"]
             ]
 
             pred_bar = [
-                (ErrorColor(code).rgb(opacity, False), counts[code], code)
+                (
+                    ErrorColor(code).rgb(opacity, False),
+                    counts[code],
+                    code,
+                    weights.get(code),
+                )
                 for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
             ]
-
             content[1][i] = (
                 evaluator.name,
                 {
-                    "Precision": (round(summary["precision"], 2), None),
-                    "Recall": (round(summary["recall"], 2), None),
-                    "F1": (round(summary["f1"], 2), None),
+                    "Precision": (precision, precision_tooltip),
+                    "Recall": (recall, recall_tooltip),
+                    "F1": (f1, f1_tooltip),
                     "Unused": (
                         summary["unused"],
                         "No. of detections below conf. threshold",
@@ -1355,7 +1459,13 @@ class Inspector:
         results["MIS"] = self.missed_error()
         results["TP"] = self.true_positives()
 
-        self.recalculate_summaries([0])
+        weights = {
+            "true_positives": 20,
+            "false_positives": 10,
+            "false_negatives": 1,
+        }
+
+        self.recalculate_summaries([0], weights=weights)
         results["overview"] = self.summary([0])
 
         self._generated_crops = True
