@@ -283,7 +283,7 @@ body {
 
 .tooltiptext {
     --tooltip-width: 120px;
-    --tooltip-opacity: 1;
+    --tooltip-opacity: 0.95;
     min-width: calc(var(--tooltip-width));
     background-color: rgba(85, 85, 85, var(--tooltip-opacity));
     color: #fff;

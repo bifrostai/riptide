@@ -263,6 +263,18 @@ class Inspector:
     ) -> Section:
         """Generate a summary of the evaluation results for each model."""
 
+        code_mapping = {
+            "TP": "True Positives",
+            "FN": "False Negatives",
+            "FP": "False Positives",
+            "BKG": "Background",
+            "CLS": "Classification",
+            "LOC": "Localization",
+            "CLL": "Classification and Localization",
+            "MIS": "Missed",
+            "DUP": "Duplicate",
+        }
+
         evaluators_and_summaries = (
             list(zip(self.evaluators, self.summaries))
             if ids is None
@@ -354,7 +366,7 @@ class Inspector:
                 (
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
-                    code,
+                    code_mapping[code],
                     weights.get(code),
                 )
                 for code in ["TP", "MIS", "FN"]
@@ -364,7 +376,7 @@ class Inspector:
                 (
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
-                    code,
+                    code_mapping[code],
                     weights.get(code),
                 )
                 for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
@@ -1472,7 +1484,7 @@ class Inspector:
         self,
         *,
         order: dict = None,
-        weights: Union[dict, ErrorWeights] = ErrorWeights.PRECISION,
+        weights: Union[dict, ErrorWeights] = ErrorWeights.F1,
         **kwargs: dict,
     ) -> Tuple[dict, dict]:
         """Generate figures and plots for the errors.

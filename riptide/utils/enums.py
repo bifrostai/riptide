@@ -22,7 +22,7 @@ ERROR_WEIGHTS = {
         "true_positives": 1,
         "false_positives": 2,
         "false_negatives": 5,
-        "MissedError": 10,
+        "MissedError": 12,
         "ClassificationError": 10,
         "ClassificationAndLocalizationError": 5,
         "BackgroundError": 10,
