@@ -37,6 +37,7 @@ from riptide.utils.crops import (
     get_both_bboxes,
     get_crop_options,
 )
+from riptide.utils.enums import ErrorWeights
 from riptide.utils.image import encode_base64
 from riptide.utils.logging import logger
 from riptide.utils.models import GTData
@@ -68,26 +69,6 @@ def empty_section(section_id: str, title: str, description: str = None):
         title=title,
         contents=[Content(type=ContentType.TEXT, content=[description])],
     )
-
-
-def sort_sections(
-    sections: Dict[str, Section], weights: dict, mapping: Dict[str, tuple]
-) -> Dict[str, Section]:
-    """Sort sections by their weights, given a mapping from section id to weight."""
-
-    def sorter(item: Tuple[str, Section]):
-        code, _ = item
-
-        weight_keys = mapping[code]
-        if weight_keys[0] is None:
-            return weight_keys[1]
-
-        for key in weight_keys:
-            if key in weights:
-                return weights[key]
-        return -2
-
-    return dict(sorted(sections.items(), key=sorter, reverse=True))
 
 
 class Inspector:
@@ -183,12 +164,22 @@ class Inspector:
         ax.set_ylabel("Number of Occurences")
         return encode_base64(fig)
 
-    def recalculate_summaries(self, ids: List[int] = None, *, weights: dict = None):
+    def recalculate_summaries(
+        self, ids: List[int] = None, *, weights: Union[dict, ErrorWeights] = None
+    ) -> dict:
         summaries = (
             self.summaries
             if ids is None
             else [self.summaries[i] for i in ids if 0 <= i < len(self.summaries)]
         )
+
+        if weights is not None:
+            if isinstance(weights, ErrorWeights):
+                weights = weights.weights
+
+            tp_weight = weights.get("true_positives", 1)
+            fn_weight = weights.get("false_negatives", 1)
+            fp_weight = weights.get("false_positives", 1)
 
         for summary in summaries:
             tp = summary.get("true_positives", 0)
@@ -215,11 +206,8 @@ class Inspector:
             )
 
             if weights is not None:
-                tp *= weights.get("true_positives", 1)
-                fn_weight = weights.get("false_negatives", 1)
+                tp *= tp_weight
                 fn *= fn_weight
-
-                fp_weight = weights.get("false_positives", 1)
 
                 weighted_errors = {
                     error_name: summary.get(error_name, 0)
@@ -254,6 +242,19 @@ class Inspector:
                         }
                     }
                 )
+
+        if weights is not None:
+            return {
+                "TP": tp_weight,
+                "FN": fn_weight,
+                "FP": fp_weight,
+                "BKG": weights.get("BackgroundError", fp_weight),
+                "CLS": weights.get("ClassificationError", fp_weight),
+                "LOC": weights.get("LocalizationError", fp_weight),
+                "CLL": weights.get("ClassificationAndLocalizationError", fp_weight),
+                "MIS": weights.get("MissedError", fn_weight),
+                "DUP": weights.get("DuplicateError", fp_weight),
+            }
 
     @logger()
     def summary(self, ids: List[int] = None) -> Section:
@@ -1460,14 +1461,29 @@ class Inspector:
     # endregion
 
     @logger()
-    def inspect(self) -> Dict[str, Any]:
+    def inspect(
+        self,
+        *,
+        order: dict = None,
+        weights: Union[dict, ErrorWeights] = ErrorWeights.PRECISION,
+    ) -> Tuple[dict, dict]:
         """Generate figures and plots for the errors.
+
+        Parameters
+        ----------
+        order : dict, default=`None`
+            A dictionary containing the order in which the sections should be displayed. If not specified, error sections are sorted by decreasing weight
+        weights : Union[dict, ErrorWeights], default=`ErrorWeights.PRECISION`
+            A dictionary containing the weights for each error type, or an ErrorWeights enum
 
         Returns
         -------
-        Dict
-            A dictionary containing the generated figures and plots.
+        Tuple[dict, dict]
+            A tuple of dictionaries containing the sections and the section names
         """
+        order = order or {}
+        order["overview"] = order.get("overview", math.inf)
+        order["TP"] = order.get("TP", -1)
 
         results = dict()
 
@@ -1479,17 +1495,18 @@ class Inspector:
         results["MIS"] = self.missed_error()
         results["TP"] = self.true_positives()
 
-        weights = {
-            "true_positives": 20,
-            "false_positives": 10,
-            "false_negatives": 1,
-            "BackgroundError": 2,
-            "DuplicateError": 11,
-        }
+        weights_by_code = self.recalculate_summaries([0], weights=weights)
+        weights_by_code.update(order)
 
-        self.recalculate_summaries([0], weights=weights)
         results["overview"] = self.summary([0])
 
+        sections = dict(
+            sorted(
+                results.items(),
+                key=lambda x: weights_by_code.get(x[0], -2),
+                reverse=True,
+            )
+        )
         section_names = {
             "overview": ("Overview", "Overview"),
             "BKG": ("BackgroundError", "Background Errors"),
@@ -1504,20 +1521,8 @@ class Inspector:
             "TP": ("TruePositive", "True Positives"),
         }
 
-        weight_mapping = {
-            "overview": (None, math.inf),
-            "TP": (None, -1),
-            "BKG": ("BackgroundError", "false_positives"),
-            "CLS": ("ClassificationError", "false_positives"),
-            "LOC": ("LocalizationError", "false_positives"),
-            "CLL": ("ClassificationAndLocalizationError", "false_positives"),
-            "DUP": ("DuplicateError", "false_positives"),
-            "MIS": ("MissedError", "false_negatives"),
-        }
-
         self._generated_crops = True
-
-        return sort_sections(results, weights, weight_mapping), section_names
+        return sections, section_names
 
     @logger()
     def compare_background_errors(self) -> Section:
