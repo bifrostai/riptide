@@ -79,6 +79,10 @@ body {
     color: #395B64;
 }
 
+.text-xs {
+    font-size: 0.8em;
+}
+
 .light {
     font-weight: 300;
 }
@@ -353,6 +357,16 @@ body {
     padding-right: 0.5em;
 }
 
+.summary-bar-item {
+    --bar-width: 1;
+    --bar-weight: 1;
+    --bar-color: #00ffd9;
+
+    flex-grow: var(--bar-width);
+    background-color: var(--bar-color);
+    transition: all 0.3s ease-in-out;
+}
+
 .summary-bar-item > .label {
     vertical-align: middle;
     padding-left: 0.2em;
@@ -360,7 +374,7 @@ body {
     color: #111111;
 }
 
-.summary-bar-item  .tooltiptext {
+.summary-bar-item .tooltiptext {
     --tooltip-width: 60px;
     --tooltip-opacity: 0.8;
     font-size: small;
@@ -372,6 +386,10 @@ body {
 
 .summary-bar-item.last {
     border-radius: 0 8px 8px 0;
+}
+
+.summary-item:hover .summary-bar-item {
+    flex-grow: calc(var(--bar-weight) * var(--bar-width));
 }
 
 .info-panel {

@@ -79,24 +79,12 @@ class HtmlReport:
         template: str = "evaluation.html",
     ):
         inspector = self.inspector
-        section_names = {
-            "Overview": "Overview",
-            "BackgroundError": "Background Errors",
-            "ClassificationError": "Classification Errors",
-            "LocalizationError": "Localization Errors",
-            "ClassificationAndLocalizationError": (
-                "Classification And Localization Errors"
-            ),
-            "DuplicateError": "Duplicate Errors",
-            "MissedError": "Missed Errors",
-            "TruePositive": "True Positives",
-        }
 
         # Summary data
         overall_summary, classwise_summary, _ = inspector.overview()
 
         # Error data - figures and plots for each error type
-        error_fig_plots = inspector.inspect()
+        sections, section_names = inspector.inspect()
 
         # MissedError data - classwise false negatives
         missed_size_var = compute_size_variance(self.evaluators[0])
@@ -114,12 +102,12 @@ class HtmlReport:
         output = self.env.get_template(template).render(
             title="Riptide",
             section_names=section_names,
+            sections=sections,
             summary=overall_summary,
             classwise_summary=classwise_summary,
             infoboxes=infoboxes,
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
-            **error_fig_plots,
         )
         os.makedirs(output_dir, exist_ok=True)
         fout = os.path.join(output_dir, fname)

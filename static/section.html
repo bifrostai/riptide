@@ -37,14 +37,14 @@
                 {{ metric }}
                 {%- if info is not none -%}<span class="tooltiptext">{{ info }}</span>{%- endif -%}
             </div>
-            <div class="summary-metric-value">{{ value }}</div>
+            <div class="summary-metric-value">{{ value | safe }}</div>
         </div>
         {%- endfor -%}
     </div>
     {%- for name, row in content[1] -%}
     {% if content[1] | length > 1 %}<h4>{{ name }}</h4>{% endif %}
     <div class="summary-row">
-        {% for metric, value in row.items() %}
+        {% for metric, value in row.items() if value is not none%}
         {% if metric in ["Ground Truths", "Predictions"] %}
         <div class="break"></div>
         <div class="summary-item" style="flex-grow: 1">
@@ -52,15 +52,17 @@
             <div class="summary-metric-value">
                 <div class="summary-bar">
                     <span class="summary-bar-value">{{ value["total"] }}</span>
-                    {% for color, count, info in value["bar"] %}
-                    {% if loop.first %}
-                    <div class="summary-bar-item first" style="flex-grow: {{ count }}; background-color: {{ color }};">
-                    {% elif loop.last %}
-                    <div class="summary-bar-item last" style="flex-grow: {{ count }}; background-color: {{ color }};">
-                    {% else %}
-                    <div class="summary-bar-item" style="flex-grow: {{ count }}; background-color: {{ color }};">
-                    {% endif %}
-                    <span class="label">{{ count }}</span><span class="tooltiptext">{{ info }}</span></div>
+                    {% for color, count, info, weight in value["bar"] %}
+                    <div class="summary-bar-item
+                    {%- if loop.first %} first
+                    {%- elif loop.last %} last
+                    {%- endif -%}"
+                    style="--bar-width: {{ count }}; --bar-color: {{ color }}; {%- if weight is not none %} --bar-weight: {{ weight }};{%- endif -%}">
+                    <span class="label">
+                        {{ count }}
+                        {%- if weight is not none %} <span class="text-xs">({{ weight }})</span>{%- endif %}
+                    </span>
+                    <span class="tooltiptext">{{ info }}</span></div>
                     {% endfor %}
                 </div>
             </div>
@@ -68,10 +70,10 @@
         {% else %}
         <div class="summary-item">
             <div class="summary-metric-title gradient {%- if value[1] is not none %} tooltip{%- endif %}">
-                {{ metric }}
+                {{ metric | safe }}
                 {%- if value[1] is not none -%}<span class="tooltiptext">{{ value[1] }}</span>{%- endif -%}
             </div>
-            <div class="summary-metric-value">{{ value[0] }}</div>
+            <div class="summary-metric-value">{{ value[0] | safe }}</div>
         </div>
         {% endif %}
         {% endfor %}
