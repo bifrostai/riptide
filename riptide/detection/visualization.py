@@ -16,6 +16,7 @@ from riptide.detection.characterization import (
     compute_aspect_variance,
     compute_size_variance,
 )
+from riptide.detection.confusions import Confusion
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
@@ -837,9 +838,7 @@ class Inspector:
         )
 
     @logger()
-    def classification_error(
-        self, **kwargs: dict
-    ) -> Tuple[Dict[int, List[Dict]], bytes]:
+    def classification_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the classification errors in the dataset.
 
         Parameters
@@ -929,7 +928,7 @@ class Inspector:
         )
 
     @logger()
-    def localization_error(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
+    def localization_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the localization errors in the dataset.
 
         Parameters
@@ -1005,9 +1004,7 @@ class Inspector:
         )
 
     @logger()
-    def classification_and_localization_error(
-        self, **kwargs: dict
-    ) -> Tuple[Dict[int, Dict], bytes]:
+    def classification_and_localization_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the classification and localization errors in the dataset.
 
         Parameters
@@ -1195,7 +1192,7 @@ class Inspector:
         )
 
     @logger()
-    def missed_error(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
+    def missed_error(self, **kwargs) -> Section:
         """Generate a section visualizing the missed errors in the dataset.
 
         Parameters
@@ -1248,7 +1245,6 @@ class Inspector:
                 axis=0,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
-                evaluator_id=0,
             )
         )
 
@@ -1277,7 +1273,7 @@ class Inspector:
                 "Bad Labels",
                 "List of all the missed detections that have bad labels.",
             ),
-            "unseen": ("Unseen", "List of all other missed detections."),
+            "others": ("Others", "List of all other missed detections."),
         }
 
         groups: Dict[str, List[Error]] = self.missed_groups()[kwargs["evaluator_id"]]
@@ -1347,7 +1343,7 @@ class Inspector:
         *,
         min_size: int = 32,
         var_threshold: float = 100,
-    ):
+    ) -> List[Dict[str, list]]:
         KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
 
         errorlist_dicts = (
@@ -1365,7 +1361,7 @@ class Inspector:
                 "occluded": [],
                 "truncated": [],
                 "bad_label": [],  # subjective
-                "unseen": [],
+                "others": [],
             }
             for _ in range(len(errorlist))
         ]
@@ -1399,12 +1395,12 @@ class Inspector:
                         count += 1
 
                     if count == 0:
-                        groups[i]["unseen"].append(error)
+                        groups[i]["others"].append(error)
 
         return groups
 
     @logger()
-    def true_positives(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
+    def true_positives(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the true positives in the dataset.
 
         Parameters

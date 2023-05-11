@@ -28,8 +28,8 @@ class Confusions:
         self.evaluation = evaluation
         self.num_preds = num_preds
         self.num_gts = num_gts
-        self.pred_confusions = [None] * num_preds
-        self.gt_confusions = [None] * num_gts
+        self.pred_confusions: List[Confusion] = [None] * num_preds
+        self.gt_confusions: List[Confusion] = [None] * num_gts
 
     @property
     def is_complete(self) -> bool:
