@@ -2,36 +2,37 @@
 > Read more: [Alchemy Handbook - Analyzing Failures](https://bifrost-core.gitlab.io/alchemy-handbook/object-detection/analyzing-failures/)
 
 There are three threshold values:
-- Background IoU threshold `bg_iou_threshold`: Detections smaller than this level are not considered
-- Foreground IoU threshold `fg_iou_threshold`: Detections must be >= this level to be considered **correct**
-- Confidence threshold `conf_threshold`: Detections must be >= this confidence to be considered
+- Confidence threshold $t_c$: Predictions must have a confidence above this level to be considered at all
+- Background IoU threshold $\text{IoU}_{b}$: Predictions with $\text{IoU}_{\max}$ less than this level are considered background predictions
+- Foreground IoU threshold $\text{IoU}_{f}$: Predictions must have $\text{IoU}_{\max}$ greater than this level to be considered correct
 
+where $\text{IoU}_{\max}$ is the maximum IoU of the prediction with any ground truth in the image.
 
-## BackgroundError
-- Is above `conf_threshold` and does not meet the `bg_iou_threshold` with any ground truth
+## Background Error (BKG)
+- $\text{confidence} \geq t_c$ and $\text{IoU}_{\max} < \text{IoU}_{b}$
 - Counts as a false positive to the predicted class
 
-## ClassificationError
-- Is above `conf_threshold` and `fg_iou_threshold`, but the class label is incorrect
-- Counts as a false positive to the predicted class
-- Counts as a false negative to the ground truth class (missed it)
-
-## LocalizationError
-- Is above `conf_threshold` and is between `bg_iou_threshold` and `fg_iou_threshold`, and the class label is **correct**
+## Classification Error (CLS)
+- $\text{confidence} \geq t_c$ and $\text{IoU}_{\max} \geq \text{IoU}_{f}$, but the class label is incorrect
 - Counts as a false positive to the predicted class
 - Counts as a false negative to the ground truth class (missed it)
 
-## ClassificationAndLocalizationError
-- Is above `conf_threshold` and is between `bg_iou_threshold` and `fg_iou_threshold`, and the class label is **incorrect**
+## Localization Error (LOC)
+- $\text{confidence} \geq t_c$ and $\text{IoU}_{b} \leq \text{IoU}_{\max} < \text{IoU}_{f}$, and the class label is **correct**
 - Counts as a false positive to the predicted class
 - Counts as a false negative to the ground truth class (missed it)
 
-## DuplicateError
-- Is above `conf_threshold` and `fg_iou_threshold`, but a simultaneous valid prediction has been made (true positive), which has a higher IoU than this one
+## Classification And Localization Error (CLL)
+- $\text{confidence} \geq t_c$ and $\text{IoU}_{b} \leq \text{IoU}_{\max} < \text{IoU}_{f}$, and the class label is **incorrect**
+- Counts as a false positive to the predicted class
+- Counts as a false negative to the ground truth class (missed it)
+
+## Duplicate Error (DUP)
+-  $\text{confidence} \geq t_c$ and $\text{IoU}_{\max} \geq \text{IoU}_{f}$, but a simultaneous valid prediction has been made (true positive), which has a higher $\text{IoU}_{\max}$ than this one
 - Counts as a false positive to the predicted class
 
-## MissedError
-- No prediction was made above `conf_threshold` that had IoU above `bg_iou_threshold` (otherwise it would be considered a `LocalizationError`)
+## Missed Error (MIS)
+- No predictions were made with $\text{confidence} \geq t_c$ and $\text{IoU}_{\max} \geq \text{IoU}_{b}$ (otherwise it would be considered a Localization Error)
 - Counts as a false negative to the ground truth class
 
 ### Subgroups
