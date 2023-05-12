@@ -884,8 +884,54 @@ class Evaluator:
         self.updated_datetime = self.created_datetime
         self.evaluations = evaluations
         self.name = name
-        self._errorlist_dict = None
         self._gt_ids_map = gt_ids_map
+        self._collate_evaluations()
+
+    def _collate_evaluations(self):
+        errorlist_dict = self._init_errorlist_dict()
+        confusion_matrices = {error_type.__name__: {} for error_type in ERROR_TYPES}
+        confusion_matrices[None] = {}
+
+        for evaluation in self.evaluations:
+            errors = evaluation.errors.pred_errors + evaluation.errors.gt_errors
+            confusions = (
+                evaluation.confusions.pred_confusions
+                + evaluation.confusions.gt_confusions
+            )
+            for error, confusion in zip(errors, confusions):
+                if error is not None:
+                    self._add_error_to_errorlist_dict(error, errorlist_dict, evaluation)
+                    confusion_pair = (error.gt_label, error.pred_label)
+                    error_name = error.__class__.__name__
+                else:
+                    error_name = None
+                    confusion_pair = (None, None)
+
+                confusion_matrix = confusion_matrices[error_name]
+                if confusion_pair not in confusion_matrix:
+                    confusion_matrix[confusion_pair] = [
+                        0 for _ in range(len(Confusion))
+                    ]
+                confusion_matrix[confusion_pair][confusion.value] += 1
+
+        self._errorlist_dict = errorlist_dict
+        self._confusion_matrices = confusion_matrices
+
+    def _init_errorlist_dict(self) -> Dict[str, List[Error]]:
+        return {error_type.__name__: [] for error_type in ERROR_TYPES}
+
+    def _init_confusion_matrices(self) -> Dict[str, List[Error]]:
+        mat = {error_type.__name__: {} for error_type in ERROR_TYPES}
+        mat[None] = {}
+        return mat
+
+    def _add_error_to_errorlist_dict(
+        self,
+        error: Error,
+        errorlist_dict: Dict[str, List[Error]],
+        evaluation: Evaluation,
+    ):
+        errorlist_dict[error.__class__.__name__].append(error)
 
     @classmethod
     def from_coco(
@@ -953,15 +999,22 @@ class Evaluator:
     def classwise_summarize(self) -> Dict[str, any]:
         raise NotImplementedError()
 
-    @logger()
     def get_errorlist_dict(self) -> Dict[str, List[Error]]:
+        """Get a mapping of error type to list of errors.
+
+        Returns
+        -------
+        Dict[str, List[Error]]
+            Dictionary of lists of errors.
+        """
         if self._errorlist_dict is None:
-            errorlist_dict = {error_type.__name__: [] for error_type in ERROR_TYPES}
-            for evaluation in self.evaluations:
-                for error in evaluation.instances:
-                    errorlist_dict[error.__class__.__name__].append(error)
-            self._errorlist_dict = errorlist_dict
+            self._collate_evaluations()
         return self._errorlist_dict
+
+    def get_confusion_matrices(self) -> Dict[Any, Dict[tuple, list]]:
+        if self._confusion_matrices is None:
+            self._collate_evaluations()
+        return self._confusion_matrices
 
 
 class ObjectDetectionEvaluator(Evaluator):
@@ -1102,39 +1155,33 @@ class ObjectDetectionEvaluator(Evaluator):
 
         return classwise_summary
 
+    def _init_errorlist_dict(self) -> Dict[str, Dict[str, List[Error]]]:
+        return {error_type.__name__: dict() for error_type in ERROR_TYPES}
+
+    def _add_error_to_errorlist_dict(
+        self,
+        error: Error,
+        errorlist_dict: Dict[str, Dict[str, List[Error]]],
+        evaluation: ObjectDetectionEvaluation,
+    ):
+        error_name = error.__class__.__name__
+        if evaluation.image_path not in errorlist_dict[error_name]:
+            errorlist_dict[error_name][evaluation.image_path] = []
+        errorlist_dict[error_name][evaluation.image_path].append(error)
+
     @logger()
     def get_errorlist_dict(self) -> Dict[str, Dict[str, List[Error]]]:
-        """Get a dictionary of dictionaries of lists of errors.
+        """Get a nested mapping from error type to lists of errors.
         The first key is the error type, the second key is the image path, and the value is a list of errors.
         Returns
         -------
         Dict[str, Dict[str, List[Error]]]
             Dictionary of dictionaries of lists of errors.
         """
-        if self._errorlist_dict is None:
-            errorlist_dict: Dict[str, Dict[str, List[Error]]] = {
-                error_type.__name__: dict() for error_type in ERROR_TYPES
-            }
-            for evaluation in self.evaluations:
-                for error in (
-                    evaluation.errors.pred_errors + evaluation.errors.gt_errors
-                ):
-                    if error is None:
-                        continue
-                    error_name = error.__class__.__name__
-                    if evaluation.image_path not in errorlist_dict[error_name]:
-                        errorlist_dict[error_name][evaluation.image_path] = []
-                    errorlist_dict[error.__class__.__name__][
-                        evaluation.image_path
-                    ].append(error)
-            self._errorlist_dict = errorlist_dict
-        return self._errorlist_dict
+        return super().get_errorlist_dict()
 
     def get_true_positives(self) -> int:
-        tp = 0
-        for evaluation in self.evaluations:
-            tp += evaluation.confusions.get_true_positives()
-        return tp
+        return self.get_confusion_matrices()[None][(None, None)][1]
 
     def get_false_positives(self) -> int:
         fp = 0
