@@ -16,6 +16,7 @@ from riptide.detection.characterization import (
     compute_aspect_variance,
     compute_size_variance,
 )
+from riptide.detection.confusions import Confusion
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
     BackgroundError,
@@ -694,26 +695,35 @@ class Inspector:
         return classwise_dict
 
     def error_classwise_ranking(
-        self, error_type: Type[Error], display_type: str = "bar"
+        self,
+        error_types: List[Type[Error]],
+        evaluator_id: int = 0,
+        *,
+        display_type: str = "bar",
+        combine: bool = False,
+        confusion: Confusion = Confusion.FALSE_POSITIVE,
     ) -> bytes:
-        labels = [
-            (error.gt_label, error.pred_label)
-            for errors in self.errorlist_dicts[0]
-            .get(error_type.__name__, dict())
-            .values()
-            for error in errors
+        if not isinstance(error_types, list):
+            error_types = [error_types]
+
+        confusion_matrices = [
+            self.evaluators[evaluator_id].get_confusion_matrices()[error_type.__name__]
+            for error_type in error_types
         ]
 
-        if len(labels) == 0:
-            return None
+        confusion_dict = {}
+        for i, confusion_matrix in enumerate(confusion_matrices):
+            for pair, counts in confusion_matrix.items():
+                if pair not in confusion_dict:
+                    confusion_dict[pair] = [0 for _ in range(len(error_types))]
+                confusion_dict[pair][i] += counts[confusion.value]
 
-        confusion_dict = {confusion: 0 for confusion in set(labels)}
+        if combine:
+            confusion_dict = {k: [sum(v)] for k, v in confusion_dict.items()}
 
-        for confusion in labels:
-            confusion_dict[confusion] += 1
-
-        ranked_idxs = sorted(confusion_dict, key=confusion_dict.get, reverse=True)
-        confusion_dict = {k: confusion_dict[k] for k in ranked_idxs}
+        confusion_dict = dict(
+            sorted(confusion_dict.items(), key=lambda x: sum(x[1]), reverse=True)
+        )
 
         setup_mpl_params()
 
@@ -723,18 +733,13 @@ class Inspector:
                 dpi=150,
                 constrained_layout=True,
             )
-            ax.barh(
-                range(len(confusion_dict)),
-                width=confusion_dict.values(),
-                color=[
-                    gradient(
-                        PALETTE_GREEN,
-                        PALETTE_BLUE,
-                        1 - (x / max(confusion_dict.values())),
-                    )
-                    for x in confusion_dict.values()
-                ],
-            )
+            for i, error_type in enumerate(error_types):
+                ax.barh(
+                    range(len(confusion_dict)),
+                    width=[x[i] for x in confusion_dict.values()],
+                    color=ErrorColor[error_type.code].hex,
+                    left=[sum(x[:i]) for x in confusion_dict.values()],
+                )
             ax.set_yticks(range(len(confusion_dict)))
             ax.set_yticklabels(
                 [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
@@ -745,7 +750,10 @@ class Inspector:
             row_labels, col_labels = map(set, zip(*confusion_dict.keys()))
             confusion_matrix = np.array(
                 [
-                    [confusion_dict.get((i, j), 0) for j in col_labels]
+                    [
+                        confusion_dict.get((i, j), [0 for _ in error_types])
+                        for j in col_labels
+                    ]
                     for i in row_labels
                 ]
             )
@@ -756,7 +764,7 @@ class Inspector:
                 constrained_layout=True,
             )
             im, cbar = heatmap(
-                confusion_matrix,
+                confusion_matrix.sum(axis=2),
                 row_labels,
                 col_labels,
                 ax=ax,
@@ -796,7 +804,7 @@ class Inspector:
             List of all the detections with confidence above the <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span> but do not pass the <span class="code">bg_iou_threshold={ self.overall_summary["bg_iou_threshold"] }</span>.
             """
 
-        if self.overall_summary[section_id] == 0:
+        if self.summaries[kwargs.get("evaluator_id", 0)]["BackgroundError"] == 0:
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -837,9 +845,7 @@ class Inspector:
         )
 
     @logger()
-    def classification_error(
-        self, **kwargs: dict
-    ) -> Tuple[Dict[int, List[Dict]], bytes]:
+    def classification_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the classification errors in the dataset.
 
         Parameters
@@ -859,7 +865,7 @@ class Inspector:
         List of all the detections with <span class="code">iou > fg_iou_threshold</span> but with predicted classes not equal to the class of the corresponding ground truth.
         """
 
-        if self.overall_summary[section_id] == 0:
+        if self.summaries[kwargs.get("evaluator_id", 0)]["ClassificationError"] == 0:
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -890,9 +896,10 @@ class Inspector:
         kwargs.update(
             dict(
                 error_type=ClassificationError,
-                color=ErrorColor.CLS,
+                color=[ErrorColor.WHITE, ErrorColor.CLS],
                 axis=1,
                 label_attr="gt_label",
+                get_bbox_func=get_both_bboxes,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
             )
@@ -929,7 +936,7 @@ class Inspector:
         )
 
     @logger()
-    def localization_error(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
+    def localization_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the localization errors in the dataset.
 
         Parameters
@@ -949,7 +956,7 @@ class Inspector:
         List of all the detections with predicted classes equal to the class of the corresponding ground truth but with <span class="code">bg_iou_threshold < iou < fg_iou_threshold</span>.
         """
 
-        if self.overall_summary[section_id] == 0:
+        if self.summaries[kwargs.get("evaluator_id", 0)]["LocalizationError"] == 0:
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -1005,9 +1012,7 @@ class Inspector:
         )
 
     @logger()
-    def classification_and_localization_error(
-        self, **kwargs: dict
-    ) -> Tuple[Dict[int, Dict], bytes]:
+    def classification_and_localization_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the classification and localization errors in the dataset.
 
         Parameters
@@ -1027,7 +1032,12 @@ class Inspector:
         List of all the detections with <span class="code">bg_iou_threshold < iou < fg_iou_threshold</span> and with predicted classes not equal to the class of the corresponding ground truth.
         """
 
-        if self.overall_summary[section_id] == 0:
+        if (
+            self.summaries[kwargs.get("evaluator_id", 0)][
+                "ClassificationAndLocalizationError"
+            ]
+            == 0
+        ):
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -1102,7 +1112,146 @@ class Inspector:
         )
 
     @logger()
-    def duplicate_error(self, **kwargs: dict) -> Dict[int, Dict]:
+    def confusions(self, **kwargs: dict) -> Section:
+        """Generate a section visualizing the classification type errors in the dataset.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Additional keyword arguments to pass to `error_classwise_dict`
+
+        Returns
+        -------
+        Section
+            The section containing the visualizations
+        """
+
+        section_id = "Confusions"
+        title = "Confusions"
+        description = """
+        List of all the detections with predicted classes not equal to the class of the corresponding ground truth.
+        """
+
+        num_errors = (
+            self.summaries[kwargs.get("evaluator_id", 0)]["ClassificationError"]
+            + self.summaries[kwargs.get("evaluator_id", 0)][
+                "ClassificationAndLocalizationError"
+            ]
+        )
+
+        if num_errors == 0:
+            return empty_section(
+                section_id=section_id,
+                title=title,
+                description=f"""
+                <p>{description}</p>
+                <p>No {title.lower()} were found.</p>
+                """,
+            )
+
+        get_label_func = lambda x: f"Ground Truth: Class {x}"
+
+        def add_metadata_func(
+            x: dict, error: ClassificationAndLocalizationError
+        ) -> dict:
+            x.update(
+                {
+                    "caption": " | ".join(
+                        [
+                            x["image_name"],
+                            f"Pred: Class {x['pred_class']}",
+                            f"Conf { x['confidence'] }",
+                            f"W{x['bbox_width']}",
+                            f"H{x['bbox_height']}",
+                            f"IoU {x['iou']}",
+                            f"CLuster { x['cluster'] }",
+                        ]
+                    ),
+                }
+            )
+
+            return x
+
+        kwargs.update(
+            dict(
+                error_type=ClassificationError,
+                color=[ErrorColor.WHITE, ErrorColor.CLS],
+                axis=1,
+                label_attr="gt_label",
+                get_bbox_func=get_both_bboxes,
+                get_label_func=get_label_func,
+                add_metadata_func=add_metadata_func,
+            )
+        )
+
+        cls_classwise_dict = self.error_classwise_dict(**kwargs)
+
+        kwargs.update(
+            dict(
+                error_type=ClassificationAndLocalizationError,
+                color=[ErrorColor.WHITE, ErrorColor.CLL],
+                axis=1,
+                get_bbox_func=get_both_bboxes,
+                label_attr="gt_label",
+                get_label_func=get_label_func,
+                add_metadata_func=add_metadata_func,
+            )
+        )
+
+        cll_classwise_dict = self.error_classwise_dict(**kwargs)
+        fig = self.error_classwise_ranking(
+            [ClassificationError, ClassificationAndLocalizationError]
+        )
+
+        # regroup by confusion pairs
+        def regroup_dict(
+            classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]],
+            source_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]],
+        ) -> None:
+            for _, (_, clusters) in source_dict.items():
+                for cluster, error_figs in clusters.items():
+                    for error_fig in error_figs[0]:
+                        confusion_idx = (error_fig["gt_class"], error_fig["pred_class"])
+                        if confusion_idx not in classwise_dict:
+                            classwise_dict[confusion_idx] = (
+                                f"gt={confusion_idx[0]} → pred={confusion_idx[1]}",
+                                dict(),
+                            )
+                        if cluster not in classwise_dict[confusion_idx][1]:
+                            classwise_dict[confusion_idx][1][cluster] = [[]]
+                        classwise_dict[confusion_idx][1][cluster][0].append(error_fig)
+
+        classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
+        regroup_dict(classwise_dict, cls_classwise_dict)
+        regroup_dict(classwise_dict, cll_classwise_dict)
+
+        return Section(
+            id=section_id,
+            title=title,
+            description=description,
+            contents=[
+                Content(
+                    type=ContentType.PLOT,
+                    header="Ranking",
+                    description=(
+                        "The following plot shows the distribution of classification"
+                        " errors."
+                    ),
+                    content=dict(plot=fig),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Visualizations",
+                    description=(
+                        "The following is a montage of the classification errors."
+                    ),
+                    content=classwise_dict,
+                ),
+            ],
+        )
+
+    @logger()
+    def duplicate_error(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the duplicate errors in the dataset.
 
         Parameters
@@ -1121,7 +1270,7 @@ class Inspector:
         description = f"""
             List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction.
             """
-        if self.overall_summary[section_id] == 0:
+        if self.summaries[kwargs.get("evaluator_id", 0)]["DuplicateError"] == 0:
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -1195,7 +1344,7 @@ class Inspector:
         )
 
     @logger()
-    def missed_error(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
+    def missed_error(self, **kwargs) -> Section:
         """Generate a section visualizing the missed errors in the dataset.
 
         Parameters
@@ -1214,7 +1363,7 @@ class Inspector:
         description = """
             List of all the ground truths that have no corresponding prediction.
             """
-        if self.overall_summary[section_id] == 0:
+        if self.summaries[kwargs.get("evaluator_id", 0)]["MissedError"] == 0:
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -1248,7 +1397,6 @@ class Inspector:
                 axis=0,
                 get_label_func=get_label_func,
                 add_metadata_func=add_metadata_func,
-                evaluator_id=0,
             )
         )
 
@@ -1277,7 +1425,7 @@ class Inspector:
                 "Bad Labels",
                 "List of all the missed detections that have bad labels.",
             ),
-            "unseen": ("Unseen", "List of all other missed detections."),
+            "others": ("Others", "List of all other missed detections."),
         }
 
         groups: Dict[str, List[Error]] = self.missed_groups()[kwargs["evaluator_id"]]
@@ -1347,7 +1495,7 @@ class Inspector:
         *,
         min_size: int = 32,
         var_threshold: float = 100,
-    ):
+    ) -> List[Dict[str, list]]:
         KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
 
         errorlist_dicts = (
@@ -1365,7 +1513,7 @@ class Inspector:
                 "occluded": [],
                 "truncated": [],
                 "bad_label": [],  # subjective
-                "unseen": [],
+                "others": [],
             }
             for _ in range(len(errorlist))
         ]
@@ -1399,12 +1547,12 @@ class Inspector:
                         count += 1
 
                     if count == 0:
-                        groups[i]["unseen"].append(error)
+                        groups[i]["others"].append(error)
 
         return groups
 
     @logger()
-    def true_positives(self, **kwargs: dict) -> Tuple[Dict[int, Dict], bytes]:
+    def true_positives(self, **kwargs: dict) -> Section:
         """Generate a section visualizing the true positives in the dataset.
 
         Parameters
@@ -1423,7 +1571,7 @@ class Inspector:
         description = f"""
             List of all the true positive detections. No prediction was made below <span class="code">conf_threshold={ self.overall_summary["conf_threshold"] }</span>.
             """
-        if self.overall_summary["true_positives"] == 0:
+        if self.summaries[kwargs.get("evaluator_id", 0)]["true_positives"] == 0:
             return empty_section(
                 section_id=section_id,
                 title=title,
@@ -1501,7 +1649,13 @@ class Inspector:
         Tuple[dict, dict]
             A tuple of dictionaries containing the sections and the section names
         """
-        order = order or {}
+        if order is not None:
+            pass
+        elif isinstance(weights, ErrorWeights):
+            order = weights.orders
+        else:
+            order = {}
+
         order["overview"] = order.get("overview", math.inf)
         order["TP"] = order.get("TP", -1)
 
@@ -1509,9 +1663,8 @@ class Inspector:
 
         func_mapping = {
             "BKG": self.background_error,
-            "CLS": self.classification_error,
+            "confusions": self.confusions,
             "LOC": self.localization_error,
-            "CLL": self.classification_and_localization_error,
             "DUP": self.duplicate_error,
             "MIS": self.missed_error,
             "TP": self.true_positives,
@@ -1537,12 +1690,8 @@ class Inspector:
         section_names = {
             "overview": ("Overview", "Overview"),
             "BKG": ("BackgroundError", "Background Errors"),
-            "CLS": ("ClassificationError", "Classification Errors"),
             "LOC": ("LocalizationError", "Localization Errors"),
-            "CLL": (
-                "ClassificationAndLocalizationError",
-                "Classification and Localization Errors",
-            ),
+            "confusions": ("Confusions", "Confusions"),
             "DUP": ("DuplicateError", "Duplicate Errors"),
             "MIS": ("MissedError", "Missed Errors"),
             "TP": ("TruePositive", "True Positives"),

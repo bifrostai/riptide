@@ -29,6 +29,18 @@ ERROR_WEIGHTS = {
     },
 }
 
+ERROR_ORDERS = {
+    "precision": {
+        "confusions": 10,
+    },
+    "recall": {
+        "confusions": 1.001,
+    },
+    "f1": {
+        "confusions": 10,
+    },
+}
+
 
 class ErrorWeights(str, Enum):
     PRECISION = "precision"
@@ -38,3 +50,7 @@ class ErrorWeights(str, Enum):
     @property
     def weights(self):
         return ERROR_WEIGHTS[self]
+
+    @property
+    def orders(self):
+        return ERROR_ORDERS[self]
