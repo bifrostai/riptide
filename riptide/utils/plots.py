@@ -55,6 +55,8 @@ def boxplot(
     area_info : dict
         Dictionary of class index to area
     """
+    np.random.seed(123)
+
     if ax is None:
         ax = plt.gca()
 
