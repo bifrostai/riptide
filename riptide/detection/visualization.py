@@ -72,7 +72,7 @@ class Inspector:
         if isinstance(evaluators, list):
             assert (
                 len({e.image_dir for e in evaluators}) == 1
-            ), "Models should be evaluated on the same dataset."
+            ), "Models should be evaluated on the same image directory."
         else:
             evaluators = [evaluators]
 
@@ -84,6 +84,7 @@ class Inspector:
 
         self.num_images = evaluator.num_images
         self.image_dir = evaluator.image_dir
+        self.categories = evaluator.categories
         # NOTE: Assumes all models have the same conf_threshold and iou_threshold
         self.conf_threshold = round(evaluator.evaluations[0].conf_threshold, 2)
         self.iou_threshold = (
@@ -593,7 +594,7 @@ class Inspector:
 
         get_bbox_func = get_bbox_func or get_bbox_by_attr
         add_metadata_func = add_metadata_func or add_metadata
-        get_label_func = get_label_func or (lambda label: f"Predicted: Class {label}")
+        get_label_func = get_label_func or (lambda label: f"Predicted: {label}")
 
         if clusters is None:
             projector = self.projector
@@ -637,7 +638,7 @@ class Inspector:
 
                 if label not in classwise_dict:
                     classwise_dict[label] = (
-                        get_label_func(label),
+                        get_label_func(self.categories.get(label, f" Class {label}")),
                         dict(),
                     )
 
@@ -699,7 +700,7 @@ class Inspector:
             error_types = [error_types]
 
         confusion_matrices = [
-            self.evaluators[evaluator_id].get_confusions()[error_type.__name__]
+            self.evaluators[evaluator_id].get_confusions()[error_type.code]
             for error_type in error_types
         ]
 
@@ -735,7 +736,11 @@ class Inspector:
                 )
             ax.set_yticks(range(len(confusion_dict)))
             ax.set_yticklabels(
-                [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
+                [
+                    f"gt={self.categories.get(k[0], f'Class {k[0]}')} pred={self.categories.get(k[1], f'Class {k[1]}')}"
+                    for k in confusion_dict.keys()
+                ],
+                minor=False,
             )
             ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
             ax.set_title(title)
@@ -1069,8 +1074,13 @@ class Inspector:
                     for error_fig in error_figs[0]:
                         confusion_idx = (error_fig["gt_class"], error_fig["pred_class"])
                         if confusion_idx not in classwise_dict:
+                            labels = self.categories.get(
+                                confusion_idx[0], f"Class {confusion_idx[0]}"
+                            ), self.categories.get(
+                                confusion_idx[1], f"Class {confusion_idx[1]}"
+                            )
                             classwise_dict[confusion_idx] = (
-                                f"gt={confusion_idx[0]} → pred={confusion_idx[1]}",
+                                f"gt={labels[0]} → pred={labels[1]}",
                                 dict(),
                             )
                         if cluster not in classwise_dict[confusion_idx][1]:
@@ -1235,7 +1245,8 @@ class Inspector:
                 fig = fig.copy()
                 if error.gt_label not in figs[group]:
                     figs[group][error.gt_label] = (
-                        f"Missed: Class {error.gt_label}",
+                        "Missed:"
+                        f" {self.categories.get(error.gt_label, f'Class {error.gt_label}')}",
                         {},
                     )
 

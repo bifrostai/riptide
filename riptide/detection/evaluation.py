@@ -29,7 +29,7 @@ from riptide.utils.colors import ErrorColor
 from riptide.utils.logging import logger
 from riptide.utils.models import GTData
 
-ERROR_TYPES = [
+ERROR_TYPES: List[Error] = [
     BackgroundError,
     ClassificationError,
     LocalizationError,
@@ -114,6 +114,8 @@ class Evaluation:
         pred_labels: torch.Tensor,
         gt_ids: torch.Tensor,
         gt_labels: torch.Tensor,
+        bg_iou_threshold: float = 0.1,
+        fg_iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
     ) -> None:
         self.idx = idx
@@ -126,6 +128,8 @@ class Evaluation:
         self.gt_ids = gt_ids
         self.gt_labels = gt_labels
         self.conf_threshold = conf_threshold
+        self.bg_iou_threshold = bg_iou_threshold
+        self.fg_iou_threshold = fg_iou_threshold
 
         used_mask = pred_scores >= conf_threshold
         unused_mask = ~used_mask
@@ -279,11 +283,10 @@ class ObjectDetectionEvaluation(Evaluation):
             pred_labels=pred_labels,
             gt_ids=gt_ids,
             gt_labels=gt_labels,
+            bg_iou_threshold=bg_iou_threshold,
+            fg_iou_threshold=fg_iou_threshold,
             conf_threshold=conf_threshold,
         )
-        self.bg_iou_threshold = bg_iou_threshold
-        self.fg_iou_threshold = fg_iou_threshold
-
         self.pred_bboxes = pred_bboxes
         self.gt_bboxes = gt_bboxes
 
@@ -880,17 +883,20 @@ class Evaluator:
         evaluations: list[Evaluation],
         name: str = "Model",
         gt_ids_map: torch.Tensor = None,
+        categories: dict[int, str] = None,
     ) -> None:
         self.created_datetime = datetime.now()
         self.updated_datetime = self.created_datetime
         self.evaluations = evaluations
         self.name = name
+        self.categories = categories or {}
         self._gt_ids_map = gt_ids_map
         self._collate_evaluations()
 
     def _collate_evaluations(self):
         errorlist_dict = self._init_errorlist_dict()
-        confusion_matrices = {}
+        confusion_matrices = {error_type.code: {} for error_type in ERROR_TYPES}
+        confusion_matrices[None] = {}
 
         for evaluation in self.evaluations:
             errors = evaluation.errors.pred_errors + evaluation.errors.gt_errors
@@ -900,26 +906,24 @@ class Evaluator:
             )
             for error, confusion in zip(errors, confusions):
                 if error is not None:
-                    error_name = error.__class__.__name__
+                    error_code = error.code
                     self._add_error_to_errorlist_dict(error, errorlist_dict, evaluation)
-                    confusion_pair = (
-                        error_name,
-                        error.gt_label or 0,
-                        error.pred_label or 0,
-                    )
+                    confusion_pair = (error.gt_label or 0, error.pred_label or 0)
                 else:
-                    error_name = "NON"
-                    confusion_pair = (error_name, 0, 0)
+                    error_code = None
+                    confusion_pair = (0, 0)
 
-                if confusion_pair not in confusion_matrices:
-                    confusion_matrices[confusion_pair] = [
+                confusion_matrix = confusion_matrices[error_code]
+                if confusion_pair not in confusion_matrix:
+                    confusion_matrix[confusion_pair] = [
                         0 for _ in range(len(Confusion))
                     ]
-                confusion_matrices[confusion_pair][confusion.value] += 1
+                confusion_matrix[confusion_pair][confusion.value] += 1
 
         confusions_list = []
-        for k, v in confusion_matrices.items():
-            confusions_list.append([*k, *v])
+        for error_type, v in confusion_matrices.items():
+            for k, confusions in v.items():
+                confusions_list.append([error_type or "NON", *k, *confusions])
 
         self._errorlist_dict = errorlist_dict
         self._confusion_matrices = confusion_matrices
