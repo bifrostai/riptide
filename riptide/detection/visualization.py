@@ -699,7 +699,7 @@ class Inspector:
             error_types = [error_types]
 
         confusion_matrices = [
-            self.evaluators[evaluator_id].get_confusion_matrices()[error_type.__name__]
+            self.evaluators[evaluator_id].get_confusions()[error_type.__name__]
             for error_type in error_types
         ]
 

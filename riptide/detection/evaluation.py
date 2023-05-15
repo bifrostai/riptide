@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
+import pandas as pd
 import torch
 from termcolor import colored
 from torchvision.io import read_image
@@ -889,8 +890,7 @@ class Evaluator:
 
     def _collate_evaluations(self):
         errorlist_dict = self._init_errorlist_dict()
-        confusion_matrices = {error_type.__name__: {} for error_type in ERROR_TYPES}
-        confusion_matrices[None] = {}
+        confusion_matrices = {}
 
         for evaluation in self.evaluations:
             errors = evaluation.errors.pred_errors + evaluation.errors.gt_errors
@@ -900,22 +900,33 @@ class Evaluator:
             )
             for error, confusion in zip(errors, confusions):
                 if error is not None:
-                    self._add_error_to_errorlist_dict(error, errorlist_dict, evaluation)
-                    confusion_pair = (error.gt_label, error.pred_label)
                     error_name = error.__class__.__name__
+                    self._add_error_to_errorlist_dict(error, errorlist_dict, evaluation)
+                    confusion_pair = (
+                        error_name,
+                        error.gt_label or 0,
+                        error.pred_label or 0,
+                    )
                 else:
-                    error_name = None
-                    confusion_pair = (None, None)
+                    error_name = "NON"
+                    confusion_pair = (error_name, 0, 0)
 
-                confusion_matrix = confusion_matrices[error_name]
-                if confusion_pair not in confusion_matrix:
-                    confusion_matrix[confusion_pair] = [
+                if confusion_pair not in confusion_matrices:
+                    confusion_matrices[confusion_pair] = [
                         0 for _ in range(len(Confusion))
                     ]
-                confusion_matrix[confusion_pair][confusion.value] += 1
+                confusion_matrices[confusion_pair][confusion.value] += 1
+
+        confusions_list = []
+        for k, v in confusion_matrices.items():
+            confusions_list.append([*k, *v])
 
         self._errorlist_dict = errorlist_dict
         self._confusion_matrices = confusion_matrices
+        self._confusion_df = pd.DataFrame(
+            confusions_list,
+            columns=["error", "gt", "pred", *[c.code for c in Confusion]],
+        )
 
     def _init_errorlist_dict(self) -> Dict[str, List[Error]]:
         return {error_type.__name__: [] for error_type in ERROR_TYPES}
@@ -1011,10 +1022,28 @@ class Evaluator:
             self._collate_evaluations()
         return self._errorlist_dict
 
-    def get_confusion_matrices(self) -> Dict[Any, Dict[tuple, list]]:
+    def get_confusions(
+        self, by: str = None, key: str = None
+    ) -> Union[Dict[Any, Dict[tuple, list]], pd.DataFrame, pd.Series]:
         if self._confusion_matrices is None:
             self._collate_evaluations()
-        return self._confusion_matrices
+        if by is None:
+            return self._confusion_matrices
+        elif by == "all":
+            return self._confusion_df[["FN", "FP", "TP", "UN"]].sum(axis=0)
+
+        assert by in [
+            "error",
+            "gt",
+            "pred",
+        ], "by must be one of 'error', 'gt', or 'pred'"
+        assert (
+            key in self._confusion_df[by].unique()
+        ), f"For by={by}, key must be one of {self._confusion_df[by].unique()}"
+
+        return self._confusion_df[self._confusion_df[by] == key][
+            ["FN", "FP", "TP", "UN"]
+        ].sum(axis=0)
 
 
 class ObjectDetectionEvaluator(Evaluator):
@@ -1181,19 +1210,16 @@ class ObjectDetectionEvaluator(Evaluator):
         return super().get_errorlist_dict()
 
     def get_true_positives(self) -> int:
-        return self.get_confusion_matrices()[None][(None, None)][1]
+        return self.get_confusions(by="error", key="NON")["TP"]
 
     def get_false_positives(self) -> int:
-        fp = 0
-        for evaluation in self.evaluations:
-            fp += evaluation.confusions.get_false_positives()
-        return fp
+        return self.get_confusions(by="all")["FP"]
 
     def get_false_negatives(self) -> int:
-        fn = 0
-        for evaluation in self.evaluations:
-            fn += evaluation.confusions.get_false_negatives()
-        return fn
+        return self.get_confusions(by="all")["FN"]
+
+    def get_unused(self) -> int:
+        return self.get_confusions(by="all")["UN"]
 
     def get_precision(self, tp: int, fp: int) -> float:
         return tp / (tp + fp + 1e-7)

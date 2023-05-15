@@ -33,6 +33,7 @@ def test_background_error():
     pred_scores = torch.Tensor([0.5])
     pred_labels = torch.Tensor([1.0])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert pred_scores >= 0.5
     assert box_iou(pred_bboxes, gt_bboxes) <= 0.1
@@ -43,6 +44,7 @@ def test_background_error():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert sum(isinstance(e, BackgroundError) for e in evaluation.instances) == 1
 
@@ -63,6 +65,7 @@ def test_classification_error():
     pred_scores = torch.Tensor([0.5])
     pred_labels = torch.Tensor([2.0])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert pred_scores >= 0.5
     assert box_iou(pred_bboxes, gt_bboxes) >= 0.5
@@ -74,6 +77,7 @@ def test_classification_error():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert sum(isinstance(e, ClassificationError) for e in evaluation.instances) == 1
 
@@ -94,6 +98,7 @@ def test_localization_error():
     pred_scores = torch.Tensor([0.5])
     pred_labels = torch.Tensor([1.0])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert pred_scores >= 0.5
     assert box_iou(pred_bboxes, gt_bboxes) >= 0.1
@@ -106,6 +111,7 @@ def test_localization_error():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert sum(isinstance(e, LocalizationError) for e in evaluation.instances) == 1
 
@@ -127,6 +133,7 @@ def test_classification_localization_error():
     pred_scores = torch.Tensor([0.5])
     pred_labels = torch.Tensor([2.0])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert pred_scores >= 0.5
     assert box_iou(pred_bboxes, gt_bboxes) >= 0.1
@@ -139,6 +146,7 @@ def test_classification_localization_error():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert (
         sum(
@@ -167,6 +175,7 @@ def test_duplicate_error():
     pred_scores = torch.Tensor([0.5, 0.5])
     pred_labels = torch.Tensor([1.0, 1.0])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert all(pred_scores >= 0.5)
     assert all(box_iou(pred_bboxes, gt_bboxes) >= 0.5)
@@ -178,6 +187,7 @@ def test_duplicate_error():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert sum(isinstance(e, DuplicateError) for e in evaluation.instances) == 1
 
@@ -193,6 +203,7 @@ def test_missed_error():
     pred_scores = torch.Tensor([0.5])
     pred_labels = torch.Tensor([1.0])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert all(pred_scores >= 0.5)
     assert all(box_iou(pred_bboxes, gt_bboxes) < 0.1)
@@ -203,6 +214,7 @@ def test_missed_error():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert sum(isinstance(e, MissedError) for e in evaluation.instances) == 1
 
@@ -214,6 +226,7 @@ def test_empty_predictions():
     pred_scores = torch.Tensor([])
     pred_labels = torch.Tensor([])
     gt_labels = torch.Tensor([1.0])
+    gt_ids = torch.Tensor([0])
 
     assert len(pred_bboxes) == 0
     evaluation = ObjectDetectionEvaluation(
@@ -223,6 +236,7 @@ def test_empty_predictions():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert sum(isinstance(e, MissedError) for e in evaluation.instances) == 1
 
@@ -234,6 +248,7 @@ def test_empty_predictions_targets():
     pred_scores = torch.Tensor([])
     pred_labels = torch.Tensor([])
     gt_labels = torch.Tensor([])
+    gt_ids = torch.Tensor([])
 
     assert len(pred_bboxes) == 0
     evaluation = ObjectDetectionEvaluation(
@@ -243,6 +258,7 @@ def test_empty_predictions_targets():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     assert len(evaluation.instances) == 0
 
@@ -270,6 +286,8 @@ def test_confusion():
     pred_scores = torch.Tensor([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
     pred_labels = torch.Tensor([1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0])
     gt_labels = torch.Tensor([1.0, 1.0, 1.0])
+    gt_ids = torch.Tensor([0, 1, 2])
+
     evaluation = ObjectDetectionEvaluation(
         image_path="",
         pred_bboxes=pred_bboxes,
@@ -277,16 +295,19 @@ def test_confusion():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     issue = ObjectDetectionEvaluator([evaluation])
     tp = issue.get_true_positives()
     fn = issue.get_false_negatives()
     fp = issue.get_false_positives()
+    un = issue.get_unused()
 
     print(evaluation)
     assert tp == 2
     assert fp == 6
     assert fn == 1
+    assert un == 0
     assert tp + fp == len(pred_labels)
     assert tp + fn == len(gt_labels)
 
@@ -314,6 +335,8 @@ def test_confusion_with_unused_predictions():
     pred_scores = torch.Tensor([0.5, 0.1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
     pred_labels = torch.Tensor([1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0])
     gt_labels = torch.Tensor([1.0, 1.0, 1.0])
+    gt_ids = torch.Tensor([0, 1, 2])
+
     evaluation = ObjectDetectionEvaluation(
         image_path="",
         pred_bboxes=pred_bboxes,
@@ -321,17 +344,20 @@ def test_confusion_with_unused_predictions():
         pred_labels=pred_labels,
         gt_bboxes=gt_bboxes,
         gt_labels=gt_labels,
+        gt_ids=gt_ids,
     )
     issue = ObjectDetectionEvaluator([evaluation])
     tp = issue.get_true_positives()
     fn = issue.get_false_negatives()
     fp = issue.get_false_positives()
+    un = issue.get_unused()
 
     print(evaluation)
     assert tp == 1
     assert fp == 6
     assert fn == 2
-    assert tp + fp == len(pred_labels) - 1
+    assert un == 1
+    assert tp + fp + un == len(pred_labels)
     assert tp + fn == len(gt_labels)
 
 
