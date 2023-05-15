@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "section.html" import render_section %}
+
+{% block content %}
+{% for section in sections.values() %}
+{{ render_section(section) }}
+{% endfor %}
+{% for infobox in infoboxes %}
+<div class="infobox">
+    <div class="infobox-title">{{ infobox['title'] }}</div>
+    <div class="infobox-content">{{ infobox['content'] }}</div>
+</div>
+{% endfor %}
+{% endblock %}

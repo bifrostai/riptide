@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from riptide.detection.evaluation import Evaluation, Evaluator
+from riptide.utils.colors import ErrorColor
 
 
 class FlowVisualizer:
@@ -14,8 +15,6 @@ class FlowVisualizer:
     ---------
     evaluators: List[Evaluator]
         List of evaluators to compare
-    coco_annotations: str
-        Path to COCO annotations file
     img_dir: str
         Path to directory containing images
 
@@ -32,24 +31,30 @@ class FlowVisualizer:
 
     statuses = ["CLS", "LOC", "CLL", "DUP", "MIS", "TP", "FN"]
 
-    def __init__(
-        self, evaluators: List[Evaluator], coco_annotations: str, img_dir: str
-    ):
+    def __init__(self, evaluators: List[Evaluator], img_dir: str):
         assert (
             len(evaluators) >= 2
         ), "At least two evaluators are required to create a flow diagram"
         # TODO: Check that all evaluators are based on the same targets (i.e. same COCO annotations file)
         self.evaluators = evaluators
-        self.coco_annotations = coco_annotations
         self.img_dir = img_dir
 
         self.confusion_matrices: Dict[Tuple[int, int], Dict[str, dict]] = dict()
 
+        self._graph: Tuple[pd.DataFrame, pd.DataFrame] = None
+
+    @property
+    def graph(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Returns nodes and edges of gt status flow graph between first two evaluators"""
+        if self._graph is None:
+            self._graph = self.generate_graph()
+        return self._graph
+
     def compute_status_flow(
         self, evaluations: List[Tuple[int, Evaluation]]
-    ) -> Tuple[List[Dict], List[Dict]]:
-        unassigned: List[Dict] = []
-        gt_status_flow = []
+    ) -> Tuple[List[dict], List[dict]]:
+        unassigned: List[dict] = []
+        gt_status_flow: List[dict] = []
         for idx, evaluation in evaluations:
             for gt_id, statuses in evaluation.get_status().items():
                 if gt_id is None:
@@ -62,19 +67,14 @@ class FlowVisualizer:
                     continue
                 # take highest confidence status as representative
                 status = statuses[0].copy()
-
-                num_tp = status.score if status.state.code == "TP" else 0
-                total = sum([s.score for s in statuses])
-                status.score = (
-                    2 * num_tp / (total + num_tp) if total + num_tp > 0 else 0
-                )
+                status.score = int(status.state.code == "TP")
 
                 gt_status_flow.append({"gt_id": gt_id, "idx": idx, **status.todict()})
         return unassigned, gt_status_flow
 
     def generate_graph(
         self,
-        ids: List[int] = [0, 1],
+        ids: List[int] = (0, 1),
         labels: Union[str, int, List[int]] = "all",
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if labels == "all":
@@ -96,7 +96,7 @@ class FlowVisualizer:
         df = pd.DataFrame.from_records(gt_status_flow).convert_dtypes()
         unassigned_df = pd.DataFrame.from_records(unassigned).convert_dtypes()
 
-        nodes = (
+        nodes: pd.DataFrame = (
             pd.concat([df, unassigned_df], ignore_index=True)
             .groupby(["idx", "state"])[["score", "iou", "gt_id"]]
             .agg(
@@ -115,7 +115,7 @@ class FlowVisualizer:
         ]
         nodes = nodes.rename(columns={"gt_id_set": "gt_ids"})
 
-        edges = pd.merge(
+        edges: pd.DataFrame = pd.merge(
             nodes, nodes, how="cross", suffixes=("_source", "_target")
         ).rename(
             columns={
@@ -137,7 +137,6 @@ class FlowVisualizer:
             edges["gt_ids"].apply(sum).notna(), edges["count"], inplace=True
         )
         edges["score"] = edges["score_mean_target"] - edges["score_mean_source"]
-        # edges = edges[edges["score"] > 0]
         edges["score_std"] = (
             edges["score_std_source"] ** 2 + edges["score_std_target"] ** 2
         ) ** (0.5)
@@ -196,26 +195,19 @@ class FlowVisualizer:
             raise NotImplementedError("Only sankey diagram is supported for now")
 
         # region: build sankey diagram
-
-        node_labels = [
-            f"{models[ids[attr['idx']]]} {attr['state']}"
-            for node, attr in nodes.iterrows()
-        ]
-
-        ## source represents the indexes of the labels that are to be used
-        ## as the starting point of a "sankey flow"
-        ## the value in the source array corresponds to
-        ## the value in same position in the target array
-
-        ## target represents the indexes of the labels that are to be used
-        ## as the ending point of a "sankey flow"
-        ## the value in the target array corresponds to
-        ## the value in same position in the source array
+        node_labels = []
+        node_colors = []
+        for _, attr in nodes.iterrows():
+            node_labels.append(f"{models[ids[attr['idx']]]} {attr['state']}")
+            node_colors.append(ErrorColor(attr["state"]).rgb(0.8, as_tuple=False))
 
         source, target = edges[["source", "target"]].values.T.tolist()
         attrs = edges[["weight", "gt_ids", "score"]].to_dict(orient="records")
 
         edge_labels = [f"{attr['score']:.2f}" for attr in attrs]
+        edge_colors = [
+            ErrorColor(code).rgb(0.3, False) for code in edges["state_source"].values
+        ]
 
         value = [attr["weight"] for attr in attrs]
 
@@ -228,15 +220,16 @@ class FlowVisualizer:
                     thickness=20,
                     line=dict(color="black", width=0.1),
                     label=node_labels,
-                    color="blue",
+                    color=node_colors,
                     # customdata = [list(dictionary.values()) for dictionary in self.confusion_matrix.values()] + [list]
                     # hovertemplate='%{label} breakdown:<br> ',
                 ),
                 link=dict(
-                    source=source,  # indices correspond to labels, eg A1, A2, A1, B1, ...
+                    source=source,
                     target=target,
                     value=value,
                     label=edge_labels,
+                    color=edge_colors,
                 ),
             ),
             layout=dict(

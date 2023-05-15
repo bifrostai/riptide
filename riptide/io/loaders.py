@@ -159,8 +159,13 @@ class COCOLoader:
             results_dict[file_name]["predictions"]["labels"].append(category_id)
 
         evaluations = []
+        start = 0
+        gt_ids_map = []
         for file_name, pred_gt_dict in results_dict.items():
-            gt_ids = torch.tensor(pred_gt_dict["targets"]["ids"])
+            coco_ids = torch.tensor(pred_gt_dict["targets"]["ids"])
+            gt_ids_map.append(coco_ids)
+            end = start + len(coco_ids)
+            gt_ids = torch.arange(start, end)
             gt_bboxes = torch.tensor(pred_gt_dict["targets"]["boxes"])
             if len(gt_bboxes) == 0:
                 gt_bboxes = torch.empty((0, 4))
@@ -187,4 +192,9 @@ class COCOLoader:
             )
             evaluations.append(evaluation)
 
-        return evaluator_cls(evaluations, image_dir=self.image_dir, **kwargs)
+        return evaluator_cls(
+            evaluations,
+            image_dir=self.image_dir,
+            gt_ids_map=torch.cat(gt_ids_map),
+            **kwargs
+        )

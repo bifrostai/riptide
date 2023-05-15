@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "riptide"
-version = "0.2.0"
+version = "0.3.0"
 description = "Bifrost Object Detection Evaluation Suite"
 authors = ["huangjoel <joel@bifrost.ai>", "Sean <sean_yap@bifrost.ai"]
 
@@ -17,6 +17,8 @@ matplotlib = "^3.6.1"
 tqdm = "^4.65.0"
 plotly = "^5.14.0"
 scikit-learn = "^1.2.2"
+pydantic = "^1.10.7"
+hdbscan = "^0.8.29"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
