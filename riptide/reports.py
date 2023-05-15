@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 from typing import Dict, List
 
 from jinja2 import Environment, FileSystemLoader
@@ -34,7 +33,6 @@ class HtmlReport:
         if not isinstance(evaluators, list):
             evaluators = [evaluators]
         self.evaluators = evaluators
-        self.evaluator = evaluators[0]
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
         self.inspector = Inspector(evaluators)
 
