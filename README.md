@@ -40,4 +40,4 @@ report = HtmlReport(evaluator).render("path/to/output/folder")
 - [Understanding Evaluations](docs/understanding_evaluations.md) <br/>
         - [Inspecting Individual Images](docs/understanding_evaluations.md#inspecting-individual-images)
 - [Understanding Error Types](docs/error_types.md)
-- [Inspecting the changes in status of Ground Truths across different models](#inspecting-the-changes-in-status-of-ground-truths-across-different-models)
+- [Comparing Models](docs/comparing_models.md)
