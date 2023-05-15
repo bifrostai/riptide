@@ -168,15 +168,12 @@ body {
     align-content: flex-start;
 }
 
-.class-image-container.gap {
-    column-gap: 5em;
-    position: absolute;
-}
 
 .class-image-container.bg {
     padding: 0.5em 0.2em;
     background-color: #395B64;
     border-radius: 0.6em;
+    justify-content: space-between;
 }
 
 .class-name {
