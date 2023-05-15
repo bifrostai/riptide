@@ -1,21 +1,16 @@
 import logging
 import math
-from typing import Any, Callable, Dict, Iterable, List, Set, Tuple, Type, Union
+from typing import Callable, Dict, Iterable, List, Set, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.nn.functional import conv2d
 from torchvision.io import read_image
-from torchvision.ops.boxes import box_iou
 from torchvision.transforms import Grayscale
 from torchvision.transforms.functional import crop
 from tqdm import tqdm
 
-from riptide.detection.characterization import (
-    compute_aspect_variance,
-    compute_size_variance,
-)
 from riptide.detection.confusions import Confusion
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
@@ -31,22 +26,17 @@ from riptide.detection.errors import (
 from riptide.detection.evaluation import ObjectDetectionEvaluator
 from riptide.flow import FlowVisualizer
 from riptide.report.section import Content, ContentType, Section
-from riptide.utils.colors import ErrorColor, gradient
+from riptide.utils.colors import ErrorColor
 from riptide.utils.crops import (
     add_metadata,
     generate_fig,
     get_bbox_by_attr,
-    get_both_bboxes,
     get_crop_options,
 )
 from riptide.utils.enums import ErrorWeights
 from riptide.utils.image import encode_base64
 from riptide.utils.logging import logger
-from riptide.utils.models import GTData
 from riptide.utils.plots import (
-    PALETTE_BLUE,
-    PALETTE_DARKER,
-    PALETTE_GREEN,
     annotate_heatmap,
     boxplot,
     heatmap,

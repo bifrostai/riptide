@@ -23,7 +23,7 @@ class Confusions:
     """Confusions assigned to predictions or ground truths."""
 
     def __init__(
-        self, evaluation: "ImageEvaluation", num_preds: int, num_gts: int
+        self, evaluation: "ObjectDetectionEvaluation", num_preds: int, num_gts: int
     ) -> None:
         self.evaluation = evaluation
         self.num_preds = num_preds

@@ -5,12 +5,11 @@ import numpy as np
 import plotly.graph_objects as go
 from matplotlib import colors
 from matplotlib.colorbar import Colorbar
-from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 from matplotlib.ticker import StrMethodFormatter
 from plotly.offline import plot
 
-from riptide.utils.colors import ErrorColor, gradient
+from riptide.utils.colors import gradient
 
 # region: mpl setup
 PALETTE_DARKER = "#222222"
