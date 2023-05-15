@@ -40,7 +40,7 @@ To categorize how the missed errors are manifested, we can further subdivide the
 - **Crowded**: The bounding box for the associated ground truth overlaps with another object.
     - This is determined by calculating the IoU of the ground truth with all other ground truths in the image, and if the maximum IoU is above `iou_threshold`, then the ground truth is considered crowded.
 - **Occluded**: The associated ground truth is occluded by the environment.
-- **Truncated**: The bounding box for the associated ground truth is truncated by the image boundary.
+- **Truncated**: The bounding box for the associated ground truth is truncated by/ located close to the image boundary.
     - That is, at least one of the four corners of the bounding box within `min_size // 2` pixels of the image boundary.
 - **Not Enough Visual Features**: The associated ground truth is either too small or too blur to be reasonably detected.
     - A ground truth is too small if at least one of its dimensions is below `min_size`.

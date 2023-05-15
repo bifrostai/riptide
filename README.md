@@ -28,106 +28,16 @@ from riptide.reports import HtmlReport
 evaluator = ObjectDetectionEvaluator.from_dicts(
     targets_dict_file="targets.pt",
     predictions_dict_file="predictions.pt",
-    image_dir="maritime",
+    image_dir="path/to/images",
     conf_threshold=0.5,
 )
 print(evaluator.summarize())
 report = HtmlReport(evaluator).render("path/to/output/folder")
 ```
 
-## Understanding Evaluations
-To obtain a summary of the predictions, use `summarize()`. This gives a breakdown of each error type, the confusion counts, and the precision, recall and F1 score.
-```python
-evaluator.summarize()
-```
+## Documentation
 
-To obtain a classwise summary of the predictions, use `classwise_summarize()`. This gives a classwise breakdown of the above.
-```python
-evaluator.classwise_summarize()
-```
-
-## Inspecting Individual Images
-To diagnose the error for a single image, you can access the `evaluations` attribute of the evaluator.
-```python
-print(evaluator.evaluations[0])
-
->>> ObjectDetectionEvaluation(pred=2, gt=1)
-myimage_000.png
-                gt0
-================================================
-        cls     3       cfu     err     score
-================================================
-pred0   3       0.94    [TP]     ---    0.98
-pred1   3       0.47    [UN]     ---    0.43
-================================================
-        cfu     [TP]
-        err      ---
-```
-This indicates that in this image, there was one ground truth (`gt0`), two predictions (`pred0` and `pred1`). There was one true positive (TP), and one **unused prediction** (UN), since its score (0.43) is below the confidence threshold above which predictions are considered (default: 0.5). If this were to be lowered, then `pred1` would be considered a false positive (FP), and further classified into one of the error types (in this case, a LocalizationError):
-```
-                gt0
-================================================
-        cls     3       cfu     err     score
-================================================
-pred0   3       0.94    [TP]     ---    0.98
-pred1   3       0.47    [FP]    [LOC]   0.43
-================================================
-        cfu     [TP]
-        err      ---
-```
-
-## Inspecting the changes in status of Ground Truths across different models
-To evaluate if the changes made to the model (e.g. changing model hyperparameters, changing the training datset) were successful in solving the problem (e.g. Did changing XXX help to resolve these Localization Errors? What are their status now?), we can use the module `riptide.flow` to identify the change in state of ground truth across two different models. (Note that both models need to use the same ground truth images and annotations)
-
-The magnitude of the change in status of ground truths can be visualized overall in terms of a sankey diagram, and the individual ground truth in a specific flow (e.g. LOC to TP) can be visualized in terms of a montage.
-
-Below is an example of how the sankey diagram and montage of a flow can be created. Currently this code has only been tested to work for Single Class GT flows; more functionalities should be added if we want to analyse gt flows within a single class in multi class models
-
-```python
-from riptide.detection.evaluation import Evaluator
-from riptide.flow import FlowVisualizer
-
-## Instantiate Evaluator instances for each model and define paths to target coco annotations and image directory
-evaluators: list[Evaluator]
-COCO_PATH: str = "/path/to/coco_annotations.json"
-IMAGE_DIR: str = "/path/to/images"
-
-## Instantiate FlowVisualizer
-flow = FlowVisualizer(evaluators, COCO_PATH, IMAGE_DIR)
-
-## Show figure
-flow.visualize().show()
-```
-
-## Understanding Error Types
-There are three threshold values:
-- Background IoU threshold `bg_iou_threshold`: Detections smaller than this level are not considered
-- Foreground IoU threshold `fg_iou_threshold`: Detections must be >= this level to be considered **correct**
-- Confidence threshold `conf_threshold`: Detections must be >= this confidence to be considered
-
-### BackgroundError
-- Is above `conf_threshold` and does not meet the `bg_iou_threshold` with any ground truth
-- Counts as a false positive to the predicted class
-
-### ClassificationError
-- Is above `conf_threshold` and `fg_iou_threshold`, but the class label is incorrect
-- Counts as a false positive to the predicted class
-- Counts as a false negative to the ground truth class (missed it)
-
-### LocalizationError
-- Is above `conf_threshold` and is between `bg_iou_threshold` and `fg_iou_threshold`, and the class label is **correct**
-- Counts as a false positive to the predicted class
-- Counts as a false negative to the ground truth class (missed it)
-
-### ClassificationAndLocalizationError
-- Is above `conf_threshold` and is between `bg_iou_threshold` and `fg_iou_threshold`, and the class label is **incorrect**
-- Counts as a false positive to the predicted class
-- Counts as a false negative to the ground truth class (missed it)
-
-### DuplicateError
-- Is above `conf_threshold` and `fg_iou_threshold`, but a simultaneous valid prediction has been made (true positive), which has a higher IoU than this one
-- Counts as a false positive to the predicted class
-
-### MissedError
-- No prediction was made above `conf_threshold` that had IoU above `bg_iou_threshold` (otherwise it would be considered a `LocalizationError`)
-- Counts as a false negative to the ground truth class
+- [Understanding Evaluations](docs/understanding_evaluations.md) <br/>
+        - [Inspecting Individual Images](docs/understanding_evaluations.md#inspecting-individual-images)
+- [Understanding Error Types](docs/error_types.md)
+- [Inspecting the changes in status of Ground Truths across different models](#inspecting-the-changes-in-status-of-ground-truths-across-different-models)
