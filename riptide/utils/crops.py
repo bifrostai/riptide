@@ -54,7 +54,7 @@ def label_func_generator(pre: str = "Class ", post: str = "") -> Callable[[int],
     return func
 
 
-def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
+def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
     """Returns the base crop options for the given error type
 
     Parameters
@@ -68,6 +68,9 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
         The crop options for the given error type
     """
 
+    if kwargs is None:
+        kwargs = dict()
+
     if error_type is BackgroundError:
         kwargs.update(
             dict(
@@ -76,7 +79,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
-                projector_attr="pred_projector",
                 get_bbox_func=get_bbox_by_attr,
                 add_metadata_func=add_metadata,
                 get_label_func=label_func_generator("Predicted: Class "),
@@ -106,7 +108,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="gt_label",
-                projector_attr="pred_projector",
                 get_bbox_func=get_bbox_by_attr,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Ground Truth: Class "),
@@ -138,7 +139,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
-                projector_attr="pred_projector",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Ground Truth: Class "),
@@ -174,7 +174,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="gt_label",
-                projector_attr="pred_projector",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Ground Truth: Class "),
@@ -219,7 +218,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
-                projector_attr="pred_projector",
                 get_bbox_func=get_bbox_func,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Ground Truth: Class "),
@@ -249,7 +247,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=0,
                 bbox_attr="gt_bbox",
                 label_attr="gt_label",
-                projector_attr="gt_projector",
                 get_bbox_func=get_bbox_by_attr,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Missed: Class "),
@@ -281,7 +278,6 @@ def get_crop_options(error_type: Type[Error], **kwargs) -> dict:
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
-                projector_attr="pred_projector",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Ground Truth: Class "),
