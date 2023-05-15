@@ -67,13 +67,7 @@ class FlowVisualizer:
                     continue
                 # take highest confidence status as representative
                 status = statuses[0].copy()
-
-                num_tp = int(status.state.code == "TP")
-                total = len(statuses)
-                status.score = (
-                    # 2 * num_tp / (total + num_tp) if total + num_tp > 0 else 0
-                    num_tp
-                )
+                status.score = int(status.state.code == "TP")
 
                 gt_status_flow.append({"gt_id": gt_id, "idx": idx, **status.todict()})
         return unassigned, gt_status_flow

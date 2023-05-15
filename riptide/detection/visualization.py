@@ -699,9 +699,11 @@ class Inspector:
         error_types: List[Type[Error]],
         evaluator_id: int = 0,
         *,
+        title: str = "Classwise Error Ranking",
         display_type: str = "bar",
         combine: bool = False,
         confusion: Confusion = Confusion.FALSE_POSITIVE,
+        encoded: bool = True,
     ) -> bytes:
         if not isinstance(error_types, list):
             error_types = [error_types]
@@ -729,7 +731,7 @@ class Inspector:
 
         if display_type == "bar":
             fig, ax = plt.subplots(
-                figsize=(4, np.ceil(len(confusion_dict) * 0.4)),
+                figsize=(5, np.ceil(len(confusion_dict) * 0.4)),
                 dpi=150,
                 constrained_layout=True,
             )
@@ -739,12 +741,14 @@ class Inspector:
                     width=[x[i] for x in confusion_dict.values()],
                     color=ErrorColor[error_type.code].hex,
                     left=[sum(x[:i]) for x in confusion_dict.values()],
+                    label=error_type.code,
                 )
             ax.set_yticks(range(len(confusion_dict)))
             ax.set_yticklabels(
                 [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
             )
-            ax.set_title("Classwise Error Ranking")
+            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
+            ax.set_title(title)
             ax.set_xlabel("Number of Occurences")
         else:
             row_labels, col_labels = map(set, zip(*confusion_dict.keys()))
@@ -774,7 +778,10 @@ class Inspector:
             )
             texts = annotate_heatmap(im, valfmt="{x:.0f}")
 
-        return encode_base64(fig)
+        if encoded:
+            return encode_base64(fig)
+        else:
+            return fig, ax
 
     # region: Error Sections
     @logger()
@@ -1524,7 +1531,6 @@ class Inspector:
                     count = 0
                     if error.crowd_ids().shape[0] > 0:
                         groups[i]["crowded"].append(error)
-                        # TODO: plot crowd
                         count += 1
                     bbox = error.gt_bbox.long()
                     image_crop: torch.Tensor = crop(
