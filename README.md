@@ -34,6 +34,7 @@ evaluator = ObjectDetectionEvaluator.from_dicts(
 print(evaluator.summarize())
 report = HtmlReport(evaluator).render("path/to/output/folder")
 ```
+[Read More - Evaluation Report](docs/understanding_evaluations.md#evaluation-report)
 
 ## Documentation
 

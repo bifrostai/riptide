@@ -49,3 +49,41 @@ evaluation = evaluator.evaluations[0]
 image = evaluation.draw_image_errors()
 display(to_pil_image(image))
 ```
+
+## Evaluation Report
+Riptide supports HTML report generation using `jinja2`. Here is a minimal example of generating a report from an evaluator object:
+
+```python
+from riptide.detection.evaluation import ObjectDetectionEvaluator
+from riptide.reports import HtmlReport
+
+evaluator = ObjectDetectionEvaluator.from_dicts(
+    targets_dict_file="targets.pt",
+    predictions_dict_file="predictions.pt",
+    image_dir="path/to/images",
+    conf_threshold=0.5,
+)
+print(evaluator.summarize())
+report = HtmlReport(evaluator).render("path/to/output/folder")
+```
+
+## Sections in the Evaluation Report
+The report is divided into the following sections:
+
+### Overview
+This section provides a summary of the performance of the model, in terms of the number of ground truths, predictions, and the error distribution for each model.
+
+### Error Visualization
+These sections provide visualizations of the errors for each error type. The errors are grouped by error type, class, and perceptual similarity, in order. Perceptual similarity is determined by computing cluster labels for the feature embeddings of ground truths and background errors, using the [HDBSCAN algorithm](https://github.com/scikit-learn-contrib/hdbscan). The cluster labels are then used to group the errors into perceptually similar groups.
+
+Predictions are grouped into the following categories:
+- **Missed Errors (MIS)**: Ground truths that were not detected by the model.
+- **Background Errors (BKG)**: Predictions that do not correspond to any ground truth.
+- **Confusions (CLS + CLL)**: Predictions that correspond to a ground truth, but are classified as a different class.
+- **Localization Errors (LOC)**: Predictions that correspond to a ground truth, but have poor localization.
+- **Duplicate Errors (DUP)**: Predictions that correspond to a ground truth, but are duplicate detections.
+
+For more information on the error types, see [Understanding Error Types](error_types.md).
+
+### Visualization of True Positives
+This section provides visualizations of the true positives for each class. The true positives are grouped by class, and perceptual similarity, in order.

@@ -1151,7 +1151,7 @@ class Inspector:
                     description=(
                         "The following is a montage of the duplicate errors. White"
                         " boxes indicate ground truths, green boxes indicate best"
-                        " predictions, and red boxes indicate duplicate predictions."
+                        " predictions, and cyan boxes indicate duplicate predictions."
                     ),
                     content=classwise_dict,
                 ),
