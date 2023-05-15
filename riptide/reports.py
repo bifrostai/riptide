@@ -36,7 +36,6 @@ class HtmlReport:
         self.evaluators = evaluators
         self.evaluator = evaluators[0]
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
-        self.template = self.env.get_template("template.html")
         self.inspector = Inspector(evaluators)
 
     def get_suggestions(
