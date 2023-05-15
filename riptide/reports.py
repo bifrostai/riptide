@@ -1,5 +1,5 @@
+import logging
 import os
-import shutil
 from typing import Dict, List
 
 from jinja2 import Environment, FileSystemLoader
@@ -29,11 +29,12 @@ ERROR_TYPES = [
 
 
 class HtmlReport:
-    def __init__(self, evaluator: "Evaluator"):
-        self.evaluator = evaluator
+    def __init__(self, evaluators: "Evaluator"):
+        if not isinstance(evaluators, list):
+            evaluators = [evaluators]
+        self.evaluators = evaluators
         self.env = Environment(loader=FileSystemLoader("static"), autoescape=True)
-        self.template = self.env.get_template("template.html")
-        self.inspector = Inspector(evaluator)
+        self.inspector = Inspector(evaluators)
 
     def get_suggestions(
         self, overall_summary: Dict, classwise_summary: Dict, **kwargs
@@ -56,6 +57,7 @@ class HtmlReport:
                     ),
                 }
             )
+
         return suggestions
 
     def get_error_info(self) -> Dict:
@@ -67,75 +69,25 @@ class HtmlReport:
             for error_name, confidence_hist in confidence_hists.items()
         }
 
-    def render(self, output_dir: str):
+    def render(
+        self,
+        output_dir: str,
+        fname: str = "report.html",
+        template: str = "evaluation.html",
+        *,
+        evaluator_id: str = 0,
+    ):
         inspector = self.inspector
-        section_names = [
-            "Overview",
-            "BackgroundError",
-            "ClassificationError",
-            "LocalizationError",
-            "ClassificationAndLocalizationError",
-            "DuplicateError",
-            "MissedError",
-            "TruePositive",
-        ]
 
         # Summary data
-        print("Creating summaries...")
-        evaluator_summary = self.evaluator.summarize()
-        overall_summary = {
-            "num_images": self.evaluator.num_images,
-            "conf_threshold": self.evaluator.evaluations[0].conf_threshold,
-            "bg_iou_threshold": self.evaluator.evaluations[0].bg_iou_threshold,
-            "fg_iou_threshold": self.evaluator.evaluations[0].fg_iou_threshold,
-        }
-        overall_summary.update({k: round(v, 3) for k, v in evaluator_summary.items()})
+        overall_summary, classwise_summary, _ = inspector.overview()
 
-        classwise_summary = self.evaluator.classwise_summarize()
-        for class_idx, individual_summary in classwise_summary.items():
-            for metric, value in individual_summary.items():
-                classwise_summary[class_idx][metric] = round(value, 3)
-
-        # BackgroundError data - classwise false positives
-        # TODO: Visual grouping using MeP
-        print("Visualizing BackgroundErrors...")
-        background_error_figs = inspector.background_error()
-
-        # ClassificationError data - classwise confusion
-        print("Visualizing ClassificationErrors...")
-        (
-            classification_error_figs,
-            classification_error_plot,
-        ) = inspector.classification_error()
-
-        # LocalizationError data - classwise confusion
-        print("Visualizing LocalizationErrors...")
-        (
-            localization_error_figs,
-            localization_error_plot,
-        ) = inspector.localization_error()
-
-        # ClassificationAndLocalizationError data - classwise confusion
-        print("Visualizing ClassificationAndLocalizationError...")
-        (
-            classification_and_localization_error_figs,
-            classification_and_localization_error_plot,
-        ) = inspector.classification_and_localization_error()
-
-        # DuplicateError data - classwise confusion
-        print("Visualizing DuplicateErrors...")
-        duplicate_error_figs, duplicate_error_plot = inspector.duplicate_error()
+        # Error data - figures and plots for each error type
+        sections, section_names = inspector.inspect(evaluator_id=evaluator_id)
 
         # MissedError data - classwise false negatives
-        print("Visualizing MissedErrors...")
-        missed_size_var = compute_size_variance(self.evaluator)
-        missed_aspect_var = compute_aspect_variance(self.evaluator)
-
-        missed_error_figs, missed_error_plot = inspector.missed_error()
-
-        # True Positives data - to bring a balanced and unbiased view to the dataset
-        print("Visualizing TruePositives...")
-        true_positive_figs, true_positive_plot = inspector.true_positives()
+        missed_size_var = compute_size_variance(self.evaluators[0])
+        missed_aspect_var = compute_aspect_variance(self.evaluators[0])
 
         # Infobox suggestions
         infoboxes = self.get_suggestions(
@@ -145,30 +97,43 @@ class HtmlReport:
             missed_aspect_var=missed_aspect_var,
         )
 
-        print("Rendering output...")
-        output = self.template.render(
+        logging.info("Rendering output...")
+        output = self.env.get_template(template).render(
             title="Riptide",
             section_names=section_names,
+            sections=sections,
             summary=overall_summary,
             classwise_summary=classwise_summary,
             infoboxes=infoboxes,
-            error_info=self.get_error_info(),
-            background_error_figs=background_error_figs,
-            classification_error_figs=classification_error_figs,
-            classification_error_plot=classification_error_plot,
-            localization_error_figs=localization_error_figs,
-            localization_error_plot=localization_error_plot,
-            classification_and_localization_error_figs=classification_and_localization_error_figs,
-            classification_and_localization_error_plot=classification_and_localization_error_plot,
-            duplicate_error_figs=duplicate_error_figs,
-            # duplicate_error_plot=duplicate_error_plot,
-            missed_error_figs=missed_error_figs,
-            missed_error_plot=missed_error_plot,
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
-            true_positive_figs=true_positive_figs,
-            true_positive_plot=true_positive_plot,
         )
         os.makedirs(output_dir, exist_ok=True)
-        with open(f"{output_dir}/report.html", "w") as f:
+        fout = os.path.join(output_dir, fname)
+        with open(fout, "w") as f:
             f.writelines(output)
+        logging.info(f"Rendered output to {fout}")
+
+    def compare(
+        self,
+        output_dir: str,
+        fname: str = "compare.html",
+        template: str = "comparison.html",
+    ):
+        inspector = self.inspector
+        for idx in [0, 1]:
+            inspector.inspect(evaluator_id=idx)
+
+        sections, section_names = inspector.compare()
+
+        logging.info("Rendering output...")
+        output = self.env.get_template(template).render(
+            title="Riptide",
+            section_names=section_names,
+            sections=sections,
+        )
+        os.makedirs(output_dir, exist_ok=True)
+        fout = os.path.join(output_dir, fname)
+        with open(fout, "w") as f:
+            f.writelines(output)
+        logging.info(f"Rendered output to {fout}")

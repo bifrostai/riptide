@@ -23,13 +23,13 @@ class Confusions:
     """Confusions assigned to predictions or ground truths."""
 
     def __init__(
-        self, evaluation: "ImageEvaluation", num_preds: int, num_gts: int
+        self, evaluation: "ObjectDetectionEvaluation", num_preds: int, num_gts: int
     ) -> None:
         self.evaluation = evaluation
         self.num_preds = num_preds
         self.num_gts = num_gts
-        self.pred_confusions = [None] * num_preds
-        self.gt_confusions = [None] * num_gts
+        self.pred_confusions: List[Confusion] = [None] * num_preds
+        self.gt_confusions: List[Confusion] = [None] * num_gts
 
     @property
     def is_complete(self) -> bool:
@@ -119,3 +119,7 @@ class Confusions:
     def get_false_negatives(self) -> int:
         self.assert_valid_confusions()
         return len([c for c in self.gt_confusions if c is Confusion.FALSE_NEGATIVE])
+
+    def get_unused(self) -> int:
+        self.assert_valid_confusions()
+        return len([c for c in self.pred_confusions if c is Confusion.UNUSED])

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8">
+ <title>{{ title }}</title>
+ <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+ <link href='http://fonts.googleapis.com/css?family=Lato:100,300,400,700,900' rel='stylesheet' type='text/css'>
+ <link href='http://fonts.googleapis.com/css?family=Fira+Code:400' rel='stylesheet' type='text/css'>
+ <link rel="icon" type="image/png" href="https://cdn.sanity.io/images/p86pglis/production/c7435e346bfd6cb876a502467f23766b4b961279-34x34.png?w=256&h=256">
+ <style type="text/css">
+  {% include "style.css" %}
+ </style>
+ {% block customhead %}{% endblock %}
+</head>
+<body>
+ <div class="sidebar">
+  {%- block sidebar -%}
+  <div class="sidebar-header">
+   <h1 class="title"><span class="gradient">Riptide</span><span class="light">Report</span></h1>
+   <span class="subtitle">v0.3.0 | <a href="https://github.com/bifrostai/riptide">source</a></span>
+  </div>
+  <div class="sidebar-items">
+  {% for key in sections if key in section_names %}
+   {% set id, name = section_names[key] -%}
+   <a class="sidebar-button" href="#{{ id }}">{{ name }}</a>
+  {% endfor %}
+  </div>
+  {%- endblock -%}
+ </div>
+ <div class="main">
+  {%- block content -%}{%- endblock -%}
+ </div>
+</body>
+</html>
