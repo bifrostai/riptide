@@ -699,9 +699,11 @@ class Inspector:
         error_types: List[Type[Error]],
         evaluator_id: int = 0,
         *,
+        title: str = "Classwise Error Ranking",
         display_type: str = "bar",
         combine: bool = False,
         confusion: Confusion = Confusion.FALSE_POSITIVE,
+        encoded: bool = True,
     ) -> bytes:
         if not isinstance(error_types, list):
             error_types = [error_types]
@@ -729,7 +731,7 @@ class Inspector:
 
         if display_type == "bar":
             fig, ax = plt.subplots(
-                figsize=(4, np.ceil(len(confusion_dict) * 0.4)),
+                figsize=(5, np.ceil(len(confusion_dict) * 0.4)),
                 dpi=150,
                 constrained_layout=True,
             )
@@ -739,12 +741,14 @@ class Inspector:
                     width=[x[i] for x in confusion_dict.values()],
                     color=ErrorColor[error_type.code].hex,
                     left=[sum(x[:i]) for x in confusion_dict.values()],
+                    label=error_type.code,
                 )
             ax.set_yticks(range(len(confusion_dict)))
             ax.set_yticklabels(
                 [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
             )
-            ax.set_title("Classwise Error Ranking")
+            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
+            ax.set_title(title)
             ax.set_xlabel("Number of Occurences")
         else:
             row_labels, col_labels = map(set, zip(*confusion_dict.keys()))
@@ -774,13 +778,14 @@ class Inspector:
             )
             texts = annotate_heatmap(im, valfmt="{x:.0f}")
 
-        return encode_base64(fig)
+        if encoded:
+            return encode_base64(fig)
+        else:
+            return fig, ax
 
     # region: Error Sections
     @logger()
-    def background_error(
-        self, *, data: dict = None, clusters: torch.Tensor = None, **kwargs
-    ) -> Section:
+    def background_error(self, *, data: dict = None, **kwargs) -> Section:
         """Generate a section visualizing the background errors in the dataset.
 
         Parameters
@@ -819,14 +824,7 @@ class Inspector:
         data["grouped"] = data.get("grouped", True)
         data["compact"] = data.get("compact", True)
 
-        kwargs.update(
-            dict(
-                error_type=BackgroundError,
-                color=ErrorColor.BKG,
-                axis=1,
-                clusters=clusters,
-            )
-        )
+        get_crop_options(BackgroundError, kwargs)
 
         figs = self.error_classwise_dict(**kwargs)
 
@@ -875,35 +873,7 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Ground Truth: Class {x}"
-
-        def add_metadata_func(x: dict, error: ClassificationError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Pred: Class {x['pred_class']}",
-                            f"Conf { x['confidence'] }",
-                            f"Cluster { x['cluster'] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=ClassificationError,
-                color=[ErrorColor.WHITE, ErrorColor.CLS],
-                axis=1,
-                label_attr="gt_label",
-                get_bbox_func=get_both_bboxes,
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(ClassificationError, kwargs)
 
         classwise_dict = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationError)
@@ -966,35 +936,7 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Ground Truth: Class {x}"
-
-        def add_metadata_func(x: dict, error: LocalizationError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"IoU {x['iou']}",
-                            f"Cluster { x['cluster'] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=LocalizationError,
-                color=[ErrorColor.WHITE, ErrorColor.LOC],
-                axis=1,
-                get_bbox_func=get_both_bboxes,
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(LocalizationError, kwargs)
 
         classwise_dict = self.error_classwise_dict(**kwargs)
 
@@ -1047,40 +989,7 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Ground Truth: Class {x}"
-
-        def add_metadata_func(
-            x: dict, error: ClassificationAndLocalizationError
-        ) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Pred: Class {x['pred_class']}",
-                            f"Conf { x['confidence'] }",
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"IoU {x['iou']}",
-                            f"Cluster { x['cluster'] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=ClassificationAndLocalizationError,
-                color=[ErrorColor.WHITE, ErrorColor.CLL],
-                axis=1,
-                get_bbox_func=get_both_bboxes,
-                label_attr="gt_label",
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(ClassificationAndLocalizationError, kwargs)
 
         classwise_dict = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationAndLocalizationError)
@@ -1149,54 +1058,11 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Ground Truth: Class {x}"
-
-        def add_metadata_func(
-            x: dict, error: ClassificationAndLocalizationError
-        ) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Pred: Class {x['pred_class']}",
-                            f"Conf { x['confidence'] }",
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"IoU {x['iou']}",
-                            f"CLuster { x['cluster'] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=ClassificationError,
-                color=[ErrorColor.WHITE, ErrorColor.CLS],
-                axis=1,
-                label_attr="gt_label",
-                get_bbox_func=get_both_bboxes,
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(ClassificationError, kwargs)
 
         cls_classwise_dict = self.error_classwise_dict(**kwargs)
 
-        kwargs.update(
-            dict(
-                error_type=ClassificationAndLocalizationError,
-                color=[ErrorColor.WHITE, ErrorColor.CLL],
-                axis=1,
-                get_bbox_func=get_both_bboxes,
-                label_attr="gt_label",
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(ClassificationAndLocalizationError, kwargs)
 
         cll_classwise_dict = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(
@@ -1280,48 +1146,7 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Ground Truth: Class {x}"
-
-        def get_bbox_func(error: DuplicateError, attr: str):
-            return torch.stack([error.gt_bbox, error.best_pred_bbox, error.pred_bbox])
-
-        def add_metadata_func(x: dict, error: DuplicateError) -> dict:
-            best_iou = round(
-                box_iou(
-                    error.best_pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)
-                ).item(),
-                3,
-            )
-            best_conf = round(error.best_confidence, 2)
-            x.update(
-                {
-                    "best_iou": best_iou,
-                    "best_conf": best_conf,
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"IoU, Conf ({ x['iou'] }, {x['confidence']})",
-                            f"Best  ({ best_iou }, { best_conf })",
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"Cluster { x['cluster'] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=DuplicateError,
-                color=[ErrorColor.WHITE, ErrorColor.TP, ErrorColor.DUP],
-                axis=1,
-                get_bbox_func=get_bbox_func,
-                add_metadata_func=add_metadata_func,
-                get_label_func=get_label_func,
-            )
-        )
+        get_crop_options(DuplicateError, kwargs)
 
         classwise_dict = self.error_classwise_dict(**kwargs)
 
@@ -1373,32 +1198,7 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Missed: Class {x}"
-
-        def add_metadata_func(x: dict, error: MissedError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=MissedError,
-                color=ErrorColor.MIS,
-                axis=0,
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(MissedError, kwargs)
 
         classwise_dict = self.error_classwise_dict(**kwargs)
         box = self.boxplot(classwise_dict)
@@ -1524,7 +1324,6 @@ class Inspector:
                     count = 0
                     if error.crowd_ids().shape[0] > 0:
                         groups[i]["crowded"].append(error)
-                        # TODO: plot crowd
                         count += 1
                     bbox = error.gt_bbox.long()
                     image_crop: torch.Tensor = crop(
@@ -1581,34 +1380,7 @@ class Inspector:
                 """,
             )
 
-        get_label_func = lambda x: f"Ground Truth: Class {x}"
-
-        def add_metadata_func(x: dict, error: NonError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Conf {x['confidence']}",
-                            f"IoU {x['iou']}",
-                            f"Cluster { x['cluster'] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
-        kwargs.update(
-            dict(
-                error_type=NonError,
-                color=[ErrorColor.WHITE, ErrorColor.TP],
-                axis=1,
-                get_bbox_func=get_both_bboxes,
-                get_label_func=get_label_func,
-                add_metadata_func=add_metadata_func,
-            )
-        )
+        get_crop_options(NonError, kwargs)
 
         classwise_dict = self.error_classwise_dict(**kwargs)
 
