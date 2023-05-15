@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "riptide"
-version = "0.2.0"
+version = "0.3.0"
 description = "Bifrost Object Detection Evaluation Suite"
 authors = ["huangjoel <joel@bifrost.ai>", "Sean <sean_yap@bifrost.ai"]
 
