@@ -104,11 +104,11 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
         kwargs.update(
             dict(
                 error_type=ClassificationError,
-                color=ErrorColor.CLS.hex,
+                color=[ErrorColor.WHITE.hex, ErrorColor.CLS.hex],
                 axis=1,
                 bbox_attr="pred_bbox",
                 label_attr="gt_label",
-                get_bbox_func=get_bbox_by_attr,
+                get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
                 get_label_func=label_func_generator("Ground Truth: Class "),
             )
