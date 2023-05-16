@@ -528,7 +528,7 @@ class Inspector:
         bbox_attr: str = None,
         label_attr: str = None,
         get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
-        get_label_func: Callable[[int], str] = None,
+        label_str: str = "Predicted: {label}",
         add_metadata_func: Callable[[dict, Error], dict] = None,
         clusters: torch.Tensor = None,
     ) -> Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]:
@@ -560,8 +560,8 @@ class Inspector:
         get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], default=None
             Function to get the bounding box from the error, by default a function that returns the bounding box specified by `bbox_attr`
 
-        get_label_func : Callable[[int], str], default=None
-            Function to get the label from the class index, by default a function that returns the class index as a string
+        label_str : str, default="Predicted: {label}"
+            String to use for the label
 
         add_metadata_func : Callable[[dict], dict], default=None
             Function to add a caption to the metadata, by default a function that returns the metadata as is
@@ -594,7 +594,6 @@ class Inspector:
 
         get_bbox_func = get_bbox_func or get_bbox_by_attr
         add_metadata_func = add_metadata_func or add_metadata
-        get_label_func = get_label_func or (lambda label: f"Predicted: {label}")
 
         if clusters is None:
             projector = self.projector
@@ -638,7 +637,9 @@ class Inspector:
 
                 if label not in classwise_dict:
                     classwise_dict[label] = (
-                        get_label_func(self.categories.get(label, f" Class {label}")),
+                        label_str.format(
+                            label=self.categories.get(label, f" Class {label}")
+                        ),
                         dict(),
                     )
 
@@ -1244,11 +1245,12 @@ class Inspector:
                     continue
                 fig = fig.copy()
                 if error.gt_label not in figs[group]:
-                    figs[group][error.gt_label] = (
-                        "Missed:"
-                        f" {self.categories.get(error.gt_label, f'Class {error.gt_label}')}",
-                        {},
+                    label_str = "Missed: {label}".format(
+                        label=self.categories.get(
+                            error.gt_label, f"Class {error.gt_label}"
+                        )
                     )
+                    figs[group][error.gt_label] = (label_str, {})
 
                 cluster = fig.get("cluster")
                 if -1 not in cluster and cluster in subclusters:
