@@ -127,20 +127,16 @@ class Inspector:
         ]
 
         self.gt_data = evaluators[0].get_gt_data()
-        gt_labels = self.gt_data.gt_labels.tolist()
-        actual_labels = [None] * len(gt_labels)
-        rep_labels = [None] * len(gt_labels)
-        for i, label in enumerate(gt_labels):
-            actual_labels[i] = (-1, label)
-            rep_labels[i] = (-2, label)
-
+        actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
+        repeat_ids = list({k for k, v in self.gt_data.gt_errors.items() if len(v) > 1})
         self.projector = CropProjector(
             name=f"Crops",
-            images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
+            images=self.gt_data.crops + bkg_crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=actual_labels + bkg_labels + rep_labels,
+            labels=actual_labels + bkg_labels,
             device=torch.device("cpu"),
+            repeat_ids=repeat_ids,
         )
 
         self.clusters = self.projector.subcluster()
@@ -671,21 +667,26 @@ class Inspector:
                 self.crops[crop_key] = fig
                 bkg_idx += 1
 
-                if -1 not in cluster and cluster in subclusters:
-                    subclusters[cluster]["similar"].append(error)
-                    previous = len(subclusters[cluster]["uniques"])
-                    unique_key = (
-                        (error.gt_idx, error.gt_label)
-                        if error.gt_idx is not None
-                        else error.pred_label
-                    )
-                    subclusters[cluster]["uniques"].add(unique_key)
-                    if len(subclusters[cluster]["uniques"]) == previous:
-                        if error_type is not BackgroundError:
-                            count += 1
-                        continue
+                unique_key = (*cluster, error.gt_label, error.pred_label)
+
+                if -1 not in cluster and unique_key in subclusters:
+                    subclusters[unique_key]["similar"].append(error)
+                    # previous = len(subclusters[cluster]["uniques"])
+                    # unique_key = (
+                    #     (error.gt_idx, error.gt_label)
+                    #     if error.gt_idx is not None
+                    #     else error.pred_label
+                    # )
+                    # unique_key = (error.gt_label, error.pred_label)
+                    if unique_key not in subclusters[unique_key]["uniques"]:
+                        subclusters[unique_key]["uniques"].add(unique_key)
+                    continue
+                    # if len(subclusters[cluster]["uniques"]) == previous:
+                    #     if error_type is not BackgroundError:
+                    #         count += 1
+                    #     continue
                 else:
-                    subclusters[cluster] = fig
+                    subclusters[unique_key] = fig
 
                 classwise_dict[label][1][cluster[0]][0].append(fig)
                 count += 1

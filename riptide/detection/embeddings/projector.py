@@ -22,8 +22,10 @@ class CropProjector:
         images: List[torch.Tensor],
         encoder_mode: str,
         normalize_embeddings: bool,
-        labels: List[Any] = None,
+        labels: list = None,
         device: torch.device = torch.device("cpu"),
+        *,
+        repeat_ids: list = None,
     ) -> None:
         if labels is not None:
             assert len(images) == len(labels), "Number of images and labels must match"
@@ -33,6 +35,7 @@ class CropProjector:
         self.images = images
         self.labels = labels
         self._embeddings: torch.Tensor = None
+        self.repeat_ids = repeat_ids or []
 
         # Override __init__: No SummaryWriter
         self.name = name
@@ -111,8 +114,11 @@ class CropProjector:
         **kwargs,
     ) -> HDBSCAN:
         embeddings = self.get_embeddings()
+        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids]])
         if mask is not None:
-            embeddings = embeddings[mask]
+            mask_tensor = torch.tensor(mask)
+            mask_tensor = torch.concat([mask_tensor, mask_tensor[self.repeat_ids]])
+            embeddings = embeddings[mask_tensor]
 
         if (
             self._clusterer is None
@@ -153,14 +159,21 @@ class CropProjector:
             Cluster labels
         """
 
-        return torch.tensor(self.get_clusterer(**kwargs).labels_)
+        clusters = torch.tensor(self.get_clusterer(**kwargs).labels_)
+
+        return (
+            clusters if len(self.repeat_ids) == 0 else clusters[: -len(self.repeat_ids)]
+        )
 
     def subcluster(self, *, sub_lambda: float = 0.8, **kwargs) -> torch.Tensor:
         """Subdivide clusters into subclusters"""
         clusterer = self.get_clusterer(**kwargs)
         embeddings = self.get_embeddings()
+        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids]])
         if self._mask is not None:
-            embeddings = embeddings[self._mask]
+            mask = torch.tensor(self._mask)
+            mask = torch.concat([mask, mask[self.repeat_ids]])
+            embeddings = embeddings[mask]
 
         labels = torch.tensor(clusterer.labels_)
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
@@ -174,4 +187,7 @@ class CropProjector:
             ).fit(cluster_embeddings)
             subclusters[cluster_mask] = torch.tensor(subclusterer.labels_)
 
-        return torch.stack([labels, subclusters], dim=1)
+        clusters = torch.stack([labels, subclusters], dim=1)
+        return (
+            clusters if len(self.repeat_ids) == 0 else clusters[: -len(self.repeat_ids)]
+        )

@@ -318,9 +318,6 @@ def generate_fig(
         if error.pred_bbox is not None and error.gt_bbox is not None
         else None
     )
-    uniques = (
-        (error.gt_idx, error.gt_label) if error.gt_idx is not None else error.pred_label
-    )
 
     data = {
         "type": error.code,
@@ -335,7 +332,7 @@ def generate_fig(
         "iou": iou,
         "cluster": cluster,
         "similar": [error],
-        "uniques": {uniques},
+        "uniques": {(*cluster, error.gt_label, error.pred_label)},
     }
 
     return add_metadata_func(data, error)
