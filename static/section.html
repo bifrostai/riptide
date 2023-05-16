@@ -196,11 +196,20 @@
 
 {%- macro render_image(image) -%}
 <div class="class-image-wrapper
-{%- if image.get('similar') | length > 0 %} stack{% endif %}
-{%- if image.get('similar') | length > 1 %} multi{% endif %}">
+{%- if image.get('similar') | length > 1 %} stack{% endif %}
+{%- if image.get('similar') | length > 2 %} multi{% endif %}">
     <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">
     {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"]}}</span>{% endif %}
-    {% if image.get("similar") | length > 1 %}<span class="badge">{{ image["similar"] | length + 1}}</span>{% endif %}
+    {% if image.get("similar") | length > 1 -%}
+    <span class="badge">
+        {{ image["uniques"] | length }} ({{ image["similar"] | length }})
+        {#{%- if image.get("uniques") | length > 1 -%}
+        {{ image["uniques"] | length }}({{ image["similar"] | length }})
+        {%- else -%}
+        {{ image["similar"] | length }}
+        {%- endif -%}#}
+    </span>
+    {%- endif %}
 </div>
 {%- endmacro -%}
 

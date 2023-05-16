@@ -127,14 +127,19 @@ class Inspector:
         ]
 
         self.gt_data = evaluators[0].get_gt_data()
-        actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
+        gt_labels = self.gt_data.gt_labels.tolist()
+        actual_labels = [None] * len(gt_labels)
+        rep_labels = [None] * len(gt_labels)
+        for i, label in enumerate(gt_labels):
+            actual_labels[i] = (-1, label)
+            rep_labels[i] = (-2, label)
 
         self.projector = CropProjector(
             name=f"Crops",
-            images=self.gt_data.crops + bkg_crops,
+            images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=actual_labels + bkg_labels,
+            labels=actual_labels + bkg_labels + rep_labels,
             device=torch.device("cpu"),
         )
 
@@ -668,10 +673,22 @@ class Inspector:
 
                 if -1 not in cluster and cluster in subclusters:
                     subclusters[cluster]["similar"].append(error)
+                    previous = len(subclusters[cluster]["uniques"])
+                    unique_key = (
+                        (error.gt_idx, error.gt_label)
+                        if error.gt_idx is not None
+                        else error.pred_label
+                    )
+                    subclusters[cluster]["uniques"].add(unique_key)
+                    if len(subclusters[cluster]["uniques"]) == previous:
+                        if error_type is not BackgroundError:
+                            count += 1
+                        continue
                 else:
                     subclusters[cluster] = fig
-                    classwise_dict[label][1][cluster[0]][0].append(fig)
-                    count += 1
+
+                classwise_dict[label][1][cluster[0]][0].append(fig)
+                count += 1
 
         if error_type not in [NonError, MissedError]:
             self.summaries[evaluator_id][error_type_name] = count
@@ -1450,15 +1467,14 @@ class Inspector:
 
         evaluator_id = kwargs.get("evaluator_id", 0)
 
-        weights_by_code = self.recalculate_summaries([evaluator_id], weights=weights)
-        weights_by_code.update(order)
+        self.recalculate_summaries([evaluator_id], weights=weights)
 
         results["overview"] = self.summary([evaluator_id])
 
         sections = dict(
             sorted(
                 results.items(),
-                key=lambda x: weights_by_code.get(x[0], -2),
+                key=lambda x: order.get(x[0], -2),
                 reverse=True,
             )
         )
