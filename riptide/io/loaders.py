@@ -118,6 +118,10 @@ class COCOLoader:
             j = json.load(f)
             target_annotations = pd.DataFrame(j["annotations"])
             target_images = pd.DataFrame(j["images"])
+            categories = pd.DataFrame(j["categories"])
+            categories.index = categories["id"]
+            categories = categories.drop(columns=["id"]).to_dict(orient="index")
+            categories = {k: v["name"] for k, v in categories.items()}
         with open(self.predictions_file, "r") as f:
             j = json.load(f)
             prediction_annotations = pd.DataFrame(j["annotations"])
@@ -196,5 +200,6 @@ class COCOLoader:
             evaluations,
             image_dir=self.image_dir,
             gt_ids_map=torch.cat(gt_ids_map),
+            categories=categories,
             **kwargs
         )

@@ -47,13 +47,6 @@ def add_metadata(metadata: dict, error: Error) -> dict:
     return metadata
 
 
-def label_func_generator(pre: str = "Class ", post: str = "") -> Callable[[int], str]:
-    def func(label: int):
-        return f"{pre}{label}{post}"
-
-    return func
-
-
 def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
     """Returns the base crop options for the given error type
 
@@ -81,7 +74,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="pred_label",
                 get_bbox_func=get_bbox_by_attr,
                 add_metadata_func=add_metadata,
-                get_label_func=label_func_generator("Predicted: Class "),
+                label_str="Predicted: {label}",
             )
         )
     elif error_type is ClassificationError:
@@ -110,7 +103,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="gt_label",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
-                get_label_func=label_func_generator("Ground Truth: Class "),
+                label_str="Actual: {label}",
             )
         )
     elif error_type is LocalizationError:
@@ -141,7 +134,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="pred_label",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
-                get_label_func=label_func_generator("Ground Truth: Class "),
+                label_str="Actual: {label}",
             )
         )
     elif error_type is ClassificationAndLocalizationError:
@@ -176,7 +169,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="gt_label",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
-                get_label_func=label_func_generator("Ground Truth: Class "),
+                label_str="Actual: {label}",
             )
         )
     elif error_type is DuplicateError:
@@ -220,7 +213,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="pred_label",
                 get_bbox_func=get_bbox_func,
                 add_metadata_func=add_metadata_func,
-                get_label_func=label_func_generator("Ground Truth: Class "),
+                label_str="Actual: {label}",
             )
         )
     elif error_type is MissedError:
@@ -249,7 +242,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="gt_label",
                 get_bbox_func=get_bbox_by_attr,
                 add_metadata_func=add_metadata_func,
-                get_label_func=label_func_generator("Missed: Class "),
+                label_str="Missed: {label}",
             )
         )
 
@@ -280,7 +273,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 label_attr="pred_label",
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
-                get_label_func=label_func_generator("Ground Truth: Class "),
+                label_str="Actual: {label}",
             )
         )
 
