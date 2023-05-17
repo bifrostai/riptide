@@ -128,15 +128,17 @@ class Inspector:
 
         self.gt_data = evaluators[0].get_gt_data()
         actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
+        rep_labels = [(-2, label) for label in self.gt_data.gt_labels.tolist()]
         repeat_ids = list({k for k, v in self.gt_data.gt_errors.items() if len(v) > 1})
+        # repeat_ids = list(self.gt_data.gt_errors.keys())
         self.projector = CropProjector(
             name=f"Crops",
-            images=self.gt_data.crops + bkg_crops,
+            images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=actual_labels + bkg_labels,
+            labels=actual_labels + bkg_labels + rep_labels,
             device=torch.device("cpu"),
-            repeat_ids=repeat_ids,
+            # repeat_ids=repeat_ids,
         )
 
         self.clusters = self.projector.subcluster()
@@ -671,25 +673,12 @@ class Inspector:
 
                 if -1 not in cluster and unique_key in subclusters:
                     subclusters[unique_key]["similar"].append(error)
-                    # previous = len(subclusters[cluster]["uniques"])
-                    # unique_key = (
-                    #     (error.gt_idx, error.gt_label)
-                    #     if error.gt_idx is not None
-                    #     else error.pred_label
-                    # )
-                    # unique_key = (error.gt_label, error.pred_label)
-                    if unique_key not in subclusters[unique_key]["uniques"]:
-                        subclusters[unique_key]["uniques"].add(unique_key)
-                    continue
-                    # if len(subclusters[cluster]["uniques"]) == previous:
-                    #     if error_type is not BackgroundError:
-                    #         count += 1
-                    #     continue
+                    subclusters[unique_key]["uniques"].add((*unique_key, error.gt_idx))
                 else:
                     subclusters[unique_key] = fig
 
-                classwise_dict[label][1][cluster[0]][0].append(fig)
-                count += 1
+                    classwise_dict[label][1][cluster[0]][0].append(fig)
+                    count += 1
 
         if error_type not in [NonError, MissedError]:
             self.summaries[evaluator_id][error_type_name] = count

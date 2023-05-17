@@ -114,10 +114,12 @@ class CropProjector:
         **kwargs,
     ) -> HDBSCAN:
         embeddings = self.get_embeddings()
-        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids]])
+        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids].clone()])
         if mask is not None:
             mask_tensor = torch.tensor(mask)
-            mask_tensor = torch.concat([mask_tensor, mask_tensor[self.repeat_ids]])
+            mask_tensor = torch.concat(
+                [mask_tensor, mask_tensor[self.repeat_ids].clone()]
+            )
             embeddings = embeddings[mask_tensor]
 
         if (
@@ -145,7 +147,7 @@ class CropProjector:
         Parameters
         ----------
         eps : float, optional
-            DBSCAN eps parameter, by default 0.4
+            DBSCAN eps parameter, by default 0.3
         min_samples : int, optional
             DBSCAN min_samples parameter, by default 2
         mask : List[bool], optional
@@ -169,18 +171,18 @@ class CropProjector:
         """Subdivide clusters into subclusters"""
         clusterer = self.get_clusterer(**kwargs)
         embeddings = self.get_embeddings()
-        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids]])
+        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids].clone()])
         if self._mask is not None:
             mask = torch.tensor(self._mask)
-            mask = torch.concat([mask, mask[self.repeat_ids]])
+            mask = torch.concat([mask, mask[self.repeat_ids].clone()])
             embeddings = embeddings[mask]
 
         labels = torch.tensor(clusterer.labels_)
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
         sub_eps = sub_lambda * clusterer.cluster_selection_epsilon
 
-        for cluster in range(clusterer.labels_.max() + 1):
-            cluster_mask = clusterer.labels_ == cluster
+        for cluster in range(labels.max() + 1):
+            cluster_mask = labels == cluster
             cluster_embeddings = embeddings[cluster_mask]
             subclusterer = HDBSCAN(
                 min_cluster_size=2, min_samples=1, cluster_selection_epsilon=sub_eps
