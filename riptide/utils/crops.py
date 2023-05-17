@@ -331,7 +331,8 @@ def generate_fig(
         "bbox_area": area,
         "iou": iou,
         "cluster": cluster,
-        "similar": [],
+        "similar": [error],
+        "uniques": {(*cluster, error.gt_label, error.pred_label, error.idx)},
     }
 
     return add_metadata_func(data, error)

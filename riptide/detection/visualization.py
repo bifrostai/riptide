@@ -128,13 +128,13 @@ class Inspector:
 
         self.gt_data = evaluators[0].get_gt_data()
         actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
-
+        repeat_labels = [(-2, label) for label in self.gt_data.gt_labels.tolist()]
         self.projector = CropProjector(
             name=f"Crops",
-            images=self.gt_data.crops + bkg_crops,
+            images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=actual_labels + bkg_labels,
+            labels=actual_labels + bkg_labels + repeat_labels,
             device=torch.device("cpu"),
         )
 
@@ -666,10 +666,17 @@ class Inspector:
                 self.crops[crop_key] = fig
                 bkg_idx += 1
 
-                if -1 not in cluster and cluster in subclusters:
-                    subclusters[cluster]["similar"].append(error)
+                unique_key = (*cluster, error.gt_label, error.pred_label)
+
+                if -1 not in cluster and unique_key in subclusters:
+                    subclusters[unique_key]["similar"].append(error)
+                    if (*unique_key, error.idx) in subclusters[unique_key]["uniques"]:
+                        count += 1
+                    else:
+                        subclusters[unique_key]["uniques"].add((*unique_key, error.idx))
                 else:
-                    subclusters[cluster] = fig
+                    subclusters[unique_key] = fig
+
                     classwise_dict[label][1][cluster[0]][0].append(fig)
                     count += 1
 
@@ -1450,15 +1457,14 @@ class Inspector:
 
         evaluator_id = kwargs.get("evaluator_id", 0)
 
-        weights_by_code = self.recalculate_summaries([evaluator_id], weights=weights)
-        weights_by_code.update(order)
+        self.recalculate_summaries([evaluator_id], weights=weights)
 
         results["overview"] = self.summary([evaluator_id])
 
         sections = dict(
             sorted(
                 results.items(),
-                key=lambda x: weights_by_code.get(x[0], -2),
+                key=lambda x: order.get(x[0], -2),
                 reverse=True,
             )
         )
@@ -1485,7 +1491,7 @@ class Inspector:
             The section containing the visualizations
         """
 
-        mask = [label[0] != -1 for label in self.projector.labels]
+        mask = [label[0] > -1 for label in self.projector.labels]
 
         figs = [
             self.error_classwise_dict(
