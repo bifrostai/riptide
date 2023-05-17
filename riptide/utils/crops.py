@@ -332,7 +332,7 @@ def generate_fig(
         "iou": iou,
         "cluster": cluster,
         "similar": [error],
-        "uniques": {(*cluster, error.gt_label, error.pred_label, error.gt_idx)},
+        "uniques": {(*cluster, error.gt_label, error.pred_label, error.idx)},
     }
 
     return add_metadata_func(data, error)

@@ -129,8 +129,6 @@ class Inspector:
         self.gt_data = evaluators[0].get_gt_data()
         actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
         repeat_labels = [(-2, label) for label in self.gt_data.gt_labels.tolist()]
-        # repeat_ids = sorted(self.gt_data.gt_errors.keys())
-        # print(repeat_ids)
         self.projector = CropProjector(
             name=f"Crops",
             images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
@@ -138,7 +136,6 @@ class Inspector:
             normalize_embeddings=True,
             labels=actual_labels + bkg_labels + repeat_labels,
             device=torch.device("cpu"),
-            # repeat_ids=repeat_ids,
         )
 
         self.clusters = self.projector.subcluster()
@@ -673,7 +670,10 @@ class Inspector:
 
                 if -1 not in cluster and unique_key in subclusters:
                     subclusters[unique_key]["similar"].append(error)
-                    subclusters[unique_key]["uniques"].add((*unique_key, error.gt_idx))
+                    if (*unique_key, error.idx) in subclusters[unique_key]["uniques"]:
+                        count += 1
+                    else:
+                        subclusters[unique_key]["uniques"].add((*unique_key, error.idx))
                 else:
                     subclusters[unique_key] = fig
 
