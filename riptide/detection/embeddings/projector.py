@@ -24,8 +24,6 @@ class CropProjector:
         normalize_embeddings: bool,
         labels: list = None,
         device: torch.device = torch.device("cpu"),
-        *,
-        repeat_ids: list = None,
     ) -> None:
         if labels is not None:
             assert len(images) == len(labels), "Number of images and labels must match"
@@ -35,7 +33,6 @@ class CropProjector:
         self.images = images
         self.labels = labels
         self._embeddings: torch.Tensor = None
-        self.repeat_ids = repeat_ids or []
 
         # Override __init__: No SummaryWriter
         self.name = name
@@ -155,12 +152,7 @@ class CropProjector:
         torch.Tensor
             Cluster labels
         """
-
-        clusters = torch.tensor(self.get_clusterer(**kwargs).labels_)
-
-        return (
-            clusters if len(self.repeat_ids) == 0 else clusters[: -len(self.repeat_ids)]
-        )
+        return torch.tensor(self.get_clusterer(**kwargs).labels_)
 
     def subcluster(self, *, sub_lambda: float = 0.8, **kwargs) -> torch.Tensor:
         """Subdivide clusters into subclusters"""
@@ -181,7 +173,4 @@ class CropProjector:
             ).fit(cluster_embeddings)
             subclusters[cluster_mask] = torch.tensor(subclusterer.labels_)
 
-        clusters = torch.stack([labels, subclusters], dim=1)
-        return (
-            clusters if len(self.repeat_ids) == 0 else clusters[: -len(self.repeat_ids)]
-        )
+        return torch.stack([labels, subclusters], dim=1)
