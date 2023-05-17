@@ -1,3 +1,6 @@
+## v0.3.1 (2023-05-17)
+- Resolve issue where `CropProjector().get_embeddings()` failed occasionally when intermediate batches of encoder had single instances.
+
 ## v0.3.0 (2023-05-15)
 - Revamp _Overview_ section. Collate error counts into colored bars.
 - Use HDBSCAN instead of DBSCAN to cluster crop visualizations.

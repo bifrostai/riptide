@@ -41,7 +41,7 @@ class CropProjector:
         self.transform = transform
         self.write_previews = False
         self.normalize_embeddings = normalize_embeddings
-        self.encoder = VariableLayerEncoder(mode=encoder_mode).to(device)
+        self.encoder = VariableLayerEncoder(mode=encoder_mode).to(device).eval()
         self.preview_size = 32
         self.embedding_size = self.encoder(torch.empty((1, 3, 48, 48)).to(device)).size(
             1
