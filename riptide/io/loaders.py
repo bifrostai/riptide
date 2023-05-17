@@ -170,7 +170,6 @@ class COCOLoader:
             gt_ids_map.append(coco_ids)
             end = start + len(coco_ids)
             gt_ids = torch.arange(start, end)
-            start = end
             gt_bboxes = torch.tensor(pred_gt_dict["targets"]["boxes"])
             if len(gt_bboxes) == 0:
                 gt_bboxes = torch.empty((0, 4))
