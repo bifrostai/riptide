@@ -128,15 +128,15 @@ class Inspector:
 
         self.gt_data = evaluators[0].get_gt_data()
         actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
-        rep_labels = [(-2, label) for label in self.gt_data.gt_labels.tolist()]
-        repeat_ids = list({k for k, v in self.gt_data.gt_errors.items() if len(v) > 1})
-        # repeat_ids = list(self.gt_data.gt_errors.keys())
+        repeat_labels = [(-2, label) for label in self.gt_data.gt_labels.tolist()]
+        # repeat_ids = sorted(self.gt_data.gt_errors.keys())
+        # print(repeat_ids)
         self.projector = CropProjector(
             name=f"Crops",
             images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=actual_labels + bkg_labels + rep_labels,
+            labels=actual_labels + bkg_labels + repeat_labels,
             device=torch.device("cpu"),
             # repeat_ids=repeat_ids,
         )
@@ -1491,7 +1491,7 @@ class Inspector:
             The section containing the visualizations
         """
 
-        mask = [label[0] != -1 for label in self.projector.labels]
+        mask = [label[0] > -1 for label in self.projector.labels]
 
         figs = [
             self.error_classwise_dict(

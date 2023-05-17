@@ -203,10 +203,9 @@
     {% if image.get("similar") | length > 1 -%}
     <span class="badge">
         {%- if image.get("uniques") | length > 1 -%}
-        {{ image["uniques"] | length }}({{ image["similar"] | length }})
-        {%- else -%}
-        {{ image["similar"] | length }}
+        <span class="text-xs">{{ image["uniques"] | length }} | </span>
         {%- endif -%}
+        {{ image["similar"] | length }}
     </span>
     {%- endif %}
 </div>

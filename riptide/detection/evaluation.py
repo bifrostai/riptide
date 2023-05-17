@@ -194,7 +194,7 @@ class Evaluation:
                 gt_label = error.gt_label
                 iou = (
                     self.ious[idx, error.gt_idx].item()
-                    if self.__class__ is ObjectDetectionEvaluation
+                    if isinstance(self, ObjectDetectionEvaluation)
                     and error.gt_idx is not None
                     else None
                 )
@@ -252,7 +252,7 @@ class Evaluation:
         for error in self.errors.gt_errors + self.errors.pred_errors:
             if error is None or error.gt_idx is None:
                 continue
-            gt_id = self.gt_ids[error.gt_idx].item()
+            gt_id = error.idx
             if gt_id not in errors:
                 errors[gt_id] = [error]
             else:

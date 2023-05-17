@@ -84,6 +84,9 @@ class CropProjector:
 
     def get_embeddings(
         self,
+        *,
+        repeat: bool = False,
+        mask: List[bool] = None,
     ) -> torch.Tensor:
         """Get embeddings for images
 
@@ -103,7 +106,17 @@ class CropProjector:
 
             self._embeddings = embeddings
 
-        return self._embeddings
+        embeddings = self._embeddings
+        if repeat:
+            embeddings = torch.cat([embeddings, embeddings[self.repeat_ids]])
+
+        if mask is not None:
+            mask_tensor = torch.tensor(mask)
+            if repeat:
+                mask_tensor = torch.cat([mask_tensor, mask_tensor[self.repeat_ids]])
+            embeddings = embeddings[mask_tensor]
+
+        return embeddings
 
     def get_clusterer(
         self,
@@ -113,14 +126,7 @@ class CropProjector:
         mask: List[bool] = None,
         **kwargs,
     ) -> HDBSCAN:
-        embeddings = self.get_embeddings()
-        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids].clone()])
-        if mask is not None:
-            mask_tensor = torch.tensor(mask)
-            mask_tensor = torch.concat(
-                [mask_tensor, mask_tensor[self.repeat_ids].clone()]
-            )
-            embeddings = embeddings[mask_tensor]
+        embeddings = self.get_embeddings(repeat=True, mask=mask)
 
         if (
             self._clusterer is None
@@ -135,7 +141,7 @@ class CropProjector:
                 **kwargs,
             ).fit(embeddings)
         elif self._mask != mask:
-            self._clusterer.fit(embeddings)
+            self._clusterer = self._clusterer.fit(embeddings)
 
         self._mask = mask
 
@@ -170,12 +176,7 @@ class CropProjector:
     def subcluster(self, *, sub_lambda: float = 0.8, **kwargs) -> torch.Tensor:
         """Subdivide clusters into subclusters"""
         clusterer = self.get_clusterer(**kwargs)
-        embeddings = self.get_embeddings()
-        embeddings = torch.concat([embeddings, embeddings[self.repeat_ids].clone()])
-        if self._mask is not None:
-            mask = torch.tensor(self._mask)
-            mask = torch.concat([mask, mask[self.repeat_ids].clone()])
-            embeddings = embeddings[mask]
+        embeddings = self.get_embeddings(repeat=True, mask=self._mask)
 
         labels = torch.tensor(clusterer.labels_)
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
