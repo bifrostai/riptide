@@ -112,8 +112,8 @@ class Evaluation:
         /,
         pred_scores: torch.Tensor,
         pred_labels: torch.Tensor,
-        gt_ids: torch.Tensor,
         gt_labels: torch.Tensor,
+        gt_offset: int = 0,
         bg_iou_threshold: float = 0.1,
         fg_iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
@@ -122,10 +122,10 @@ class Evaluation:
 
         self.num_preds = len(pred_labels)
         self.num_gts = len(gt_labels)
+        self.gt_offset = gt_offset
 
         self.pred_scores = pred_scores
         self.pred_labels = pred_labels
-        self.gt_ids = gt_ids
         self.gt_labels = gt_labels
         self.conf_threshold = conf_threshold
         self.bg_iou_threshold = bg_iou_threshold
@@ -154,6 +154,10 @@ class Evaluation:
     def instances(self) -> List[Error]:
         return self.pred_errors + self.gt_errors
 
+    def _get_gt_id(self, gt_idx: int) -> Any:
+        """Returns the ID of the ground truth at the given index."""
+        return self.gt_offset + gt_idx if gt_idx is not None else None
+
     def get_gt_status(self) -> Dict[int, Status]:
         """Returns the statuses for the ground truths.
 
@@ -164,7 +168,7 @@ class Evaluation:
         """
         statuses: Dict[Any, Status] = dict()
         for idx, confusion in enumerate(self.confusions.get_gt_confusions()):
-            gt_id = self.gt_ids[idx].item()
+            gt_id = self._get_gt_id(idx)
             gt_label = self.gt_labels[idx].item()
             pred_label = None
             error = self.errors.check_gt_error(idx)
@@ -186,11 +190,7 @@ class Evaluation:
             gt_label = None
             error = self.errors.check_prediction_error(idx)
             if error is not None:
-                gt_id = (
-                    self.gt_ids[error.gt_idx].item()
-                    if error.gt_idx is not None
-                    else None
-                )
+                gt_id = self._get_gt_id(error.gt_idx)
                 gt_label = error.gt_label
                 iou = (
                     self.ious[idx, error.gt_idx].item()
@@ -270,9 +270,9 @@ class ObjectDetectionEvaluation(Evaluation):
         pred_bboxes: torch.Tensor,
         pred_scores: torch.Tensor,
         pred_labels: torch.Tensor,
-        gt_ids: torch.Tensor,
         gt_bboxes: torch.Tensor,
         gt_labels: torch.Tensor,
+        gt_offset: int = 0,
         bg_iou_threshold: float = 0.1,
         fg_iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
@@ -281,8 +281,8 @@ class ObjectDetectionEvaluation(Evaluation):
             image_path,
             pred_scores=pred_scores,
             pred_labels=pred_labels,
-            gt_ids=gt_ids,
             gt_labels=gt_labels,
+            gt_offset=gt_offset,
             bg_iou_threshold=bg_iou_threshold,
             fg_iou_threshold=fg_iou_threshold,
             conf_threshold=conf_threshold,
@@ -308,7 +308,6 @@ class ObjectDetectionEvaluation(Evaluation):
                     continue
 
                 background_error = BackgroundError(
-                    -1,
                     evaluation=self,
                     pred_idx=pred_idx,
                     pred_label=pred_label,
@@ -330,7 +329,6 @@ class ObjectDetectionEvaluation(Evaluation):
             # All gts are MissedErrors and false negatives
             for gt_idx, (gt_label, gt_bbox) in enumerate(zip(gt_labels, gt_bboxes)):
                 missed_error = MissedError(
-                    gt_ids[gt_idx],
                     evaluation=self,
                     gt_idx=gt_idx,
                     gt_label=gt_label,
@@ -356,7 +354,6 @@ class ObjectDetectionEvaluation(Evaluation):
                     label_of_best_gt_match,
                 ):
                     true_positive = NonError(
-                        gt_ids[idx_of_best_gt_match],
                         evaluation=self,
                         pred_idx=pred_idx,
                         gt_idx=idx_of_best_gt_match,
@@ -392,7 +389,6 @@ class ObjectDetectionEvaluation(Evaluation):
 
             if self.is_background_error(pred_iou):
                 background_error = BackgroundError(
-                    -1,
                     evaluation=self,
                     pred_idx=pred_idx,
                     pred_label=pred_label,
@@ -411,8 +407,6 @@ class ObjectDetectionEvaluation(Evaluation):
             box_of_best_gt_match = gt_bboxes[idx_of_best_gt_match]
             label_of_best_gt_match = gt_labels[idx_of_best_gt_match]
 
-            idx = gt_ids[idx_of_best_gt_match]
-
             # Test for LocalizationError: correct class but poor localization
             # This detection would have been positive if it had higher IoU with this GT
             if self.is_localization_error(
@@ -421,7 +415,6 @@ class ObjectDetectionEvaluation(Evaluation):
                 label_of_best_gt_match,
             ):
                 localization_error = LocalizationError(
-                    idx,
                     evaluation=self,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
@@ -455,7 +448,6 @@ class ObjectDetectionEvaluation(Evaluation):
                 label_of_best_gt_match,
             ):
                 classification_error = ClassificationError(
-                    idx,
                     evaluation=self,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
@@ -487,7 +479,6 @@ class ObjectDetectionEvaluation(Evaluation):
                 label_of_best_gt_match,
             ):
                 classification_localization_error = ClassificationAndLocalizationError(
-                    idx,
                     evaluation=self,
                     pred_idx=pred_idx,
                     gt_idx=idx_of_best_gt_match,
@@ -514,7 +505,7 @@ class ObjectDetectionEvaluation(Evaluation):
                 continue
 
             # Test for DuplicateError: predictions with a lower IoU than an existing true positive
-            # This detection would have been a positive if it had the highest IoU with this GT
+            # This detection would have been a true positive if it had the highest IoU with this GT
             if self.is_duplicate_error(
                 pred_label,
                 iou_of_best_gt_match,
@@ -531,7 +522,6 @@ class ObjectDetectionEvaluation(Evaluation):
                 best_pred_bbox = self.pred_bboxes[idx_of_best_pred_match]
                 best_confidence = self.pred_scores[idx_of_best_pred_match]
                 duplicate_error = DuplicateError(
-                    idx,
                     evaluation=self,
                     pred_idx=pred_idx,
                     best_pred_idx=idx_of_best_pred_match,
@@ -555,7 +545,6 @@ class ObjectDetectionEvaluation(Evaluation):
 
             # Error canditates that are not actually errors are true positives
             true_positive = NonError(
-                idx,
                 evaluation=self,
                 pred_idx=pred_idx,
                 gt_idx=idx_of_best_gt_match,
@@ -606,7 +595,6 @@ class ObjectDetectionEvaluation(Evaluation):
 
             if all(i is None for i in pred_idx_matches):
                 missed_error = MissedError(
-                    gt_ids[gt_idx],
                     evaluation=self,
                     gt_idx=gt_idx,
                     gt_label=gt_labels[gt_idx],
@@ -1316,14 +1304,12 @@ class ObjectDetectionEvaluator(Evaluator):
         if self.gt_data is not None:
             return self.gt_data
         gt_errors: Dict[int, List[Error]] = {}
-        gt_ids = []
         gt_labels = []
         crops: List[torch.Tensor] = []
         images: list = []
         for evaluation in self.evaluations:
             image = read_image(evaluation.image_path)
             bboxes = evaluation.gt_bboxes.long().clone()
-            gt_ids.append(evaluation.gt_ids)
             gt_labels.append(evaluation.gt_labels)
             bboxes[:, 2:] = (
                 evaluation.gt_bboxes[:, 2:] - evaluation.gt_bboxes[:, :2] + 2 * pad
@@ -1335,12 +1321,10 @@ class ObjectDetectionEvaluator(Evaluator):
 
             gt_errors.update(evaluation.get_errors_by_gt())
 
-        gt_ids = torch.cat(gt_ids, dim=0)
         gt_labels = torch.cat(gt_labels, dim=0)
 
         self.gt_data = GTData(
             crops=crops,
-            gt_ids=gt_ids,
             gt_labels=gt_labels,
             gt_errors=gt_errors,
             images=images,

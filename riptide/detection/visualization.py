@@ -668,7 +668,16 @@ class Inspector:
 
                 unique_key = (*cluster, error.gt_label, error.pred_label)
 
-                if -1 not in cluster and unique_key in subclusters:
+                is_repeated_non_outlier = (
+                    -1 not in cluster and unique_key in subclusters
+                )
+                is_repeated_gt = (
+                    not isinstance(error, BackgroundError)
+                    and unique_key in subclusters
+                    and (*unique_key, error.idx) in subclusters[unique_key]["uniques"]
+                )
+
+                if is_repeated_non_outlier or is_repeated_gt:
                     subclusters[unique_key]["similar"].append(error)
                     if (*unique_key, error.idx) in subclusters[unique_key]["uniques"]:
                         count += 1
@@ -1595,8 +1604,6 @@ class Inspector:
                     )
                 gt_errors[gt_label][gt_id][1][i] = errors
 
-        gt_ids = gt_data.gt_ids.tolist()
-
         logging.info("Collated errors")
 
         ## generate crops
@@ -1611,7 +1618,7 @@ class Inspector:
                     figs[gt_id] = [[] for _ in evaluators]
                 image_tensor = read_image(image_path)
                 image_name = image_path.split("/")[-1]
-                cluster = tuple(gt_clusters[gt_ids.index(gt_id)].tolist())
+                cluster = tuple(gt_clusters[gt_id].tolist())
                 for i, model_errors in zip(ids, error_list):
                     for error in model_errors:
                         crop_key = (i, error)
@@ -1680,9 +1687,8 @@ class Inspector:
         ]
         for i, section_gt_ids in enumerate(gt_ids_by_section):
             for gt_id in section_gt_ids:
-                gt_ref = gt_ids.index(gt_id)
-                class_idx = gt_data.gt_labels[gt_ref].item()
-                cluster = tuple(gt_clusters[gt_ref].tolist())
+                class_idx = gt_data.gt_labels[gt_id].item()
+                cluster = tuple(gt_clusters[gt_id].tolist())
                 gt_figs = figs.get(gt_id)
                 if gt_figs is None:
                     continue
