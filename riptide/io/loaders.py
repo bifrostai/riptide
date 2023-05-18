@@ -25,9 +25,7 @@ class DictLoader:
         loader.predictions_dict_file = predictions_dict_file
         return loader
 
-    def process_boxes(
-        self, gt_dict: Dict, pred_dict: Dict, start: int = 0
-    ) -> Tuple[torch.Tensor, ...]:
+    def process_boxes(self, gt_dict: dict, pred_dict: dict) -> Tuple[torch.Tensor, ...]:
         pred_bboxes = (
             pred_dict["boxes"] if len(pred_dict["boxes"]) > 0 else torch.empty((0, 4))
         )
@@ -39,16 +37,12 @@ class DictLoader:
         )
         gt_bboxes = gt_dict["boxes"]
         gt_labels = gt_dict["labels"]
-        end = start + len(gt_labels)
-        gt_ids = torch.arange(start, end)
         return (
             pred_bboxes,
             pred_scores,
             pred_labels,
             gt_bboxes,
             gt_labels,
-            gt_ids,
-            end,
         )
 
     def load(
@@ -78,20 +72,19 @@ class DictLoader:
                 pred_labels,
                 gt_bboxes,
                 gt_labels,
-                gt_ids,
-                start,
-            ) = self.process_boxes(gt, pred, start)
+            ) = self.process_boxes(gt, pred)
             evaluation = evaluation_cls(
                 image_path=os.path.join(self.image_dir, file_name),
                 pred_bboxes=pred_bboxes.cpu(),
                 pred_scores=pred_scores.cpu(),
                 pred_labels=pred_labels.cpu(),
-                gt_ids=gt_ids.cpu(),
                 gt_bboxes=gt_bboxes.cpu(),
                 gt_labels=gt_labels.cpu(),
+                gt_offset=start,
                 conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
+            start += len(gt_labels)
 
         return evaluator_cls(evaluations, image_dir=self.image_dir, **kwargs)
 
@@ -168,8 +161,6 @@ class COCOLoader:
         for file_name, pred_gt_dict in results_dict.items():
             coco_ids = torch.tensor(pred_gt_dict["targets"]["ids"])
             gt_ids_map.append(coco_ids)
-            end = start + len(coco_ids)
-            gt_ids = torch.arange(start, end)
             gt_bboxes = torch.tensor(pred_gt_dict["targets"]["boxes"])
             if len(gt_bboxes) == 0:
                 gt_bboxes = torch.empty((0, 4))
@@ -189,12 +180,13 @@ class COCOLoader:
                 pred_bboxes=pred_bboxes,
                 pred_scores=pred_scores,
                 pred_labels=pred_labels,
-                gt_ids=gt_ids,
                 gt_bboxes=gt_bboxes,
                 gt_labels=gt_labels,
+                gt_offset=start,
                 conf_threshold=conf_threshold,
             )
             evaluations.append(evaluation)
+            start += len(gt_labels)
 
         return evaluator_cls(
             evaluations,

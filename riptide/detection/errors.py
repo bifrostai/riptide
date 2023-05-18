@@ -71,7 +71,6 @@ class Error:
 
     def __init__(
         self,
-        idx: int,
         /,
         evaluation,
         pred_idx: int = None,
@@ -82,7 +81,6 @@ class Error:
         gt_bbox: torch.Tensor = None,
         confidence: float = None,
     ) -> None:
-        self.idx = idx.item() if isinstance(idx, torch.Tensor) else idx
         self.pred_idx = (
             pred_idx.item() if isinstance(pred_idx, torch.Tensor) else pred_idx
         )
@@ -103,6 +101,10 @@ class Error:
 
         self._evaluation = evaluation
 
+    @property
+    def idx(self):
+        return self._evaluation._get_gt_id(self.gt_idx)
+
     def __repr__(self) -> str:
         attrs = [
             f"{x}={getattr(self, x)}"
@@ -122,7 +124,6 @@ class ClassificationError(Error):
 
     def __init__(
         self,
-        idx: int,
         /,
         conf_threshold: float = 0.5,
         **kwargs,
@@ -144,7 +145,7 @@ class ClassificationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
         self.conf_threshold = conf_threshold
 
 
@@ -154,7 +155,6 @@ class LocalizationError(Error):
 
     def __init__(
         self,
-        idx: int,
         /,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
@@ -191,7 +191,7 @@ class LocalizationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
@@ -202,7 +202,6 @@ class ClassificationAndLocalizationError(Error):
 
     def __init__(
         self,
-        idx: int,
         /,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
@@ -239,7 +238,7 @@ class ClassificationAndLocalizationError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
@@ -250,7 +249,6 @@ class DuplicateError(Error):
 
     def __init__(
         self,
-        idx: int,
         /,
         best_pred_idx: int,
         best_pred_label: int,
@@ -310,7 +308,7 @@ class DuplicateError(Error):
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
 
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
         self.best_pred_idx = best_pred_idx
         self.best_pred_label = (
             best_pred_label.item()
@@ -333,7 +331,6 @@ class BackgroundError(Error):
 
     def __init__(
         self,
-        idx: int,
         /,
         conf_threshold: float = 0.5,
         **kwargs,
@@ -352,7 +349,7 @@ class BackgroundError(Error):
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
 
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
         self.conf_threshold = conf_threshold
 
 
@@ -362,8 +359,6 @@ class MissedError(Error):
 
     def __init__(
         self,
-        idx: int,
-        /,
         **kwargs,
     ) -> None:
         gt_label = kwargs.get("gt_label", 0)
@@ -372,7 +367,7 @@ class MissedError(Error):
                 f"The ground truth category must have value > 0, got {gt_label}"
             )
 
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
 
     def crowd_ids(self, threshold=0.4) -> torch.Tensor:
         """Get the indices of neighbouring ground truths that overlap with the ground truth associated with this error."""
@@ -389,7 +384,6 @@ class NonError(Error):
 
     def __init__(
         self,
-        idx: int,
         /,
         iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
@@ -425,7 +419,7 @@ class NonError(Error):
             raise LowConfidenceException(
                 f"The prediction must have conf >= {conf_threshold}, got {confidence}"
             )
-        super().__init__(idx, **kwargs)
+        super().__init__(**kwargs)
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
 
