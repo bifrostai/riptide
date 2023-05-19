@@ -744,13 +744,26 @@ class Inspector:
                 constrained_layout=True,
             )
             for i, error_type in enumerate(error_types):
-                ax.barh(
+                bars = ax.barh(
                     range(len(confusion_dict)),
                     width=[x[i] for x in confusion_dict.values()],
                     color=ErrorColor[error_type.code].hex,
                     left=[sum(x[:i]) for x in confusion_dict.values()],
                     label=error_type.code,
                 )
+                for bar in bars.patches:
+                    if bar.get_width() == 0:
+                        continue
+                    ax.annotate(
+                        format(bar.get_width(), "d"),
+                        (bar.get_x() + bar.get_width() - 0.5, bar.get_y()),
+                        ha="center",
+                        va="center",
+                        size=8,
+                        xytext=(0, 8),
+                        textcoords="offset points",
+                    )
+
             ax.set_yticks(range(len(confusion_dict)))
             ax.set_yticklabels(
                 [
