@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.nn.functional import conv2d
-from torchvision.io import read_image
 from torchvision.transforms import Grayscale
 from torchvision.transforms.functional import crop
 from tqdm import tqdm
@@ -34,7 +33,7 @@ from riptide.utils.crops import (
     get_crop_options,
 )
 from riptide.utils.enums import ErrorWeights
-from riptide.utils.image import encode_base64
+from riptide.utils.image import encode_base64, read_image
 from riptide.utils.logging import logger
 from riptide.utils.plots import (
     annotate_heatmap,
@@ -1729,7 +1728,7 @@ class Inspector:
                         type=ContentType.IMAGES,
                         header=f"Errors in Class {class_idx}",
                         content=section_content["contents"][class_idx],
-                        data=dict(grouped=True, compact=True),
+                        data=dict(grouped=True, compact=True, badged=False),
                     )
                     for class_idx in section_content["contents"]
                 ],

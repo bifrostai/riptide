@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import torch
 from matplotlib.figure import Figure
 from PIL import Image
+from torchvision.io import read_image as read_image_torch
 from torchvision.transforms.functional import crop
 from torchvision.utils import draw_bounding_boxes
 
@@ -102,8 +103,6 @@ def get_padded_bbox_crop(
         short_edge_padding = torch.div(
             (x2 - x1) - (y2 - y1), 2, rounding_mode="floor"
         ).item()
-        # y1 = max(0, y1 - short_edge_padding)
-        # y2 = min(image_tensor.size(1), y2 + short_edge_padding)
         y1 -= short_edge_padding
         y2 += short_edge_padding
     else:
@@ -112,8 +111,6 @@ def get_padded_bbox_crop(
         short_edge_padding = torch.div(
             ((y2 - y1) - (x2 - x1)), 2, rounding_mode="floor"
         ).item()
-        # x1 = max(0, x1 - short_edge_padding)
-        # x2 = min(image_tensor.size(2), x2 + short_edge_padding)
         x1 -= short_edge_padding
         x2 += short_edge_padding
 
@@ -154,3 +151,46 @@ def encode_base64(input: Any) -> bytes:
     else:
         raise Exception(f"Input type {input.__class__.__name__} not supported.")
     return base64.b64encode(bytesio.getvalue()).decode("utf-8")
+
+
+def blank_image(width: int, height: int, *, fill_value: int = 255) -> torch.Tensor:
+    """Create a blank image
+
+    Parameters
+    ----------
+    width : int
+        Width of image
+    height : int
+        Height of image
+
+    Returns
+    -------
+    Image.Image
+        Blank image
+    """
+    t = torch.full((3, height, width), fill_value=fill_value, dtype=torch.uint8)
+    t[0, :, :] = torch.linspace(fill_value // 2, fill_value, width).repeat(height, 1)
+    t[1, :, :] = torch.linspace(fill_value, fill_value // 2, height).repeat(width, 1).T
+    return t
+
+
+def read_image(
+    image_path: str, *, width: int = 1920, height: int = 1920
+) -> torch.Tensor:
+    """Read an image from a path
+
+    Parameters
+    ----------
+    image_path : str
+        Path to image
+
+    Returns
+    -------
+    Image.Image
+        Image
+    """
+    try:
+        image = read_image_torch(image_path)
+    except:
+        image = blank_image(width, height)
+    return image
