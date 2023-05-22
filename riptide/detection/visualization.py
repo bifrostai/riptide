@@ -513,6 +513,7 @@ class Inspector:
         ax.set_yscale("log")
         ax.set_ylabel("Area (px)")
         ax.set_xlabel("Class")
+        ax.set_xticklabels([self.categories.get(i, i) for i in ax.get_xticks()])
 
         return encode_base64(fig)
 
