@@ -1679,7 +1679,6 @@ class Inspector:
                         self.crops[crop_key] = fig
                         figs[gt_id][i].append(fig)
 
-                    # TODO: this sorting is repeated in Evaluation().get_pred_status(). Use that instead
                     figs[gt_id][i] = [
                         sorted(
                             figs[gt_id][i],

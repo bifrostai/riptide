@@ -122,7 +122,8 @@ class HtmlReport:
     ):
         inspector = self.inspector
         for idx in [0, 1]:
-            inspector.inspect(evaluator_id=idx)
+            if idx not in inspector._generated_crops:
+                inspector.inspect(evaluator_id=idx)
 
         sections, section_names = inspector.compare()
 
