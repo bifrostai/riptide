@@ -548,7 +548,7 @@ class Inspector:
         evaluator_id : int, default=0
             Evaluator id to use
 
-        preview_size : int, default=128
+        preview_size : int, default=192
             Size of the preview image
 
         bbox_attr : str, default=None
@@ -694,6 +694,13 @@ class Inspector:
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
+
+            for clusters in clusters_dict.values():
+                clusters[0] = sorted(
+                    clusters[0],
+                    key=lambda x: (len(x["similar"]), len(x["uniques"])),
+                    reverse=True,
+                )
 
             classwise_dict[label] = (
                 class_info,
@@ -1293,6 +1300,15 @@ class Inspector:
                     figs[group][error.gt_label][1][cluster] = [[]]
 
                 figs[group][error.gt_label][1][cluster][0].append(fig)
+
+        for _, group_figs in figs.items():
+            for _, (_, clusters) in group_figs.items():
+                for cluster in clusters.values():
+                    cluster[0] = sorted(
+                        cluster[0],
+                        key=lambda x: (len(x["similar"]), len(x["uniques"])),
+                        reverse=True,
+                    )
 
         return Section(
             id=section_id,
