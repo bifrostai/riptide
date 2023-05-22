@@ -77,6 +77,11 @@ class FlowVisualizer:
         ids: List[int] = (0, 1),
         labels: Union[str, int, List[int]] = "all",
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        for i in ids:
+            assert 0 <= i < len(self.evaluators), (
+                f"Invalid list of evaluator IDs {ids}. IDs cannot be less than"
+                f" {len(self.evaluators)}"
+            )
         if labels == "all":
             evaluations = [
                 (i, evaluation)

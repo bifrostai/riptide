@@ -513,6 +513,7 @@ class Inspector:
         ax.set_yscale("log")
         ax.set_ylabel("Area (px)")
         ax.set_xlabel("Class")
+        ax.set_xticklabels([self.categories.get(i, i) for i in ax.get_xticks()])
 
         return encode_base64(fig)
 
@@ -547,7 +548,7 @@ class Inspector:
         evaluator_id : int, default=0
             Evaluator id to use
 
-        preview_size : int, default=128
+        preview_size : int, default=192
             Size of the preview image
 
         bbox_attr : str, default=None
@@ -693,6 +694,13 @@ class Inspector:
 
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
+
+            for clusters in clusters_dict.values():
+                clusters[0] = sorted(
+                    clusters[0],
+                    key=lambda x: (len(x["similar"]), len(x["uniques"])),
+                    reverse=True,
+                )
 
             classwise_dict[label] = (
                 class_info,
@@ -1293,6 +1301,25 @@ class Inspector:
 
                 figs[group][error.gt_label][1][cluster][0].append(fig)
 
+        for _, group_figs in figs.items():
+            for class_idx, (info, clusters) in group_figs.items():
+                for cluster in clusters.values():
+                    cluster[0] = sorted(
+                        cluster[0],
+                        key=lambda x: (len(x["similar"]), len(x["uniques"])),
+                        reverse=True,
+                    )
+                group_figs[class_idx] = (
+                    info,
+                    dict(
+                        sorted(
+                            clusters.items(),
+                            key=lambda x: x[0],
+                            reverse=True,
+                        )
+                    ),
+                )
+
         return Section(
             id=section_id,
             title=title,
@@ -1652,7 +1679,6 @@ class Inspector:
                         self.crops[crop_key] = fig
                         figs[gt_id][i].append(fig)
 
-                    # TODO: this sorting is repeated in Evaluation().get_pred_status(). Use that instead
                     figs[gt_id][i] = [
                         sorted(
                             figs[gt_id][i],

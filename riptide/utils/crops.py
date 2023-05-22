@@ -38,7 +38,7 @@ def add_metadata(metadata: dict, error: Error) -> dict:
                     f"Conf { metadata['confidence'] }",
                     f"W{ metadata['bbox_width'] }",
                     f"H{ metadata['bbox_height'] }",
-                    f"Cluster { metadata['cluster'] }",
+                    f"Sub { metadata['cluster'][1] }",
                 ]
             ),
         }
@@ -87,6 +87,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                             x["image_name"],
                             f"Pred: Class {x['pred_class']}",
                             f"Conf { x['confidence'] }",
+                            f"Sub { x['cluster'][1] }",
                         ]
                     ),
                 }
@@ -117,7 +118,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
                             f"IoU {x['iou']}",
-                            f"Cluster { x['cluster'] }",
+                            f"Sub { x['cluster'][1] }",
                         ]
                     ),
                 }
@@ -152,7 +153,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
                             f"IoU {x['iou']}",
-                            f"Cluster { x['cluster'] }",
+                            f"Sub { x['cluster'][1] }",
                         ]
                     ),
                 }
@@ -196,7 +197,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                             f"Best  ({ best_iou }, { best_conf })",
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
-                            f"Cluster { x['cluster'] }",
+                            f"Sub { x['cluster'][1] }",
                         ]
                     ),
                 }
@@ -226,6 +227,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                             x["image_name"],
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
+                            f"Sub { x['cluster'][1] }",
                         ]
                     ),
                 }
@@ -256,7 +258,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                             x["image_name"],
                             f"Conf {x['confidence']}",
                             f"IoU {x['iou']}",
-                            f"Cluster { x['cluster'] }",
+                            f"Sub { x['cluster'][1] }",
                         ]
                     ),
                 }
