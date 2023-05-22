@@ -45,7 +45,6 @@ body {
 }
 
 .sidebar {
-    background-color: #222222;
     padding-bottom: 2vh;
     width: 18vw;
     display: flex;
@@ -118,13 +117,10 @@ body {
     overflow: auto;
     -ms-overflow-style: none;
     scrollbar-width: none;
-    display: flex;
-    flex-direction: column;
-    word-wrap: break-word;
     background-color: #222222;
-    color: #FFEECC;
     padding: 2vh 5vw;
     width: 60%;
+    max-width: 900px;
 }
 
 .main::-webkit-scrollbar {
