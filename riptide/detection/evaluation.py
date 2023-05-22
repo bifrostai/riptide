@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import pandas as pd
 import torch
 from termcolor import colored
-from torchvision.io import read_image
 from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import crop, to_pil_image
 from torchvision.utils import draw_bounding_boxes
@@ -26,6 +25,7 @@ from riptide.detection.errors import (
 )
 from riptide.io.loaders import COCOLoader, DictLoader
 from riptide.utils.colors import ErrorColor
+from riptide.utils.image import read_image
 from riptide.utils.logging import logger
 from riptide.utils.models import GTData
 

@@ -138,6 +138,7 @@
 {%- macro render_images(content) -%}
 {%- set grouped = content.data.get("grouped", true) -%}
 {%- set compact = content.data.get("compact", true) -%}
+{%- set badged = content.data.get("badged", true) -%}
 {%- set images = content.content -%}
 <div class="class-images">
     {%- if images.get("group_headers") is not none -%}
@@ -155,7 +156,7 @@
                 <div class="class-image-container row">
                     {%- for image_dict in image_list -%}
                     <div class="class-image-wrapper">
-                        {{ render_image(image_dict) }}
+                        {{ render_image(image_dict, badged) }}
                     </div>
                     {%- endfor -%}
                 </div>
@@ -170,7 +171,7 @@
                 <div class="class-image-container row" style="flex-basis: {{ 100 / (cluster | length) }}%">
                     {%- for image_dict in image_list -%}
                     <div class="class-image-wrapper">
-                        {{ render_image(image_dict) }}
+                        {{ render_image(image_dict, badged) }}
                     </div>
                     {%- endfor -%}
                 </div>
@@ -183,7 +184,7 @@
                 {%- for cluster in clusters.values() -%}
                 {%- for image_list in cluster -%}
                 {%- for image_dict in image_list -%}
-                    {{ render_image(image_dict) }}
+                    {{ render_image(image_dict, badged) }}
                 {%- endfor -%}
                 {%- endfor -%}
                 {%- endfor -%}
@@ -194,13 +195,13 @@
 </div>
 {%- endmacro -%}
 
-{%- macro render_image(image) -%}
+{%- macro render_image(image, badged=true) -%}
 <div class="class-image-wrapper
-{%- if image.get('similar') | length > 1 %} stack{% endif %}
-{%- if image.get('similar') | length > 2 %} multi{% endif %}">
+{%- if badged and image.get('similar') | length > 1 %} stack{% endif %}
+{%- if badged and image.get('similar') | length > 2 %} multi{% endif %}">
     <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">
     {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"]}}</span>{% endif %}
-    {% if image.get("similar") | length > 1 -%}
+    {% if badged and image.get("similar") | length > 1 -%}
     <span class="badge">
         {%- if image.get("uniques") | length > 1 -%}
         <span class="text-xs">{{ image["uniques"] | length }} | </span>
