@@ -1302,13 +1302,23 @@ class Inspector:
                 figs[group][error.gt_label][1][cluster][0].append(fig)
 
         for _, group_figs in figs.items():
-            for _, (_, clusters) in group_figs.items():
+            for class_idx, (info, clusters) in group_figs.items():
                 for cluster in clusters.values():
                     cluster[0] = sorted(
                         cluster[0],
                         key=lambda x: (len(x["similar"]), len(x["uniques"])),
                         reverse=True,
                     )
+                group_figs[class_idx] = (
+                    info,
+                    dict(
+                        sorted(
+                            clusters.items(),
+                            key=lambda x: x[0],
+                            reverse=True,
+                        )
+                    ),
+                )
 
         return Section(
             id=section_id,
