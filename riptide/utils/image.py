@@ -39,7 +39,7 @@ def crop_preview(
         image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors, width=2)
     image_tensor, translation = get_padded_bbox_crop(image_tensor, bbox)
 
-    return image_tensor
+    return image_tensor, translation
 
 
 def convex_hull(
@@ -102,16 +102,20 @@ def get_padded_bbox_crop(
         short_edge_padding = torch.div(
             (x2 - x1) - (y2 - y1), 2, rounding_mode="floor"
         ).item()
-        y1 = max(0, y1 - short_edge_padding)
-        y2 = min(image_tensor.size(1), y2 + short_edge_padding)
+        # y1 = max(0, y1 - short_edge_padding)
+        # y2 = min(image_tensor.size(1), y2 + short_edge_padding)
+        y1 -= short_edge_padding
+        y2 += short_edge_padding
     else:
         y1 -= PREVIEW_PADDING
         y2 += PREVIEW_PADDING
         short_edge_padding = torch.div(
             ((y2 - y1) - (x2 - x1)), 2, rounding_mode="floor"
         ).item()
-        x1 = max(0, x1 - short_edge_padding)
-        x2 = min(image_tensor.size(2), x2 + short_edge_padding)
+        # x1 = max(0, x1 - short_edge_padding)
+        # x2 = min(image_tensor.size(2), x2 + short_edge_padding)
+        x1 -= short_edge_padding
+        x2 += short_edge_padding
 
     cropped = crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
     translation = torch.tensor([x1, y1, x2, y2]) - hull
