@@ -31,6 +31,7 @@ from riptide.utils.crops import (
     generate_fig,
     get_bbox_by_attr,
     get_crop_options,
+    get_unique_key,
 )
 from riptide.utils.enums import ErrorWeights
 from riptide.utils.image import encode_base64, read_image
@@ -666,7 +667,7 @@ class Inspector:
                 self.crops[crop_key] = fig
                 bkg_idx += 1
 
-                unique_key = (*cluster, error.gt_label, error.pred_label)
+                unique_key, tail = get_unique_key(cluster, error)
 
                 is_repeated_non_outlier = (
                     -1 not in cluster and unique_key in subclusters
@@ -674,15 +675,15 @@ class Inspector:
                 is_repeated_gt = (
                     not isinstance(error, BackgroundError)
                     and unique_key in subclusters
-                    and (*unique_key, error.idx) in subclusters[unique_key]["uniques"]
+                    and unique_key + tail in subclusters[unique_key]["uniques"]
                 )
 
                 if is_repeated_non_outlier or is_repeated_gt:
                     subclusters[unique_key]["similar"].append(error)
-                    if (*unique_key, error.idx) in subclusters[unique_key]["uniques"]:
+                    if unique_key + tail in subclusters[unique_key]["uniques"]:
                         count += 1
                     else:
-                        subclusters[unique_key]["uniques"].add((*unique_key, error.idx))
+                        subclusters[unique_key]["uniques"].add(unique_key + tail)
                 else:
                     subclusters[unique_key] = fig
 
@@ -1295,7 +1296,6 @@ class Inspector:
 
                 cluster = cluster[0]
 
-                fig["caption"] += f" | Sub {fig.get('cluster')[1]}"
                 if cluster not in figs[group][error.gt_label][1]:
                     figs[group][error.gt_label][1][cluster] = [[]]
 
@@ -1530,7 +1530,7 @@ class Inspector:
         return sections, section_names
 
     @logger()
-    def compare_background_errors(self) -> Section:
+    def compare_background_errors(self, **kwargs) -> Section:
         """Generate a section comparing the background errors between models.
 
         Returns
@@ -1539,14 +1539,12 @@ class Inspector:
             The section containing the visualizations
         """
 
-        mask = [label[0] > -1 for label in self.projector.labels]
+        get_crop_options(BackgroundError, kwargs)
 
         figs = [
             self.error_classwise_dict(
-                BackgroundError,
-                color=ErrorColor.BKG,
-                axis=1,
                 evaluator_id=idx,
+                **kwargs,
             )
             for idx in range(len(self.evaluators))
         ]

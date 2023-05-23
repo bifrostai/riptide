@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Type, Union
+from typing import Any, Callable, List, Tuple, Type, Union
 
 import torch
 from PIL import Image
@@ -6,6 +6,7 @@ from torchvision.ops.boxes import box_iou
 from torchvision.transforms.functional import to_pil_image
 
 from riptide.detection.errors import (
+    HIGH_CONFIDENCE,
     BackgroundError,
     ClassificationAndLocalizationError,
     ClassificationError,
@@ -30,20 +31,7 @@ def get_both_bboxes(error: Error, bbox_attr: str):
 
 
 def add_metadata(metadata: dict, error: Error) -> dict:
-    metadata.update(
-        {
-            "caption": " | ".join(
-                [
-                    metadata["image_name"],
-                    f"Conf { metadata['confidence'] }",
-                    f"W{ metadata['bbox_width'] }",
-                    f"H{ metadata['bbox_height'] }",
-                    f"Sub { metadata['cluster'][1] }",
-                ]
-            ),
-        }
-    )
-
+    metadata["caption"] += f" | Sub { metadata['cluster'][1] }"
     return metadata
 
 
@@ -65,6 +53,23 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
         kwargs = dict()
 
     if error_type is BackgroundError:
+
+        def add_metadata_func(x: dict, error: BackgroundError) -> dict:
+            x.update(
+                {
+                    "caption": " | ".join(
+                        [
+                            x["image_name"],
+                            f"W{ x['bbox_width'] }",
+                            f"H{ x['bbox_height'] }",
+                            f"Conf {x['confidence']}",
+                        ]
+                    )
+                }
+            )
+
+            return add_metadata(x, error)
+
         kwargs.update(
             dict(
                 error_type=BackgroundError,
@@ -73,27 +78,16 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
                 get_bbox_func=get_bbox_by_attr,
-                add_metadata_func=add_metadata,
+                add_metadata_func=add_metadata_func,
                 label_str="Predicted: {label}",
             )
         )
     elif error_type is ClassificationError:
 
         def add_metadata_func(x: dict, error: ClassificationError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Pred: Class {x['pred_class']}",
-                            f"Conf { x['confidence'] }",
-                            f"Sub { x['cluster'][1] }",
-                        ]
-                    ),
-                }
-            )
+            x["caption"] += f" | Pred: Class {x['pred_class']}"
 
-            return x
+            return add_metadata(x, error)
 
         kwargs.update(
             dict(
@@ -108,24 +102,6 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
             )
         )
     elif error_type is LocalizationError:
-
-        def add_metadata_func(x: dict, error: LocalizationError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"IoU {x['iou']}",
-                            f"Sub { x['cluster'][1] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
         kwargs.update(
             dict(
                 error_type=LocalizationError,
@@ -134,7 +110,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
                 get_bbox_func=get_both_bboxes,
-                add_metadata_func=add_metadata_func,
+                add_metadata_func=add_metadata,
                 label_str="Actual: {label}",
             )
         )
@@ -143,23 +119,8 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
         def add_metadata_func(
             x: dict, error: ClassificationAndLocalizationError
         ) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Pred: Class {x['pred_class']}",
-                            f"Conf { x['confidence'] }",
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"IoU {x['iou']}",
-                            f"Sub { x['cluster'][1] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
+            x["caption"] += f" | Pred: Class {x['pred_class']}"
+            return add_metadata(x, error)
 
         kwargs.update(
             dict(
@@ -193,17 +154,16 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                     "caption": " | ".join(
                         [
                             x["image_name"],
-                            f"IoU, Conf ({ x['iou'] }, {x['confidence']})",
-                            f"Best  ({ best_iou }, { best_conf })",
                             f"W{x['bbox_width']}",
                             f"H{x['bbox_height']}",
-                            f"Sub { x['cluster'][1] }",
+                            f"IoU, Conf ({ x['iou'] }, {x['confidence']})",
+                            f"Best  ({ best_iou }, { best_conf })",
                         ]
                     ),
                 }
             )
 
-            return x
+            return add_metadata(x, error)
 
         kwargs.update(
             dict(
@@ -219,21 +179,20 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
         )
     elif error_type is MissedError:
 
-        def add_metadata_func(x: dict, error: MissedError) -> dict:
+        def add_metadata_func(x: dict, error: BackgroundError) -> dict:
             x.update(
                 {
                     "caption": " | ".join(
                         [
                             x["image_name"],
-                            f"W{x['bbox_width']}",
-                            f"H{x['bbox_height']}",
-                            f"Sub { x['cluster'][1] }",
+                            f"W{ x['bbox_width'] }",
+                            f"H{ x['bbox_height'] }",
                         ]
-                    ),
+                    )
                 }
             )
 
-            return x
+            return add_metadata(x, error)
 
         kwargs.update(
             dict(
@@ -249,23 +208,6 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
         )
 
     else:
-
-        def add_metadata_func(x: dict, error: NonError) -> dict:
-            x.update(
-                {
-                    "caption": " | ".join(
-                        [
-                            x["image_name"],
-                            f"Conf {x['confidence']}",
-                            f"IoU {x['iou']}",
-                            f"Sub { x['cluster'][1] }",
-                        ]
-                    ),
-                }
-            )
-
-            return x
-
         kwargs.update(
             dict(
                 error_type=NonError,
@@ -274,12 +216,21 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 bbox_attr="pred_bbox",
                 label_attr="pred_label",
                 get_bbox_func=get_both_bboxes,
-                add_metadata_func=add_metadata_func,
+                add_metadata_func=add_metadata,
                 label_str="Actual: {label}",
             )
         )
 
     return kwargs
+
+
+def get_unique_key(cluster: tuple, error: Error) -> Tuple[tuple, tuple]:
+    return (
+        *cluster,
+        error.gt_label,
+        error.pred_label,
+        error.confidence is not None and error.confidence > HIGH_CONFIDENCE,
+    ), (error.idx,)
 
 
 def generate_fig(
@@ -321,6 +272,8 @@ def generate_fig(
         else None
     )
 
+    unique_key, tail = get_unique_key(cluster, error)
+
     data = {
         "type": error.code,
         "image_name": image_name,
@@ -334,7 +287,16 @@ def generate_fig(
         "iou": iou,
         "cluster": cluster,
         "similar": [error],
-        "uniques": {(*cluster, error.gt_label, error.pred_label, error.idx)},
+        "uniques": {unique_key + tail},
     }
+
+    data["caption"] = " | ".join(
+        [
+            data["image_name"],
+            f"W{ data['bbox_width'] }",
+            f"H{ data['bbox_height'] }",
+            f"IoU, Conf ({ data['iou'] }, {data['confidence']})",
+        ]
+    )
 
     return add_metadata_func(data, error)

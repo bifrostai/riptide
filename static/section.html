@@ -196,13 +196,14 @@
 {%- endmacro -%}
 
 {%- macro render_image(image, badged=true) -%}
+{%- set high_conf = image.get("confidence") is not none and image.get("confidence") > 0.85 -%}
 <div class="class-image-wrapper
 {%- if badged and image.get('similar') | length > 1 %} stack{% endif %}
 {%- if badged and image.get('similar') | length > 2 %} multi{% endif %}">
     <img class="class-image" src="data:image/png;base64,{{ image['image_base64'] | safe}}" alt="{{ image['alt'] }}">
-    {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"]}}</span>{% endif %}
-    {% if badged and image.get("similar") | length > 1 -%}
-    <span class="badge">
+    {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"] | safe}}</span>{% endif %}
+    {% if badged and (image.get("similar") | length > 1 or high_conf) -%}
+    <span class="badge" {%- if high_conf %} style="--badge-color: #C80000;"{% endif %}>
         {%- if image.get("uniques") | length > 1 -%}
         <span class="text-xs">{{ image["uniques"] | length }} | </span>
         {%- endif -%}

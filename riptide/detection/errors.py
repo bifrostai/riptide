@@ -26,6 +26,7 @@ from riptide.detection.confusions import Confusion
 #     classification or localization error.
 ################################################################################################
 
+HIGH_CONFIDENCE = 0.85
 
 # region: Exceptions
 class WrongCategoryException(Exception):
