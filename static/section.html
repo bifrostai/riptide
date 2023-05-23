@@ -196,7 +196,7 @@
 {%- endmacro -%}
 
 {%- macro render_image(image, badged=true) -%}
-{%- set high_conf = image.get("confidence") is not none and image.get("confidence") > 0.85 -%}
+{%- set high_conf = image.get("type") != "TP" and image.get("confidence") is not none and image.get("confidence") > 0.85 -%}
 <div class="class-image-wrapper
 {%- if badged and image.get('similar') | length > 1 %} stack{% endif %}
 {%- if badged and image.get('similar') | length > 2 %} multi{% endif %}">
