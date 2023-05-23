@@ -238,6 +238,7 @@ body {
 
 .badge {
     --badge-color: #2c2c2c;
+    --badge-outline: #2c2c2c;
     position: absolute;
     top: 0;
     right: 0;
@@ -245,7 +246,7 @@ body {
     min-height: 2.5vh;
     border-radius: 1.25vh;
     background-color: var(--badge-color);
-    outline: solid 0.3em var(--badge-color);
+    outline: solid 0.3em var(--badge-outline);
     outline-offset: -0.05em;
     font-size: 1.5vh;
     text-align: center;
