@@ -94,24 +94,26 @@ def test_get_clusters(images: List[torch.Tensor]):
         ), "First subcluster should be equal to the cluster"
 
 
-def test_clusters_are_equal():
+@settings(deadline=None, max_examples=5)
+@given(st_images(num=NUM_IMAGES, dtype=int, channels=3))
+def test_clusters_are_equal(images: List[torch.Tensor]):
     """Clusters should be equal for the same image"""
     torch.random.manual_seed(SEED)
-    images = [torch.rand(3, IMG_SIZE, IMG_SIZE) for _ in range(NUM_IMAGES)]
+    # add some noise for cases where all images are the same
+    noise = [torch.rand(3, IMG_SIZE, IMG_SIZE) for _ in range(2)]
 
     for mode in ALLOWED_MODES:
         projector = CropProjector(
             name="test",
-            images=images + images,
+            images=images + images + noise,
             encoder_mode=mode,
             normalize_embeddings=True,
         )
-        clusters = projector.subcluster(sub_lambda=1)
+        clusters = projector.subcluster()[:-2, :]
         assert (
             clusters[:, 0].min() != -1
         ), "Core clusters: No outliers should be present"
-        # TODO: Fix this test. Identical images should be in the same subcluster
-        # assert clusters[:, 1].min() != -1, "Sub-clusters: No outliers should be present"
+        assert clusters[:, 1].min() != -1, "Sub-clusters: No outliers should be present"
         assert torch.all(
             clusters[:NUM_IMAGES, 0] == clusters[NUM_IMAGES:, 0]
         ), "Clusters should be equal for the same image"

@@ -165,12 +165,14 @@ class CropProjector:
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
         sub_eps = sub_lambda * clusterer.cluster_selection_epsilon
 
+        noise = torch.rand((2, embeddings.shape[1]), device=embeddings.device)
+
         for cluster in range(labels.max() + 1):
             cluster_mask = labels == cluster
-            cluster_embeddings = embeddings[cluster_mask]
+            cluster_embeddings = torch.cat([embeddings[cluster_mask], noise])
             subclusterer = HDBSCAN(
                 min_cluster_size=2, min_samples=1, cluster_selection_epsilon=sub_eps
             ).fit(cluster_embeddings)
-            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_)
+            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_[:-2])
 
         return torch.stack([labels, subclusters], dim=1)
