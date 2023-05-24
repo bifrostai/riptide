@@ -1,9 +1,12 @@
 # import os
 
+from typing import List
+
 import torch
-from torchvision.ops import box_iou
+from hypothesis import given, settings
 
 from riptide.detection.embeddings.projector import CropProjector
+from tests.utils.strategies import st_images
 
 ALLOWED_MODES = [
     "preconv",
@@ -18,11 +21,11 @@ IMG_SIZE = 32
 SEED = 1234
 
 
-def test_get_embeddings():
+@settings(deadline=None, max_examples=5)
+@given(st_images(num=NUM_IMAGES, dtype=int, channels=3))
+def test_get_embeddings(images: List[torch.Tensor]):
     """A CropProjector should be able to be instantiated and compute embeddings"""
-    torch.random.manual_seed(SEED)
 
-    images = [torch.rand(3, IMG_SIZE, IMG_SIZE) for _ in range(NUM_IMAGES)]
     for mode in ALLOWED_MODES:
         try:
             projector = CropProjector(
@@ -51,10 +54,10 @@ def test_get_embeddings():
             ) from e
 
 
-def test_embeddings_are_equal():
+@settings(deadline=None, max_examples=5)
+@given(st_images(num=NUM_IMAGES, dtype=int, channels=3))
+def test_embeddings_are_equal(images: List[torch.Tensor]):
     """Embeddings should be equal for the same image"""
-    torch.random.manual_seed(SEED)
-    images = [torch.rand(3, IMG_SIZE, IMG_SIZE) for _ in range(NUM_IMAGES)]
 
     for mode in ALLOWED_MODES:
         projector = CropProjector(
@@ -69,11 +72,10 @@ def test_embeddings_are_equal():
         ), "Embeddings should be equal for the same image"
 
 
-def test_get_clusters():
+@settings(deadline=None, max_examples=5)
+@given(st_images(num=NUM_IMAGES, dtype=int, channels=3))
+def test_get_clusters(images: List[torch.Tensor]):
     """A CropProjector should be able to be instantiated and compute clusters"""
-    torch.random.manual_seed(SEED)
-
-    images = [torch.rand(3, IMG_SIZE, IMG_SIZE) for _ in range(NUM_IMAGES)]
     for mode in ALLOWED_MODES:
         projector = CropProjector(
             name="test",
