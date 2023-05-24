@@ -13,6 +13,7 @@ from tqdm import tqdm
 from riptide.detection.confusions import Confusion
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
+    HIGH_CONFIDENCE,
     BackgroundError,
     ClassificationAndLocalizationError,
     ClassificationError,
@@ -371,7 +372,7 @@ class Inspector:
                     code_mapping[code],
                     weights.get(code),
                 )
-                for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
+                for code in ["TP", "BKG", "CLS", "CLL", "LOC", "DUP", "FP"]
             ]
             content[1][i] = (
                 evaluator.name,
@@ -816,6 +817,55 @@ class Inspector:
         else:
             return fig, ax
 
+    def extract_high_confidence(
+        self,
+        classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]],
+    ):
+        """Extract the high confidence errors from a dictionary of error crops.
+        Returns a new dictionary with the high confidence errors and removes them from the original dictionary.
+
+        Parameters
+        ----------
+        classwise_dict : Dict[int, Tuple[str, Dict[int, List[Dict]]]]
+            The dictionary of error crops
+
+        Returns
+        -------
+        Dict[int, Tuple[str, Dict[int, List[Dict]]]]
+            The dictionary of high confidence error crops
+        """
+        high_conf: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
+        for label, (class_info, clusters_dict) in classwise_dict.items():
+            if label not in high_conf:
+                high_conf[label] = (class_info, {})
+
+            clusters_dict_del_set = set()
+            for cluster, errors in clusters_dict.items():
+                if cluster not in high_conf[label][1]:
+                    high_conf[label][1][cluster] = [[] for _ in errors]
+                for i, model_errors in enumerate(errors):
+                    model_errors_del_set = set()
+                    for j, error in enumerate(model_errors):
+                        if (error["confidence"] or 0) > HIGH_CONFIDENCE:
+                            high_conf[label][1][cluster][i].append(error)
+                            model_errors_del_set.add(j)
+                    for j in sorted(model_errors_del_set, reverse=True):
+                        del model_errors[j]
+
+                if sum(len(x) for x in high_conf[label][1][cluster]) == 0:
+                    del high_conf[label][1][cluster]
+
+                if sum(len(x) for x in errors) == 0:
+                    clusters_dict_del_set.add(cluster)
+
+            for cluster in clusters_dict_del_set:
+                del clusters_dict[cluster]
+
+            if len(high_conf[label][1]) == 0:
+                del high_conf[label]
+
+        return high_conf
+
     # region: Error Sections
     @logger()
     def background_error(self, *, data: dict = None, **kwargs) -> Section:
@@ -861,11 +911,19 @@ class Inspector:
 
         figs = self.error_classwise_dict(**kwargs)
 
+        high_conf = self.extract_high_confidence(figs)
+
         return Section(
             id=section_id,
             title=title,
             description=description,
             contents=[
+                Content(
+                    type=ContentType.IMAGES,
+                    header="High Confidence Errors",
+                    content=high_conf,
+                    data=data,
+                ),
                 Content(
                     type=ContentType.IMAGES,
                     header="Visualizations",
