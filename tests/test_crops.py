@@ -1,55 +1,10 @@
-from typing import List
+from typing import Tuple
 
 import torch
 from hypothesis import given
-from hypothesis import strategies as st
-from hypothesis.extra.numpy import array_shapes as st_array_shapes
-from hypothesis.extra.numpy import arrays as st_arrays
 
 from riptide.utils.image import convex_hull, crop_preview
-
-
-@st.composite
-def bbox_shape(draw) -> st.SearchStrategy[List[int]]:
-    head = draw(st_array_shapes(min_dims=1, max_dims=1))
-    return (*head, 4)
-
-
-@st.composite
-def image_shape(draw, channels=3) -> st.SearchStrategy[List[int]]:
-    tail = draw(st_array_shapes(min_dims=2, max_dims=2, min_side=10))
-    return (channels, *tail)
-
-
-@st.composite
-def st_tensor(
-    draw, dtype=int, shape=bbox_shape(), shape_only=True
-) -> st.SearchStrategy[torch.Tensor]:
-    if shape_only:
-        arr = draw(
-            st_arrays(
-                dtype=dtype,
-                shape=shape,
-                elements=st.integers(min_value=0, max_value=255),
-            )
-        )
-    else:
-        arr = draw(st_arrays(dtype=dtype, shape=shape))
-    return torch.tensor(arr)
-
-
-@st.composite
-def st_bbox(draw, dtype=int, xyxy=False) -> st.SearchStrategy[torch.Tensor]:
-    arr = draw(
-        st_arrays(
-            dtype=dtype,
-            shape=bbox_shape(),
-            elements=st.integers(min_value=0, max_value=2048),
-        )
-    )
-    if xyxy:
-        arr[:, 2:] += arr[:, :2]
-    return torch.tensor(arr)
+from tests.utils.strategies import st_bbox, st_image_and_bboxes
 
 
 @given(st_bbox(dtype=int, xyxy=True))
@@ -81,14 +36,19 @@ def test_convex_hull_xywh(bboxes: torch.Tensor):
     assert (bboxes == original).all()
 
 
-@given(st_tensor(dtype=int, shape=image_shape()), st_bbox(dtype=int, xyxy=True))
-def test_padded_crop(image_tensor: torch.Tensor, bbox: torch.Tensor):
+@given(st_image_and_bboxes())
+def test_padded_crop(input: Tuple[torch.Tensor, torch.Tensor]):
     PREVIEW_PADDING = 48
+    image_tensor, bbox = input
     hull, _ = convex_hull(bbox)
     sides = hull[2:] - hull[:2]
 
-    cropped, translation = crop_preview(image_tensor, bbox, colors=None)
+    cropped = crop_preview(image_tensor, bbox, colors=None)
 
-    # TODO: Fix this test
-    # assert cropped.shape[1] == cropped.shape[2], "Cropped image should be square"
-    # assert torch.abs(cropped.shape[1] - (sides.max() + PREVIEW_PADDING * 2)) <= 100, "Cropped image should be padded"
+    assert (
+        -2 < cropped.shape[1] - cropped.shape[2] < 2
+    ), "Cropped image should be square"
+    assert (
+        -2 < cropped.shape[1] - (sides.max() + PREVIEW_PADDING * 2) < 2
+    ), "Cropped image should be padded"
+    # TODO: Check that the bounding boxes are in the right place

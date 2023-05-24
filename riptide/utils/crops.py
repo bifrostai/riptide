@@ -251,13 +251,13 @@ def generate_fig(
         width, height, area = get_bbox_stats(bbox)
         bboxes = get_bbox_func(error, bbox_attr)
 
-        crop_tensor, _ = (
-            crop_preview(image_tensor, bboxes, color)
+        crop_tensor = (
+            crop_preview(image_tensor, bboxes, colors=color, preview_size=preview_size)
             if isinstance(bboxes, torch.Tensor)
-            else (image_tensor, None)
+            else image_tensor
         )
         crop: Image.Image = to_pil_image(crop_tensor)
-        encoded_crop = encode_base64(crop.resize((preview_size, preview_size)))
+        encoded_crop = encode_base64(crop)
     else:
         width, height, area = (None, None, None)
         encoded_crop = None
