@@ -533,6 +533,7 @@ class Inspector:
         label_str: str = "Predicted: {label}",
         add_metadata_func: Callable[[dict, Error], dict] = None,
         clusters: torch.Tensor = None,
+        extract_high: bool = False,
     ) -> Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]:
         """Compute a dictionary of plots for the crops of the errors, classwise.
 
@@ -709,7 +710,11 @@ class Inspector:
                 dict(sorted(clusters_dict.items(), key=lambda x: x[0], reverse=True)),
             )
 
-        return classwise_dict
+        if extract_high:
+            high_conf = self.extract_high_confidence(classwise_dict)
+            return classwise_dict, high_conf
+
+        return classwise_dict, None
 
     def error_classwise_ranking(
         self,
@@ -868,16 +873,11 @@ class Inspector:
 
     # region: Error Sections
     @logger()
-    def background_error(self, *, data: dict = None, **kwargs) -> Section:
+    def background_error(self, **kwargs) -> Section:
         """Generate a section visualizing the background errors in the dataset.
 
         Parameters
         ----------
-        data : dict, optional
-            Metadata to attach to content, by default None
-        clusters : torch.Tensor, optional
-            The cluster assignments for each error, if None then clusters are computed by `self.projector`, by default None
-
         kwargs : dict
             Additional keyword arguments to pass to `error_classwise_dict`
 
@@ -902,16 +902,9 @@ class Inspector:
                 """,
             )
 
-        if data is None:
-            data = {}
-        data["grouped"] = data.get("grouped", True)
-        data["compact"] = data.get("compact", True)
-
         get_crop_options(BackgroundError, kwargs)
 
-        figs = self.error_classwise_dict(**kwargs)
-
-        high_conf = self.extract_high_confidence(figs)
+        figs, high_conf = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -920,15 +913,15 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header="High Confidence Errors",
+                    header="High Confidence Detections",
+                    description=f"""Background errors with <span class='code'>confidence > 0.85</span>.""",
                     content=high_conf,
-                    data=data,
+                    data=dict(high_badge=False),
                 ),
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
+                    header="Other Detections",
                     content=figs,
-                    data=data,
                 ),
             ],
         )
@@ -966,7 +959,7 @@ class Inspector:
 
         get_crop_options(ClassificationError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationError)
 
         contents = [
@@ -1029,7 +1022,7 @@ class Inspector:
 
         get_crop_options(LocalizationError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, high_conf = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -1038,9 +1031,16 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
+                    header="High Confidence Detections",
+                    description=f"""Poorly localized detections with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=classwise_dict,
-                )
+                ),
             ],
         )
 
@@ -1082,7 +1082,7 @@ class Inspector:
 
         get_crop_options(ClassificationAndLocalizationError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationAndLocalizationError)
 
         return Section(
@@ -1129,7 +1129,7 @@ class Inspector:
         section_id = "Confusions"
         title = "Confusions"
         description = """
-        List of all the detections with predicted classes not equal to the class of the corresponding ground truth.
+        List of all the detections with predicted classes not equal to the class of the corresponding ground truth. White boxes indicate ground truths, red boxes indicate classification errors, and orange boxes indicate poorly localized detections.
         """
 
         num_errors = (
@@ -1151,11 +1151,11 @@ class Inspector:
 
         get_crop_options(ClassificationError, kwargs)
 
-        cls_classwise_dict = self.error_classwise_dict(**kwargs)
+        cls_classwise_dict, _ = self.error_classwise_dict(**kwargs)
 
         get_crop_options(ClassificationAndLocalizationError, kwargs)
 
-        cll_classwise_dict = self.error_classwise_dict(**kwargs)
+        cll_classwise_dict, _ = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(
             [ClassificationError, ClassificationAndLocalizationError]
         )
@@ -1187,6 +1187,8 @@ class Inspector:
         regroup_dict(classwise_dict, cls_classwise_dict)
         regroup_dict(classwise_dict, cll_classwise_dict)
 
+        high_conf = self.extract_high_confidence(classwise_dict)
+
         return Section(
             id=section_id,
             title=title,
@@ -1195,18 +1197,19 @@ class Inspector:
                 Content(
                     type=ContentType.PLOT,
                     header="Ranking",
-                    description=(
-                        "The following plot shows the distribution of classification"
-                        " errors."
-                    ),
+                    description=f"""The following plot shows the distribution of classification errors.""",
                     content=dict(plot=fig),
                 ),
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description=(
-                        "The following is a montage of the classification errors."
-                    ),
+                    header="High Confidence Detections",
+                    description=f"""Confusions with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=classwise_dict,
                 ),
             ],
@@ -1230,7 +1233,7 @@ class Inspector:
         section_id = "DuplicateError"
         title = "Duplicate Errors"
         description = f"""
-            List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction.
+            List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction. White boxes indicate ground truths, green boxes indicate best predictions, and cyan boxes indicate duplicate predictions.
             """
         if self.summaries[kwargs.get("evaluator_id", 0)]["DuplicateError"] == 0:
             return empty_section(
@@ -1244,7 +1247,7 @@ class Inspector:
 
         get_crop_options(DuplicateError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, high_conf = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -1253,12 +1256,14 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description=(
-                        "The following is a montage of the duplicate errors. White"
-                        " boxes indicate ground truths, green boxes indicate best"
-                        " predictions, and cyan boxes indicate duplicate predictions."
-                    ),
+                    header="High Confidence Detections",
+                    description=f"""Duplicate errors with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=classwise_dict,
                 ),
             ],
@@ -1296,7 +1301,7 @@ class Inspector:
 
         get_crop_options(MissedError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
         box = self.boxplot(classwise_dict)
 
         sections = {
@@ -1324,7 +1329,9 @@ class Inspector:
             "others": ("Others", "List of all other missed detections."),
         }
 
-        groups: Dict[str, List[Error]] = self.missed_groups()[kwargs["evaluator_id"]]
+        groups: Dict[str, List[Error]] = self.missed_groups()[
+            kwargs.get("evaluator_id", 0)
+        ]
 
         figs: Dict[str, Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]] = {
             k: {} for k in groups
@@ -1498,7 +1505,7 @@ class Inspector:
 
         get_crop_options(NonError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -1598,12 +1605,13 @@ class Inspector:
         """
 
         get_crop_options(BackgroundError, kwargs)
+        kwargs["extract_high"] = False
 
         figs = [
             self.error_classwise_dict(
                 evaluator_id=idx,
                 **kwargs,
-            )
+            )[0]
             for idx in range(len(self.evaluators))
         ]
 
@@ -1810,7 +1818,7 @@ class Inspector:
                         type=ContentType.IMAGES,
                         header=f"Errors in Class {class_idx}",
                         content=section_content["contents"][class_idx],
-                        data=dict(grouped=True, compact=True, badged=False),
+                        data=dict(badged=False),
                     )
                     for class_idx in section_content["contents"]
                 ],

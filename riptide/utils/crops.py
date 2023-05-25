@@ -52,6 +52,8 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
     if kwargs is None:
         kwargs = dict()
 
+    kwargs["extract_high"] = True
+
     if error_type is BackgroundError:
 
         def add_metadata_func(x: dict, error: BackgroundError) -> dict:
@@ -99,6 +101,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
                 label_str="Actual: {label}",
+                extract_high=False,
             )
         )
     elif error_type is LocalizationError:
@@ -132,6 +135,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata_func,
                 label_str="Actual: {label}",
+                extract_high=False,
             )
         )
     elif error_type is DuplicateError:
@@ -204,6 +208,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 get_bbox_func=get_bbox_by_attr,
                 add_metadata_func=add_metadata_func,
                 label_str="Missed: {label}",
+                extract_high=False,
             )
         )
 
@@ -218,6 +223,7 @@ def get_crop_options(error_type: Type[Error], kwargs: dict = None) -> dict:
                 get_bbox_func=get_both_bboxes,
                 add_metadata_func=add_metadata,
                 label_str="Actual: {label}",
+                extract_high=False,
             )
         )
 
