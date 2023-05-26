@@ -154,7 +154,9 @@ class CropProjector:
         """
         return torch.tensor(self.get_clusterer(**kwargs).labels_)
 
-    def subcluster(self, *, sub_lambda: float = 0.8, **kwargs) -> torch.Tensor:
+    def subcluster(
+        self, *, sub_lambda: float = 0.8, n_noise: int = 2, **kwargs
+    ) -> torch.Tensor:
         """Subdivide clusters into subclusters"""
         clusterer = self.get_clusterer(**kwargs)
         embeddings = self.get_embeddings()
@@ -165,7 +167,7 @@ class CropProjector:
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
         sub_eps = sub_lambda * clusterer.cluster_selection_epsilon
 
-        noise = torch.rand((2, embeddings.shape[1]), device=embeddings.device)
+        noise = torch.rand((n_noise, embeddings.shape[1]), device=embeddings.device)
 
         for cluster in range(labels.max() + 1):
             cluster_mask = labels == cluster
@@ -173,6 +175,6 @@ class CropProjector:
             subclusterer = HDBSCAN(
                 min_cluster_size=2, min_samples=1, cluster_selection_epsilon=sub_eps
             ).fit(cluster_embeddings)
-            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_[:-2])
+            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_[:-n_noise])
 
         return torch.stack([labels, subclusters], dim=1)
