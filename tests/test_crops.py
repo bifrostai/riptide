@@ -4,7 +4,7 @@ import torch
 from hypothesis import given
 
 from riptide.utils.image import convex_hull, crop_preview
-from tests.utils.strategies import st_bbox, st_image_and_bboxes
+from tests.strategies.image import st_bbox, st_image_and_bboxes
 
 
 @given(st_bbox(dtype=int, xyxy=True))

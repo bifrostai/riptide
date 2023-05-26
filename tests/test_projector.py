@@ -6,7 +6,7 @@ import torch
 from hypothesis import given, settings
 
 from riptide.detection.embeddings.projector import CropProjector
-from tests.utils.strategies import st_images
+from tests.strategies.image import st_images
 
 ALLOWED_MODES = [
     "preconv",

@@ -24,12 +24,12 @@ def image_shape(
 
 @st.composite
 def st_bbox(
-    draw, dtype=int, xyxy=False, min_side=0, max_value=2048
+    draw, dtype=int, xyxy=False, min_side=0, max_value=2048, shape=None
 ) -> st.SearchStrategy[torch.Tensor]:
     arr = draw(
         st_arrays(
             dtype=dtype,
-            shape=bbox_shape(),
+            shape=shape or bbox_shape(),
             elements=st.integers(min_value=0, max_value=max_value),
         )
     )
@@ -64,11 +64,11 @@ def st_images(
 
 @st.composite
 def st_image_and_bboxes(
-    draw, dtype=int, channels=3
+    draw, dtype=int, channels=3, *, img_shape=None
 ) -> st.SearchStrategy[List[torch.Tensor]]:
-    img_shape = draw(image_shape(channels=channels))
+    img_shape = img_shape or draw(image_shape(channels=channels))
     image = draw(st_image(dtype=dtype, shape=img_shape))
-    bboxes = draw(st_bbox(dtype=dtype, xyxy=True, max_value=max(img_shape)))
+    bboxes = draw(st_bbox(dtype=dtype, xyxy=True, max_value=max(img_shape[-2:])))
     bboxes[:, [0, 2]] = torch.clamp(bboxes[:, [0, 2]], min=0, max=img_shape[-1])
     bboxes[:, [1, 3]] = torch.clamp(bboxes[:, [1, 3]], min=0, max=img_shape[-2])
     return image, bboxes

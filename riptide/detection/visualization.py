@@ -65,6 +65,58 @@ def empty_section(section_id: str, title: str, description: str = None):
     )
 
 
+def missed_groups(
+    errorlist: List[Dict[str, List[MissedError]]],
+    min_size: int = 32,
+    var_threshold: float = 100,
+):
+    KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
+
+    groups = [
+        {
+            "crowded": [],
+            "low_feat": [],
+            "occluded": [],
+            "truncated": [],
+            "bad_label": [],  # subjective
+            "others": [],
+        }
+        for _ in range(len(errorlist))
+    ]
+    for i, model_errors in enumerate(errorlist):
+        for image_path, errors in model_errors.items():
+            image_tensor = read_image(image_path)
+            for error in errors:
+                count = 0
+                if error.crowd_ids().shape[0] > 0:
+                    groups[i]["crowded"].append(error)
+                    count += 1
+                bbox = error.gt_bbox.long()
+                image_crop: torch.Tensor = crop(
+                    image_tensor, bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]
+                )
+                image_crop = Grayscale()(image_crop).unsqueeze(0).float()
+                if (
+                    torch.min(bbox[2:] - bbox[:2]) < min_size
+                    or conv2d(image_crop, KERNEL).var() < var_threshold
+                ):
+                    groups[i]["low_feat"].append(error)
+                    count += 1
+
+                if (
+                    bbox.min() <= min_size // 2
+                    or bbox[2] >= image_tensor.shape[2] - min_size // 2
+                    or bbox[3] >= image_tensor.shape[1] - min_size // 2
+                ):
+                    groups[i]["truncated"].append(error)
+                    count += 1
+
+                if count == 0:
+                    groups[i]["others"].append(error)
+
+    return groups
+
+
 class Inspector:
     @logger("Initializing Inspector", "Initialized Inspector")
     def __init__(
@@ -1593,7 +1645,6 @@ class Inspector:
         min_size: int = 32,
         var_threshold: float = 100,
     ) -> List[Dict[str, list]]:
-        KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
 
         errorlist_dicts = (
             self.errorlist_dicts
@@ -1603,47 +1654,9 @@ class Inspector:
         errorlist: List[Dict[str, List[MissedError]]] = [
             d["MissedError"] for d in errorlist_dicts
         ]
-        groups = [
-            {
-                "crowded": [],
-                "low_feat": [],
-                "occluded": [],
-                "truncated": [],
-                "bad_label": [],  # subjective
-                "others": [],
-            }
-            for _ in range(len(errorlist))
-        ]
-        for i, model_errors in enumerate(errorlist):
-            for image_path, errors in model_errors.items():
-                image_tensor = read_image(image_path)
-                for error in errors:
-                    count = 0
-                    if error.crowd_ids().shape[0] > 0:
-                        groups[i]["crowded"].append(error)
-                        count += 1
-                    bbox = error.gt_bbox.long()
-                    image_crop: torch.Tensor = crop(
-                        image_tensor, bbox[1], bbox[0], bbox[3], bbox[2]
-                    )
-                    image_crop = Grayscale()(image_crop).unsqueeze(0).float()
-                    if (
-                        torch.min(bbox[2:] - bbox[:2]) < min_size
-                        or conv2d(image_crop, KERNEL).var() < var_threshold
-                    ):
-                        groups[i]["low_feat"].append(error)
-                        count += 1
-
-                    if (
-                        bbox.min() <= min_size // 2
-                        or bbox[2] >= image_tensor.shape[2] - min_size // 2
-                        or bbox[3] >= image_tensor.shape[1] - min_size // 2
-                    ):
-                        groups[i]["truncated"].append(error)
-                        count += 1
-
-                    if count == 0:
-                        groups[i]["others"].append(error)
+        groups = missed_groups(
+            errorlist=errorlist, min_size=min_size, var_threshold=var_threshold
+        )
 
         return groups
 
