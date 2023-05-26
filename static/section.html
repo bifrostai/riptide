@@ -9,7 +9,7 @@
 {%- endmacro -%}
 
 {%- macro render_content(content) -%}
-{% if content.header is not none %}<h3>{{ content.header }}</h3>{% endif %}
+{% if content.header is not none %}<h3>{{ content.header | safe }}</h3>{% endif %}
 {% if content.description is not none %}<p>{{ content.description | safe }}</p>{% endif %}
 {%- if content.type == "overview" -%}
     {{ render_overview(content.content) }}
@@ -21,6 +21,12 @@
     {{ render_recall(content.content) }}
 {%- elif content.type == "plot" -%}
     {{ render_plot(content.content) }}
+{%- elif content.type == "image" -%}
+    {%- set badged = content.data.get("badged", true) -%}
+    {%- set high_badge = content.data.get("high_badge", true) -%}
+    {{ render_image(content.content, badged, high_badge) }}
+{%- elif content.type == "infoboxes" -%}
+    {{ render_infoboxes(content) }}
 {%- else -%}
 {%- for c in content.content -%}
     {{ c | safe }}
@@ -87,6 +93,19 @@
 </div>
 {%- endmacro -%}
 
+{%- macro render_infoboxes(content) -%}
+{% for infobox in content.content.values() %}
+<div class="infobox">
+    <div class="infobox-title">{{ infobox['title'] }}</div>
+    <div class="infobox-content">
+        {% for c in infobox["content"] %}
+        {{ render_content(c) }}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{%- endmacro -%}
+
 {%- macro render_recall(content) -%}
 {% set classwise_summary = content[0] %}
 {% set error_type = content[1] %}
@@ -139,6 +158,7 @@
 {%- set grouped = content.data.get("grouped", true) -%}
 {%- set compact = content.data.get("compact", true) -%}
 {%- set badged = content.data.get("badged", true) -%}
+{%- set high_badge = content.data.get("high_badge", true) -%}
 {%- set images = content.content -%}
 <div class="class-images">
     {%- if images.get("group_headers") is not none -%}
@@ -156,7 +176,7 @@
                 <div class="class-image-container row">
                     {%- for image_dict in image_list -%}
                     <div class="class-image-wrapper">
-                        {{ render_image(image_dict, badged) }}
+                        {{ render_image(image_dict, badged, high_badge) }}
                     </div>
                     {%- endfor -%}
                 </div>
@@ -170,9 +190,7 @@
                 {%- for image_list in cluster -%}
                 <div class="class-image-container row" style="flex-basis: {{ 100 / (cluster | length) }}%">
                     {%- for image_dict in image_list -%}
-                    <div class="class-image-wrapper">
-                        {{ render_image(image_dict, badged) }}
-                    </div>
+                    {{ render_image(image_dict, badged) }}
                     {%- endfor -%}
                 </div>
                 {%- endfor -%}
@@ -195,8 +213,9 @@
 </div>
 {%- endmacro -%}
 
-{%- macro render_image(image, badged=true) -%}
-{%- set high_conf = image.get("type") != "TP" and image.get("confidence") is not none and image.get("confidence") > 0.85 -%}
+{%- macro render_image(image, badged=true, high_badge=true) -%}
+{%- set display_uniques = image.get("type") not in ["TP", "MIS"] and image.get("uniques") | length > 1 -%}
+{%- set high_conf = high_badge and image.get("type") != "TP" and image.get("confidence") is not none and image.get("confidence") > 0.85 -%}
 <div class="class-image-wrapper
 {%- if badged and image.get('similar') | length > 1 %} stack{% endif %}
 {%- if badged and image.get('similar') | length > 2 %} multi{% endif %}">
@@ -204,7 +223,7 @@
     {% if image.get("caption") is not none %}<span class="data-tooltip">{{image["caption"] | safe}}</span>{% endif %}
     {% if badged and (image.get("similar") | length > 1 or high_conf) -%}
     <span class="badge" {%- if high_conf %} style="--badge-color: #C80000;"{% endif %}>
-        {%- if image.get("uniques") | length > 1 -%}
+        {%- if display_uniques -%}
         <span class="text-xs">{{ image["uniques"] | length }} | </span>
         {%- endif -%}
         {{ image["similar"] | length }}
