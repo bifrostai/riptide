@@ -12,7 +12,9 @@ class ContentType(str, Enum):
     RECALL = "recall"
     AR_SIZE = "ar_size"
     IMAGES = "images"
+    IMAGE = "image"
     PLOT = "plot"
+    INFOBOXES = "infoboxes"
 
 
 class Content(BaseModel):

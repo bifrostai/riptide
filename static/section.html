@@ -21,6 +21,12 @@
     {{ render_recall(content.content) }}
 {%- elif content.type == "plot" -%}
     {{ render_plot(content.content) }}
+{%- elif content.type == "image" -%}
+    {%- set badged = content.data.get("badged", true) -%}
+    {%- set high_badge = content.data.get("high_badge", true) -%}
+    {{ render_image(content.content, badged, high_badge) }}
+{%- elif content.type == "infoboxes" -%}
+    {{ render_infoboxes(content) }}
 {%- else -%}
 {%- for c in content.content -%}
     {{ c | safe }}
@@ -85,6 +91,19 @@
     </div>
     {%- endfor -%}
 </div>
+{%- endmacro -%}
+
+{%- macro render_infoboxes(content) -%}
+{% for infobox in content.content.values() %}
+<div class="infobox">
+    <div class="infobox-title">{{ infobox['title'] }}</div>
+    <div class="infobox-content">
+        {% for c in infobox["content"] %}
+        {{ render_content(c) }}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
 {%- endmacro -%}
 
 {%- macro render_recall(content) -%}
@@ -171,9 +190,7 @@
                 {%- for image_list in cluster -%}
                 <div class="class-image-container row" style="flex-basis: {{ 100 / (cluster | length) }}%">
                     {%- for image_dict in image_list -%}
-                    <div class="class-image-wrapper">
-                        {{ render_image(image_dict, badged) }}
-                    </div>
+                    {{ render_image(image_dict, badged) }}
                     {%- endfor -%}
                 </div>
                 {%- endfor -%}

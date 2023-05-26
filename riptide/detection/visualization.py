@@ -1,3 +1,4 @@
+import heapq
 import logging
 import math
 from typing import Callable, Dict, Iterable, List, Set, Tuple, Type, Union
@@ -871,6 +872,179 @@ class Inspector:
 
         return high_conf
 
+    def get_suggestions(self, results: Dict[str, Section], **kwargs) -> Content:
+        """Get suggestions for the errors in the results.
+
+        Parameters
+        ----------
+        results : Dict[str, Section]
+            The results of the error analysis
+
+        Returns
+        -------
+        Content
+            The suggestions for the errors
+        """
+
+        suggestions: Dict[str, dict] = {}
+
+        def not_empty(code: str):
+            return (
+                code in results and results[code].contents[0].type != ContentType.TEXT
+            )
+
+        if not_empty("MIS"):
+            mis_contents: Dict[int, List[Tuple[int, str]]] = {}
+            for content in results.get("MIS").contents[1:]:
+                class_errors: Dict[
+                    int, Tuple[str, Dict[int, List[List[dict]]]]
+                ] = content.content
+                for class_idx, (class_info, clusters_dict) in class_errors.items():
+                    if class_idx not in mis_contents:
+                        mis_contents[class_idx] = []
+                    num_groups = [
+                        sum(len(y) for y in x) for x in clusters_dict.values()
+                    ]
+                    mis_contents[class_idx].append(
+                        (sum(num_groups), class_info, content.header)
+                    )
+
+            mis_contents = {
+                k: sorted(v, reverse=True)[0] for k, v in mis_contents.items()
+            }
+
+            suggestions["MIS"] = dict(
+                title="Most Common Causes of Missed Detections",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["<ul>"]
+                        + [
+                            f"<li>{class_info[8:]}: {group} ({n})"
+                            for n, class_info, group in mis_contents.values()
+                        ]
+                        + ["</ul>"],
+                    ),
+                ],
+            )
+
+        if not_empty("BKG"):
+            bkg_high_confs: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = (
+                results.get("BKG").contents[0].content
+            )
+            bkg_contents: Dict[int, int] = {
+                class_idx: (
+                    sum(sum(len(y) for y in x) for x in clusters_dict.values()),
+                    class_info,
+                )
+                for class_idx, (class_info, clusters_dict) in bkg_high_confs.items()
+            }
+
+            suggestions["BKG"] = dict(
+                title="No. of High Confidence Background Errors",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=[
+                            "<p>A large number of high confidence errors could be due"
+                            " to missing labels in the test dataset.</p>"
+                        ],
+                    ),
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["<ul>"]
+                        + [
+                            f"<li>{class_info[11:]}: {n}"
+                            for n, class_info in bkg_contents.values()
+                        ]
+                        + ["</ul>"],
+                    ),
+                ],
+            )
+
+        if not_empty("confusions"):
+            cls_errors: Dict[
+                Tuple[int, int], Tuple[str, Dict[int, List[List[dict]]]]
+            ] = (results.get("confusions").contents[1].content)
+            cls_contents: Dict[int, Tuple[int, str]] = {}
+            for confusion_idx, (info, clusters_dict) in cls_errors.items():
+                num_groups = [sum(len(y) for y in x) for x in clusters_dict.values()]
+                cls_contents[confusion_idx] = (sum(num_groups), info)
+
+            suggestions["confusions"] = dict(
+                title="Most Common Confusions",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=[
+                            "<p>A large number of confusions could suggest insufficient"
+                            " distinction between categories.</p>"
+                        ],
+                    ),
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["<ul>"]
+                        + [f"<li>{info}: {n}" for n, info in cls_contents.values()]
+                        + ["</ul>"],
+                    ),
+                ],
+            )
+
+        if not_empty("LOC"):
+            TOP_K = 3
+            loc_high_conf: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = (
+                results.get("LOC").contents[0].content
+            )
+            loc_contents: Dict[int, List[dict]] = {}
+
+            k = 0
+            for class_idx, (class_info, clusters_dict) in loc_high_conf.items():
+                heap = []
+
+                for figs in clusters_dict.values():
+                    for model_figs in figs:
+                        for fig in model_figs:
+                            tu_score = len(fig["similar"]) / (len(fig["uniques"]) + 1)
+                            heapq.heappush(heap, (-tu_score, k, class_info, fig))
+                            k += 1
+
+                loc_contents[class_idx] = [
+                    heapq.heappop(heap) for _ in range(min(TOP_K, len(heap)))
+                ]
+
+            suggestions["LOC"] = dict(
+                title="Most Repeated Localization Errors",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=[
+                            "<p>The top 3 error groups with the largest <span"
+                            " class='code'>total/unique</span> ratios. These could be"
+                            " due to crowded labels.</p>"
+                        ],
+                    ),
+                    Content(
+                        type=ContentType.TEXT,
+                        content=['<div class="class-image-container row">'],
+                    ),
+                    *[
+                        Content(
+                            type=ContentType.IMAGE,
+                            content=fig,
+                            data=dict(high_badge=False),
+                        )
+                        for elems in loc_contents.values()
+                        for _, _, _, fig in elems
+                    ],
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["</div>"],
+                    ),
+                ],
+            )
+
+        return Content(type=ContentType.INFOBOXES, content=suggestions)
+
     # region: Error Sections
     @logger()
     def background_error(self, **kwargs) -> Section:
@@ -1341,7 +1515,7 @@ class Inspector:
 
         for group, errors in groups.items():
             for error in errors:
-                fig: dict = self.crops.get((kwargs["evaluator_id"], error))
+                fig: dict = self.crops.get((kwargs.get("evaluator_id", 0), error))
                 if fig is None:
                     logging.warn(f"Could not find crop for {error}")
                     continue
@@ -1554,7 +1728,7 @@ class Inspector:
         order["overview"] = order.get("overview", math.inf)
         order["TP"] = order.get("TP", -1)
 
-        results = dict()
+        results: Dict[str, Section] = dict()
 
         func_mapping = {
             "BKG": self.background_error,
@@ -1573,6 +1747,8 @@ class Inspector:
         self.recalculate_summaries([evaluator_id], weights=weights)
 
         results["overview"] = self.summary([evaluator_id])
+        infoboxes = self.get_suggestions(results)
+        results["overview"].contents.append(infoboxes)
 
         sections = dict(
             sorted(

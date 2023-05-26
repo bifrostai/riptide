@@ -87,12 +87,13 @@ body {
 }
 
 .infobox {
+    --info-gradient-left: #395B64;
+    --info-gradient-right: #395B64;
     margin: 2vh 0;
-    color: #2C3333;
-    background: #00b3ff;
-    background: -moz-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
-    background: -webkit-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
-    background: linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    background: var(--info-gradient-right);
+    background: -moz-linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    background: -webkit-linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    background: linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
     border-radius: 0.4em;
     padding: 2vh;
 }
@@ -249,6 +250,7 @@ body {
     outline: solid 0.3em var(--badge-outline);
     outline-offset: -0.05em;
     font-size: 1.5vh;
+    color: #FFEECC;
     text-align: center;
     line-height: 2.5vh;
     z-index: 3;
