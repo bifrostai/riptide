@@ -63,15 +63,15 @@
             <div class="summary-metric-value">
                 <div class="summary-bar">
                     <span class="summary-bar-value">{{ value["total"] }}</span>
-                    {% for color, count, info, weight in value["bar"] %}
+                    {% for color, count, info, diff in value["bar"] %}
                     <div class="summary-bar-item
                     {%- if loop.first %} first
                     {%- elif loop.last %} last
                     {%- endif -%}"
-                    style="--bar-width: {{ count }}; --bar-color: {{ color }}; {%- if weight is not none %} --bar-weight: {{ weight }};{%- endif -%}">
+                    style="--bar-width: {{ count }}; --bar-color: {{ color }}; {%- if diff is not none %} --bar-diff: {{ diff }};{%- endif -%}">
                     <span class="label">
                         {{ count }}
-                        {%- if weight is not none %} <span class="text-xs">({{ weight }})</span>{%- endif %}
+                        {%- if diff is not none and diff > 0 %} <span class="text-xs">(+{{ diff }})</span>{%- endif %}
                     </span>
                     <span class="tooltiptext">{{ info }}</span></div>
                     {% endfor %}
