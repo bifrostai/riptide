@@ -145,27 +145,29 @@ class Inspector:
             round(evaluator.evaluations[0].bg_iou_threshold, 2),
             round(evaluator.evaluations[0].fg_iou_threshold, 2),
         )
-
-        self.summaries = [
-            {
+        self.summaries: List[dict] = [None] * len(evaluators)
+        self.classwise_summaries: List[dict] = [None] * len(evaluators)
+        for i, evaluator in enumerate(self.evaluators):
+            summary = {
                 "name": evaluator.name,
                 "conf_threshold": evaluator.conf_threshold,
                 "iou_thresholds": evaluator.iou_thresholds,
                 **{k: round(v, 3) for k, v in evaluator.summarize().items()},
             }
-            for evaluator in self.evaluators
-        ]
+            summary["raw"] = summary.copy()
 
-        self.classwise_summaries = [
-            {
+            classwise_summary = {
                 "name": evaluator.name,
                 **{
                     class_idx: {k: round(v, 3) for k, v in individual_summary.items()}
                     for class_idx, individual_summary in evaluator.classwise_summarize().items()
                 },
             }
-            for evaluator in self.evaluators
-        ]
+            classwise_summary["raw"] = classwise_summary.copy()
+
+            self.summaries[i] = summary
+            self.classwise_summaries[i] = classwise_summary
+
         bkg_crops: List[torch.Tensor] = []
         bkg_errors: List[List[Error]] = []
 
@@ -368,7 +370,7 @@ class Inspector:
             recall_tooltip = None
             f1_tooltip = None
 
-            weights = {}
+            diffs = {}
 
             if display_weights and "weighted" in summary:
                 weighted: dict = summary["weighted"]
@@ -389,13 +391,13 @@ class Inspector:
                     ["TP", "FP", "CLS", "LOC", "CLL", "DUP", "MIS", "BKG"],
                     ["true_positives", "false_positives", *ALL_ERRORS],
                 ):
-                    weights[code] = (
+                    diffs[code] = (
                         round(weighted[key] / counts[code], 2)
                         if counts[code] > 0
                         else 0
                     )
 
-                weights["FN"] = (
+                diffs["FN"] = (
                     round(
                         weighted["false_negatives"] / (counts["FN"] + counts["MIS"]), 2
                     )
@@ -406,6 +408,34 @@ class Inspector:
                 precision_tooltip = "Weighted | Unweighted"
                 recall_tooltip = "Weighted | Unweighted"
                 f1_tooltip = "Weighted | Unweighted"
+            else:
+                raw = summary.get("raw", summary)
+                if precision != round(raw["precision"], 2):
+                    precision = (
+                        f" {precision} <span class='text-dark"
+                        f" text-xs'>| {round(raw['precision'], 2)}</span>"
+                    )
+                    precision_tooltip = "Adjusted | Raw"
+                if recall != round(raw["recall"], 2):
+                    recall = (
+                        f" {recall} <span class='text-dark text-xs'>|"
+                        f" {round(raw['recall'], 2)}</span>"
+                    )
+                    recall_tooltip = "Adjusted | Raw"
+                if f1 != round(raw["f1"], 2):
+                    f1 = (
+                        f" {f1} <span class='text-dark text-xs'>|"
+                        f" {round(raw['f1'], 2)}</span>"
+                    )
+                    f1_tooltip = "Adjusted | Raw"
+
+                for code, key in zip(
+                    ["TP", "FP", "CLS", "LOC", "CLL", "DUP", "MIS", "BKG"],
+                    ["true_positives", "false_positives", *ALL_ERRORS],
+                ):
+                    diffs[code] = raw[key] - counts[code]
+
+                diffs["FN"] = raw["false_negatives"] - (counts["FN"] + counts["MIS"])
 
             opacity = 0.8
             gt_bar = [
@@ -413,7 +443,7 @@ class Inspector:
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
                     code_mapping[code],
-                    weights.get(code),
+                    diffs.get(code),
                 )
                 for code in ["TP", "MIS", "FN"]
             ]
@@ -423,7 +453,7 @@ class Inspector:
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
                     code_mapping[code],
-                    weights.get(code),
+                    diffs.get(code),
                 )
                 for code in ["TP", "BKG", "CLS", "CLL", "LOC", "DUP", "FP"]
             ]

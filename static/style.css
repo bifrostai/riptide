@@ -355,7 +355,7 @@ body {
 
 .summary-bar-item {
     --bar-width: 1;
-    --bar-weight: 1;
+    --bar-diff: 0;
     --bar-color: #00ffd9;
 
     flex-grow: var(--bar-width);
@@ -385,7 +385,7 @@ body {
 }
 
 .summary-item:hover .summary-bar-item {
-    flex-grow: calc(var(--bar-weight) * var(--bar-width));
+    flex-grow: calc(var(--bar-diff) + var(--bar-width));
 }
 
 .info-panel {
