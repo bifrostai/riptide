@@ -352,6 +352,21 @@ files = [
 ]
 
 [[package]]
+name = "exceptiongroup"
+version = "1.1.1"
+description = "Backport of PEP 654 (exception groups)"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "exceptiongroup-1.1.1-py3-none-any.whl", hash = "sha256:232c37c63e4f682982c8b6459f33a8981039e5fb8756b2074364e5055c498c9e"},
+    {file = "exceptiongroup-1.1.1.tar.gz", hash = "sha256:d484c3090ba2889ae2928419117447a14daf3c1231d5e30d0aae34f354f01785"},
+]
+
+[package.extras]
+test = ["pytest (>=6)"]
+
+[[package]]
 name = "filelock"
 version = "3.10.7"
 description = "A platform independent file lock."
@@ -428,6 +443,40 @@ joblib = ">=1.0"
 numpy = ">=1.20"
 scikit-learn = ">=0.20"
 scipy = ">=1.0"
+
+[[package]]
+name = "hypothesis"
+version = "6.75.3"
+description = "A library for property-based testing"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "hypothesis-6.75.3-py3-none-any.whl", hash = "sha256:a12bf34c29bd22757d20edf93f95805978ed0ffb8d0b22dbadc890a79dc9baa8"},
+    {file = "hypothesis-6.75.3.tar.gz", hash = "sha256:15cdadb80a7ac59087581624d266a4fb585b5cce9b7f88f506c481a9f0e583f6"},
+]
+
+[package.dependencies]
+attrs = ">=19.2.0"
+exceptiongroup = {version = ">=1.0.0", markers = "python_version < \"3.11\""}
+numpy = {version = ">=1.16.0", optional = true, markers = "extra == \"numpy\""}
+sortedcontainers = ">=2.1.0,<3.0.0"
+
+[package.extras]
+all = ["backports.zoneinfo (>=0.2.1)", "black (>=19.10b0)", "click (>=7.0)", "django (>=3.2)", "dpcontracts (>=0.4)", "importlib-metadata (>=3.6)", "lark (>=0.10.1)", "libcst (>=0.3.16)", "numpy (>=1.16.0)", "pandas (>=1.1)", "pytest (>=4.6)", "python-dateutil (>=1.4)", "pytz (>=2014.1)", "redis (>=3.0.0)", "rich (>=9.0.0)", "tzdata (>=2023.3)"]
+cli = ["black (>=19.10b0)", "click (>=7.0)", "rich (>=9.0.0)"]
+codemods = ["libcst (>=0.3.16)"]
+dateutil = ["python-dateutil (>=1.4)"]
+django = ["django (>=3.2)"]
+dpcontracts = ["dpcontracts (>=0.4)"]
+ghostwriter = ["black (>=19.10b0)"]
+lark = ["lark (>=0.10.1)"]
+numpy = ["numpy (>=1.16.0)"]
+pandas = ["pandas (>=1.1)"]
+pytest = ["pytest (>=4.6)"]
+pytz = ["pytz (>=2014.1)"]
+redis = ["redis (>=3.0.0)"]
+zoneinfo = ["backports.zoneinfo (>=0.2.1)", "tzdata (>=2023.3)"]
 
 [[package]]
 name = "identify"
@@ -1384,6 +1433,18 @@ files = [
 ]
 
 [[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
+    {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
+]
+
+[[package]]
 name = "tenacity"
 version = "8.2.2"
 description = "Retry code until it succeeds"
@@ -1686,4 +1747,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "ad2ac5a9c5db60c99d2f91b98e0ae91989b3a8770039c2acea3f77c50bd4b07d"
+content-hash = "3a5a2985a54c9147cc96ce95ddb3ad91f8084e879eb913cd2a050b971552549d"

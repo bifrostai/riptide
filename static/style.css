@@ -45,7 +45,6 @@ body {
 }
 
 .sidebar {
-    background-color: #222222;
     padding-bottom: 2vh;
     width: 18vw;
     display: flex;
@@ -88,12 +87,13 @@ body {
 }
 
 .infobox {
+    --info-gradient-left: #395B64;
+    --info-gradient-right: #395B64;
     margin: 2vh 0;
-    color: #2C3333;
-    background: #00b3ff;
-    background: -moz-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
-    background: -webkit-linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
-    background: linear-gradient(45deg, #00ffd9 10%, #00b3ff 90%);
+    background: var(--info-gradient-right);
+    background: -moz-linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    background: -webkit-linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    background: linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
     border-radius: 0.4em;
     padding: 2vh;
 }
@@ -118,13 +118,10 @@ body {
     overflow: auto;
     -ms-overflow-style: none;
     scrollbar-width: none;
-    display: flex;
-    flex-direction: column;
-    word-wrap: break-word;
     background-color: #222222;
-    color: #FFEECC;
     padding: 2vh 5vw;
     width: 60%;
+    max-width: 900px;
 }
 
 .main::-webkit-scrollbar {
@@ -242,6 +239,7 @@ body {
 
 .badge {
     --badge-color: #2c2c2c;
+    --badge-outline: #2c2c2c;
     position: absolute;
     top: 0;
     right: 0;
@@ -249,9 +247,10 @@ body {
     min-height: 2.5vh;
     border-radius: 1.25vh;
     background-color: var(--badge-color);
-    outline: solid 0.3em var(--badge-color);
+    outline: solid 0.3em var(--badge-outline);
     outline-offset: -0.05em;
     font-size: 1.5vh;
+    color: #FFEECC;
     text-align: center;
     line-height: 2.5vh;
     z-index: 3;
@@ -356,7 +355,7 @@ body {
 
 .summary-bar-item {
     --bar-width: 1;
-    --bar-weight: 1;
+    --bar-diff: 0;
     --bar-color: #00ffd9;
 
     flex-grow: var(--bar-width);
@@ -386,7 +385,7 @@ body {
 }
 
 .summary-item:hover .summary-bar-item {
-    flex-grow: calc(var(--bar-weight) * var(--bar-width));
+    flex-grow: calc(var(--bar-diff) + var(--bar-width));
 }
 
 .info-panel {

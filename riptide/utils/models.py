@@ -12,7 +12,6 @@ class GTData(BaseModel):
     """Data class for GT data"""
 
     crops: List[torch.Tensor]
-    gt_ids: torch.Tensor
     gt_labels: torch.Tensor
     gt_errors: Dict[int, List[Error]]
     images: List[str]
@@ -23,21 +22,17 @@ class GTData(BaseModel):
     @classmethod
     def combine(cls, *gt_data: GTData) -> GTData:
         """Combine multiple GTData objects into one"""
-        try:
-            gt_ids = set(gt_data[0].gt_ids.tolist())
-            for gt in gt_data[1:]:
-                assert gt_ids == set(gt.gt_ids.tolist())
-        except AssertionError:
-            raise ValueError("GTData objects must have the same gt_ids")
+        # assert that the length of all gt_data is the same
+        assert (
+            len(set([len(gt) for gt in gt_data])) == 1
+        ), "Only GTData with the same number of ground truths can be combined"
 
         crops = []
-        gt_ids = []
         gt_labels = []
         gt_errors: Dict[int, list] = {}
         images = []
         for gt in gt_data:
             crops.extend(gt.crops)
-            gt_ids.extend(gt.gt_ids)
             gt_labels.extend(gt.gt_labels)
             images.extend(gt.images)
             for gt_id, errors in gt.gt_errors.items():
@@ -46,7 +41,6 @@ class GTData(BaseModel):
                 gt_errors[gt_id].extend(errors)
         return cls(
             crops=crops,
-            gt_ids=torch.stack(gt_ids),
             gt_labels=torch.stack(gt_labels),
             gt_errors=gt_errors,
             images=images,
