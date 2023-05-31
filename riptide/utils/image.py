@@ -7,16 +7,23 @@ import plotly.graph_objects as go
 import torch
 from matplotlib.figure import Figure
 from PIL import Image
-from torchvision.transforms.functional import crop
+from torchvision.io import read_image as read_image_torch
+from torchvision.transforms.functional import crop, resize
 from torchvision.utils import draw_bounding_boxes
 
 PREVIEW_PADDING = 48
+PREVIEW_SIZE = 192
 
 
 def crop_preview(
     image_tensor: torch.Tensor,
-    bbox: torch.Tensor,
-    colors: Union[List[Union[str, Tuple[int, int, int]]], str, Tuple[int, int, int]],
+    bboxes: torch.Tensor,
+    *,
+    colors: Union[
+        List[Union[str, Tuple[int, int, int]]], str, Tuple[int, int, int]
+    ] = "white",
+    preview_size: int = PREVIEW_SIZE,
+    preview_padding: int = PREVIEW_PADDING,
 ) -> torch.Tensor:
     """Crop a preview of the bounding box
 
@@ -34,12 +41,19 @@ def crop_preview(
     torch.Tensor
         Cropped image tensor
     """
-    bbox = bbox.long()
-    if colors is not None:
-        image_tensor = draw_bounding_boxes(image_tensor, bbox, colors=colors, width=2)
-    image_tensor, translation = get_padded_bbox_crop(image_tensor, bbox)
+    bboxes = bboxes.long()
 
-    return image_tensor
+    crop_box = get_padded_bbox_crop(bboxes, padding=preview_padding)
+    x1, y1, x2, y2 = crop_box.tolist()
+    cropped = crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
+
+    if colors is not None:
+        bboxes = bboxes - crop_box[:2].repeat(2)
+        bboxes = torch.div(bboxes * preview_size, x2 - x1, rounding_mode="floor")
+        cropped = resize(cropped, (preview_size, preview_size))
+        cropped = draw_bounding_boxes(cropped, bboxes, colors=colors, width=2)
+
+    return cropped
 
 
 def convex_hull(
@@ -72,51 +86,44 @@ def convex_hull(
 
 
 def get_padded_bbox_crop(
-    image_tensor: torch.Tensor,
     bbox: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    padding: int = PREVIEW_PADDING,
+) -> torch.Tensor:
     """Get a padded crop of the bounding box(es)
 
     Parameters
     ----------
-    image_tensor : torch.Tensor
-        Image tensor
     bbox : torch.Tensor
         Bounding box(es) in xyxy format
-    pad : int, optional
+    padding : int, optional
         Padding around bounding box, by default 48
-    size : int, optional
-        Size of output image, by default 224
 
     Returns
     -------
-    Tuple[torch.Tensor, torch.Tensor]
-        Cropped image and translation tensor to apply to bounding boxes
+    torch.Tensor
+        Bounding box of padded crop
     """
     hull, _ = convex_hull(bbox)
     x1, y1, x2, y2 = hull.tolist()
     long_edge = torch.argmax(hull[2:] - hull[:2])  # 0 is w, 1 is h
     if long_edge == 0:
-        x1 -= PREVIEW_PADDING
-        x2 += PREVIEW_PADDING
+        x1 -= padding
+        x2 += padding
         short_edge_padding = torch.div(
             (x2 - x1) - (y2 - y1), 2, rounding_mode="floor"
         ).item()
-        y1 = max(0, y1 - short_edge_padding)
-        y2 = min(image_tensor.size(1), y2 + short_edge_padding)
+        y1 -= short_edge_padding
+        y2 += short_edge_padding
     else:
-        y1 -= PREVIEW_PADDING
-        y2 += PREVIEW_PADDING
+        y1 -= padding
+        y2 += padding
         short_edge_padding = torch.div(
             ((y2 - y1) - (x2 - x1)), 2, rounding_mode="floor"
         ).item()
-        x1 = max(0, x1 - short_edge_padding)
-        x2 = min(image_tensor.size(2), x2 + short_edge_padding)
+        x1 -= short_edge_padding
+        x2 += short_edge_padding
 
-    cropped = crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
-    translation = torch.tensor([x1, y1, x2, y2]) - hull
-
-    return cropped, translation
+    return torch.tensor([x1, y1, x2, y2])
 
 
 def get_bbox_stats(bbox: torch.Tensor) -> Tuple[int, int, int]:
@@ -150,3 +157,46 @@ def encode_base64(input: Any) -> bytes:
     else:
         raise Exception(f"Input type {input.__class__.__name__} not supported.")
     return base64.b64encode(bytesio.getvalue()).decode("utf-8")
+
+
+def blank_image(width: int, height: int, *, fill_value: int = 255) -> torch.Tensor:
+    """Create a blank image
+
+    Parameters
+    ----------
+    width : int
+        Width of image
+    height : int
+        Height of image
+
+    Returns
+    -------
+    Image.Image
+        Blank image
+    """
+    t = torch.full((3, height, width), fill_value=fill_value, dtype=torch.uint8)
+    t[0, :, :] = torch.linspace(fill_value // 2, fill_value, width).repeat(height, 1)
+    t[1, :, :] = torch.linspace(fill_value, fill_value // 2, height).repeat(width, 1).T
+    return t
+
+
+def read_image(
+    image_path: str, *, width: int = 1920, height: int = 1920
+) -> torch.Tensor:
+    """Read an image from a path
+
+    Parameters
+    ----------
+    image_path : str
+        Path to image
+
+    Returns
+    -------
+    Image.Image
+        Image
+    """
+    try:
+        image = read_image_torch(image_path)
+    except:
+        image = blank_image(width, height)
+    return image

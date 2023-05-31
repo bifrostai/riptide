@@ -1,3 +1,4 @@
+import heapq
 import logging
 import math
 from typing import Callable, Dict, Iterable, List, Set, Tuple, Type, Union
@@ -6,7 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.nn.functional import conv2d
-from torchvision.io import read_image
 from torchvision.transforms import Grayscale
 from torchvision.transforms.functional import crop
 from tqdm import tqdm
@@ -14,6 +14,7 @@ from tqdm import tqdm
 from riptide.detection.confusions import Confusion
 from riptide.detection.embeddings.projector import CropProjector
 from riptide.detection.errors import (
+    HIGH_CONFIDENCE,
     BackgroundError,
     ClassificationAndLocalizationError,
     ClassificationError,
@@ -32,9 +33,10 @@ from riptide.utils.crops import (
     generate_fig,
     get_bbox_by_attr,
     get_crop_options,
+    get_unique_key,
 )
 from riptide.utils.enums import ErrorWeights
-from riptide.utils.image import encode_base64
+from riptide.utils.image import encode_base64, read_image
 from riptide.utils.logging import logger
 from riptide.utils.plots import (
     annotate_heatmap,
@@ -63,6 +65,58 @@ def empty_section(section_id: str, title: str, description: str = None):
     )
 
 
+def missed_groups(
+    errorlist: List[Dict[str, List[MissedError]]],
+    min_size: int = 32,
+    var_threshold: float = 100,
+):
+    KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
+
+    groups = [
+        {
+            "crowded": [],
+            "low_feat": [],
+            "occluded": [],
+            "truncated": [],
+            "bad_label": [],  # subjective
+            "others": [],
+        }
+        for _ in range(len(errorlist))
+    ]
+    for i, model_errors in enumerate(errorlist):
+        for image_path, errors in model_errors.items():
+            image_tensor = read_image(image_path)
+            for error in errors:
+                count = 0
+                if error.crowd_ids().shape[0] > 0:
+                    groups[i]["crowded"].append(error)
+                    count += 1
+                bbox = error.gt_bbox.long()
+                image_crop: torch.Tensor = crop(
+                    image_tensor, bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]
+                )
+                image_crop = Grayscale()(image_crop).unsqueeze(0).float()
+                if (
+                    torch.min(bbox[2:] - bbox[:2]) < min_size
+                    or conv2d(image_crop, KERNEL).var() < var_threshold
+                ):
+                    groups[i]["low_feat"].append(error)
+                    count += 1
+
+                if (
+                    bbox.min() <= min_size // 2
+                    or bbox[2] >= image_tensor.shape[2] - min_size // 2
+                    or bbox[3] >= image_tensor.shape[1] - min_size // 2
+                ):
+                    groups[i]["truncated"].append(error)
+                    count += 1
+
+                if count == 0:
+                    groups[i]["others"].append(error)
+
+    return groups
+
+
 class Inspector:
     @logger("Initializing Inspector", "Initialized Inspector")
     def __init__(
@@ -72,7 +126,7 @@ class Inspector:
         if isinstance(evaluators, list):
             assert (
                 len({e.image_dir for e in evaluators}) == 1
-            ), "Models should be evaluated on the same dataset."
+            ), "Models should be evaluated on the same image directory."
         else:
             evaluators = [evaluators]
 
@@ -84,33 +138,36 @@ class Inspector:
 
         self.num_images = evaluator.num_images
         self.image_dir = evaluator.image_dir
+        self.categories = evaluator.categories
         # NOTE: Assumes all models have the same conf_threshold and iou_threshold
         self.conf_threshold = round(evaluator.evaluations[0].conf_threshold, 2)
         self.iou_threshold = (
             round(evaluator.evaluations[0].bg_iou_threshold, 2),
             round(evaluator.evaluations[0].fg_iou_threshold, 2),
         )
-
-        self.summaries = [
-            {
+        self.summaries: List[dict] = [None] * len(evaluators)
+        self.classwise_summaries: List[dict] = [None] * len(evaluators)
+        for i, evaluator in enumerate(self.evaluators):
+            summary = {
                 "name": evaluator.name,
                 "conf_threshold": evaluator.conf_threshold,
                 "iou_thresholds": evaluator.iou_thresholds,
                 **{k: round(v, 3) for k, v in evaluator.summarize().items()},
             }
-            for evaluator in self.evaluators
-        ]
+            summary["raw"] = summary.copy()
 
-        self.classwise_summaries = [
-            {
+            classwise_summary = {
                 "name": evaluator.name,
                 **{
                     class_idx: {k: round(v, 3) for k, v in individual_summary.items()}
                     for class_idx, individual_summary in evaluator.classwise_summarize().items()
                 },
             }
-            for evaluator in self.evaluators
-        ]
+            classwise_summary["raw"] = classwise_summary.copy()
+
+            self.summaries[i] = summary
+            self.classwise_summaries[i] = classwise_summary
+
         bkg_crops: List[torch.Tensor] = []
         bkg_errors: List[List[Error]] = []
 
@@ -127,13 +184,13 @@ class Inspector:
 
         self.gt_data = evaluators[0].get_gt_data()
         actual_labels = [(-1, label) for label in self.gt_data.gt_labels.tolist()]
-
+        repeat_labels = [(-2, label) for label in self.gt_data.gt_labels.tolist()]
         self.projector = CropProjector(
             name=f"Crops",
-            images=self.gt_data.crops + bkg_crops,
+            images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
             encoder_mode="preconv",
             normalize_embeddings=True,
-            labels=actual_labels + bkg_labels,
+            labels=actual_labels + bkg_labels + repeat_labels,
             device=torch.device("cpu"),
         )
 
@@ -313,7 +370,7 @@ class Inspector:
             recall_tooltip = None
             f1_tooltip = None
 
-            weights = {}
+            diffs = {}
 
             if display_weights and "weighted" in summary:
                 weighted: dict = summary["weighted"]
@@ -334,13 +391,13 @@ class Inspector:
                     ["TP", "FP", "CLS", "LOC", "CLL", "DUP", "MIS", "BKG"],
                     ["true_positives", "false_positives", *ALL_ERRORS],
                 ):
-                    weights[code] = (
+                    diffs[code] = (
                         round(weighted[key] / counts[code], 2)
                         if counts[code] > 0
                         else 0
                     )
 
-                weights["FN"] = (
+                diffs["FN"] = (
                     round(
                         weighted["false_negatives"] / (counts["FN"] + counts["MIS"]), 2
                     )
@@ -351,6 +408,34 @@ class Inspector:
                 precision_tooltip = "Weighted | Unweighted"
                 recall_tooltip = "Weighted | Unweighted"
                 f1_tooltip = "Weighted | Unweighted"
+            else:
+                raw = summary.get("raw", summary)
+                if precision != round(raw["precision"], 2):
+                    precision = (
+                        f" {precision} <span class='text-dark"
+                        f" text-xs'>| {round(raw['precision'], 2)}</span>"
+                    )
+                    precision_tooltip = "Adjusted | Raw"
+                if recall != round(raw["recall"], 2):
+                    recall = (
+                        f" {recall} <span class='text-dark text-xs'>|"
+                        f" {round(raw['recall'], 2)}</span>"
+                    )
+                    recall_tooltip = "Adjusted | Raw"
+                if f1 != round(raw["f1"], 2):
+                    f1 = (
+                        f" {f1} <span class='text-dark text-xs'>|"
+                        f" {round(raw['f1'], 2)}</span>"
+                    )
+                    f1_tooltip = "Adjusted | Raw"
+
+                for code, key in zip(
+                    ["TP", "FP", "CLS", "LOC", "CLL", "DUP", "MIS", "BKG"],
+                    ["true_positives", "false_positives", *ALL_ERRORS],
+                ):
+                    diffs[code] = raw[key] - counts[code]
+
+                diffs["FN"] = raw["false_negatives"] - (counts["FN"] + counts["MIS"])
 
             opacity = 0.8
             gt_bar = [
@@ -358,7 +443,7 @@ class Inspector:
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
                     code_mapping[code],
-                    weights.get(code),
+                    diffs.get(code),
                 )
                 for code in ["TP", "MIS", "FN"]
             ]
@@ -368,9 +453,9 @@ class Inspector:
                     ErrorColor(code).rgb(opacity, False),
                     counts[code],
                     code_mapping[code],
-                    weights.get(code),
+                    diffs.get(code),
                 )
-                for code in ["TP", "BKG", "CLS", "LOC", "CLL", "DUP", "FP"]
+                for code in ["TP", "BKG", "CLS", "CLL", "LOC", "DUP", "FP"]
             ]
             content[1][i] = (
                 evaluator.name,
@@ -513,6 +598,7 @@ class Inspector:
         ax.set_yscale("log")
         ax.set_ylabel("Area (px)")
         ax.set_xlabel("Class")
+        ax.set_xticklabels([self.categories.get(i, i) for i in ax.get_xticks()])
 
         return encode_base64(fig)
 
@@ -527,9 +613,10 @@ class Inspector:
         bbox_attr: str = None,
         label_attr: str = None,
         get_bbox_func: Callable[[Tuple[Error, str]], torch.Tensor] = None,
-        get_label_func: Callable[[int], str] = None,
+        label_str: str = "Predicted: {label}",
         add_metadata_func: Callable[[dict, Error], dict] = None,
         clusters: torch.Tensor = None,
+        extract_high: bool = False,
     ) -> Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]:
         """Compute a dictionary of plots for the crops of the errors, classwise.
 
@@ -547,7 +634,7 @@ class Inspector:
         evaluator_id : int, default=0
             Evaluator id to use
 
-        preview_size : int, default=128
+        preview_size : int, default=192
             Size of the preview image
 
         bbox_attr : str, default=None
@@ -559,8 +646,8 @@ class Inspector:
         get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], default=None
             Function to get the bounding box from the error, by default a function that returns the bounding box specified by `bbox_attr`
 
-        get_label_func : Callable[[int], str], default=None
-            Function to get the label from the class index, by default a function that returns the class index as a string
+        label_str : str, default="Predicted: {label}"
+            String to use for the label
 
         add_metadata_func : Callable[[dict], dict], default=None
             Function to add a caption to the metadata, by default a function that returns the metadata as is
@@ -593,7 +680,6 @@ class Inspector:
 
         get_bbox_func = get_bbox_func or get_bbox_by_attr
         add_metadata_func = add_metadata_func or add_metadata
-        get_label_func = get_label_func or (lambda label: f"Predicted: Class {label}")
 
         if clusters is None:
             projector = self.projector
@@ -637,7 +723,9 @@ class Inspector:
 
                 if label not in classwise_dict:
                     classwise_dict[label] = (
-                        get_label_func(label),
+                        label_str.format(
+                            label=self.categories.get(label, f" Class {label}")
+                        ),
                         dict(),
                     )
 
@@ -664,10 +752,26 @@ class Inspector:
                 self.crops[crop_key] = fig
                 bkg_idx += 1
 
-                if -1 not in cluster and cluster in subclusters:
-                    subclusters[cluster]["similar"].append(error)
+                unique_key, tail = get_unique_key(cluster, error)
+
+                is_repeated_non_outlier = (
+                    -1 not in cluster and unique_key in subclusters
+                )
+                is_repeated_gt = (
+                    not isinstance(error, BackgroundError)
+                    and unique_key in subclusters
+                    and unique_key + tail in subclusters[unique_key]["uniques"]
+                )
+
+                if is_repeated_non_outlier or is_repeated_gt:
+                    subclusters[unique_key]["similar"].append(error)
+                    if unique_key + tail in subclusters[unique_key]["uniques"]:
+                        count += 1
+                    else:
+                        subclusters[unique_key]["uniques"].add(unique_key + tail)
                 else:
-                    subclusters[cluster] = fig
+                    subclusters[unique_key] = fig
+
                     classwise_dict[label][1][cluster[0]][0].append(fig)
                     count += 1
 
@@ -677,12 +781,23 @@ class Inspector:
         for label in label_set:
             class_info, clusters_dict = classwise_dict[label]
 
+            for clusters in clusters_dict.values():
+                clusters[0] = sorted(
+                    clusters[0],
+                    key=lambda x: (len(x["similar"]), len(x["uniques"])),
+                    reverse=True,
+                )
+
             classwise_dict[label] = (
                 class_info,
                 dict(sorted(clusters_dict.items(), key=lambda x: x[0], reverse=True)),
             )
 
-        return classwise_dict
+        if extract_high:
+            high_conf = self.extract_high_confidence(classwise_dict)
+            return classwise_dict, high_conf
+
+        return classwise_dict, None
 
     def error_classwise_ranking(
         self,
@@ -699,7 +814,7 @@ class Inspector:
             error_types = [error_types]
 
         confusion_matrices = [
-            self.evaluators[evaluator_id].get_confusion_matrices()[error_type.__name__]
+            self.evaluators[evaluator_id].get_confusions()[error_type.code]
             for error_type in error_types
         ]
 
@@ -726,16 +841,33 @@ class Inspector:
                 constrained_layout=True,
             )
             for i, error_type in enumerate(error_types):
-                ax.barh(
+                bars = ax.barh(
                     range(len(confusion_dict)),
                     width=[x[i] for x in confusion_dict.values()],
                     color=ErrorColor[error_type.code].hex,
                     left=[sum(x[:i]) for x in confusion_dict.values()],
                     label=error_type.code,
                 )
+                for bar in bars.patches:
+                    if bar.get_width() == 0:
+                        continue
+                    ax.annotate(
+                        format(bar.get_width(), "d"),
+                        (bar.get_x() + bar.get_width() - 0.5, bar.get_y()),
+                        ha="center",
+                        va="center",
+                        size=8,
+                        xytext=(0, 8),
+                        textcoords="offset points",
+                    )
+
             ax.set_yticks(range(len(confusion_dict)))
             ax.set_yticklabels(
-                [f"gt={k[0]} pred={k[1]}" for k in confusion_dict.keys()], minor=False
+                [
+                    f"gt={self.categories.get(k[0], f'Class {k[0]}')} pred={self.categories.get(k[1], f'Class {k[1]}')}"
+                    for k in confusion_dict.keys()
+                ],
+                minor=False,
             )
             ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
             ax.set_title(title)
@@ -773,18 +905,235 @@ class Inspector:
         else:
             return fig, ax
 
+    def extract_high_confidence(
+        self,
+        classwise_dict: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]],
+    ):
+        """Extract the high confidence errors from a dictionary of error crops.
+        Returns a new dictionary with the high confidence errors and removes them from the original dictionary.
+
+        Parameters
+        ----------
+        classwise_dict : Dict[int, Tuple[str, Dict[int, List[Dict]]]]
+            The dictionary of error crops
+
+        Returns
+        -------
+        Dict[int, Tuple[str, Dict[int, List[Dict]]]]
+            The dictionary of high confidence error crops
+        """
+        high_conf: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = {}
+        for label, (class_info, clusters_dict) in classwise_dict.items():
+            if label not in high_conf:
+                high_conf[label] = (class_info, {})
+
+            clusters_dict_del_set = set()
+            for cluster, errors in clusters_dict.items():
+                if cluster not in high_conf[label][1]:
+                    high_conf[label][1][cluster] = [[] for _ in errors]
+                for i, model_errors in enumerate(errors):
+                    model_errors_del_set = set()
+                    for j, error in enumerate(model_errors):
+                        if (error["confidence"] or 0) > HIGH_CONFIDENCE:
+                            high_conf[label][1][cluster][i].append(error)
+                            model_errors_del_set.add(j)
+                    for j in sorted(model_errors_del_set, reverse=True):
+                        del model_errors[j]
+
+                if sum(len(x) for x in high_conf[label][1][cluster]) == 0:
+                    del high_conf[label][1][cluster]
+
+                if sum(len(x) for x in errors) == 0:
+                    clusters_dict_del_set.add(cluster)
+
+            for cluster in clusters_dict_del_set:
+                del clusters_dict[cluster]
+
+            if len(high_conf[label][1]) == 0:
+                del high_conf[label]
+
+        return high_conf
+
+    def get_suggestions(self, results: Dict[str, Section], **kwargs) -> Content:
+        """Get suggestions for the errors in the results.
+
+        Parameters
+        ----------
+        results : Dict[str, Section]
+            The results of the error analysis
+
+        Returns
+        -------
+        Content
+            The suggestions for the errors
+        """
+
+        suggestions: Dict[str, dict] = {}
+
+        def not_empty(code: str):
+            return (
+                code in results and results[code].contents[0].type != ContentType.TEXT
+            )
+
+        if not_empty("MIS"):
+            mis_contents: Dict[int, List[Tuple[int, str]]] = {}
+            for content in results.get("MIS").contents[1:]:
+                class_errors: Dict[
+                    int, Tuple[str, Dict[int, List[List[dict]]]]
+                ] = content.content
+                for class_idx, (class_info, clusters_dict) in class_errors.items():
+                    if class_idx not in mis_contents:
+                        mis_contents[class_idx] = []
+                    num_groups = [
+                        sum(len(y) for y in x) for x in clusters_dict.values()
+                    ]
+                    mis_contents[class_idx].append(
+                        (sum(num_groups), class_info, content.header)
+                    )
+
+            mis_contents = {
+                k: sorted(v, reverse=True)[0] for k, v in mis_contents.items()
+            }
+
+            suggestions["MIS"] = dict(
+                title="Most Common Causes of Missed Detections",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["<ul>"]
+                        + [
+                            f"<li>{class_info[8:]}: {group} ({n})"
+                            for n, class_info, group in mis_contents.values()
+                        ]
+                        + ["</ul>"],
+                    ),
+                ],
+            )
+
+        if not_empty("BKG"):
+            bkg_high_confs: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = (
+                results.get("BKG").contents[0].content
+            )
+            bkg_contents: Dict[int, int] = {
+                class_idx: (
+                    sum(sum(len(y) for y in x) for x in clusters_dict.values()),
+                    class_info,
+                )
+                for class_idx, (class_info, clusters_dict) in bkg_high_confs.items()
+            }
+
+            suggestions["BKG"] = dict(
+                title="No. of High Confidence Background Errors",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=[
+                            "<p>A large number of high confidence errors could be due"
+                            " to missing labels in the test dataset.</p>"
+                        ],
+                    ),
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["<ul>"]
+                        + [
+                            f"<li>{class_info[11:]}: {n}"
+                            for n, class_info in bkg_contents.values()
+                        ]
+                        + ["</ul>"],
+                    ),
+                ],
+            )
+
+        if not_empty("confusions"):
+            cls_errors: Dict[
+                Tuple[int, int], Tuple[str, Dict[int, List[List[dict]]]]
+            ] = (results.get("confusions").contents[1].content)
+            cls_contents: Dict[int, Tuple[int, str]] = {}
+            for confusion_idx, (info, clusters_dict) in cls_errors.items():
+                num_groups = [sum(len(y) for y in x) for x in clusters_dict.values()]
+                cls_contents[confusion_idx] = (sum(num_groups), info)
+
+            suggestions["confusions"] = dict(
+                title="Most Common Confusions",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=[
+                            "<p>A large number of confusions could suggest insufficient"
+                            " distinction between categories.</p>"
+                        ],
+                    ),
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["<ul>"]
+                        + [f"<li>{info}: {n}" for n, info in cls_contents.values()]
+                        + ["</ul>"],
+                    ),
+                ],
+            )
+
+        if not_empty("LOC"):
+            TOP_K = 3
+            loc_high_conf: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = (
+                results.get("LOC").contents[0].content
+            )
+            loc_contents: Dict[int, List[dict]] = {}
+
+            k = 0
+            for class_idx, (class_info, clusters_dict) in loc_high_conf.items():
+                heap = []
+
+                for figs in clusters_dict.values():
+                    for model_figs in figs:
+                        for fig in model_figs:
+                            tu_score = len(fig["similar"]) / (len(fig["uniques"]) + 1)
+                            heapq.heappush(heap, (-tu_score, k, class_info, fig))
+                            k += 1
+
+                loc_contents[class_idx] = [
+                    heapq.heappop(heap) for _ in range(min(TOP_K, len(heap)))
+                ]
+
+            suggestions["LOC"] = dict(
+                title="Most Repeated Localization Errors",
+                content=[
+                    Content(
+                        type=ContentType.TEXT,
+                        content=[
+                            "<p>The top 3 error groups with the largest <span"
+                            " class='code'>total/unique</span> ratios. These could be"
+                            " due to crowded labels.</p>"
+                        ],
+                    ),
+                    Content(
+                        type=ContentType.TEXT,
+                        content=['<div class="class-image-container row">'],
+                    ),
+                    *[
+                        Content(
+                            type=ContentType.IMAGE,
+                            content=fig,
+                            data=dict(high_badge=False),
+                        )
+                        for elems in loc_contents.values()
+                        for _, _, _, fig in elems
+                    ],
+                    Content(
+                        type=ContentType.TEXT,
+                        content=["</div>"],
+                    ),
+                ],
+            )
+
+        return Content(type=ContentType.INFOBOXES, content=suggestions)
+
     # region: Error Sections
     @logger()
-    def background_error(self, *, data: dict = None, **kwargs) -> Section:
+    def background_error(self, **kwargs) -> Section:
         """Generate a section visualizing the background errors in the dataset.
 
         Parameters
         ----------
-        data : dict, optional
-            Metadata to attach to content, by default None
-        clusters : torch.Tensor, optional
-            The cluster assignments for each error, if None then clusters are computed by `self.projector`, by default None
-
         kwargs : dict
             Additional keyword arguments to pass to `error_classwise_dict`
 
@@ -809,14 +1158,9 @@ class Inspector:
                 """,
             )
 
-        if data is None:
-            data = {}
-        data["grouped"] = data.get("grouped", True)
-        data["compact"] = data.get("compact", True)
-
         get_crop_options(BackgroundError, kwargs)
 
-        figs = self.error_classwise_dict(**kwargs)
+        figs, high_conf = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -825,9 +1169,15 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
+                    header="High Confidence Detections",
+                    description=f"""Background errors with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=figs,
-                    data=data,
                 ),
             ],
         )
@@ -865,7 +1215,7 @@ class Inspector:
 
         get_crop_options(ClassificationError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationError)
 
         contents = [
@@ -928,7 +1278,7 @@ class Inspector:
 
         get_crop_options(LocalizationError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, high_conf = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -937,9 +1287,16 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
+                    header="High Confidence Detections",
+                    description=f"""Poorly localized detections with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=classwise_dict,
-                )
+                ),
             ],
         )
 
@@ -981,7 +1338,7 @@ class Inspector:
 
         get_crop_options(ClassificationAndLocalizationError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(ClassificationAndLocalizationError)
 
         return Section(
@@ -1028,7 +1385,7 @@ class Inspector:
         section_id = "Confusions"
         title = "Confusions"
         description = """
-        List of all the detections with predicted classes not equal to the class of the corresponding ground truth.
+        List of all the detections with predicted classes not equal to the class of the corresponding ground truth. White boxes indicate ground truths, red boxes indicate classification errors, and orange boxes indicate poorly localized detections.
         """
 
         num_errors = (
@@ -1050,11 +1407,11 @@ class Inspector:
 
         get_crop_options(ClassificationError, kwargs)
 
-        cls_classwise_dict = self.error_classwise_dict(**kwargs)
+        cls_classwise_dict, _ = self.error_classwise_dict(**kwargs)
 
         get_crop_options(ClassificationAndLocalizationError, kwargs)
 
-        cll_classwise_dict = self.error_classwise_dict(**kwargs)
+        cll_classwise_dict, _ = self.error_classwise_dict(**kwargs)
         fig = self.error_classwise_ranking(
             [ClassificationError, ClassificationAndLocalizationError]
         )
@@ -1069,8 +1426,13 @@ class Inspector:
                     for error_fig in error_figs[0]:
                         confusion_idx = (error_fig["gt_class"], error_fig["pred_class"])
                         if confusion_idx not in classwise_dict:
+                            labels = self.categories.get(
+                                confusion_idx[0], f"Class {confusion_idx[0]}"
+                            ), self.categories.get(
+                                confusion_idx[1], f"Class {confusion_idx[1]}"
+                            )
                             classwise_dict[confusion_idx] = (
-                                f"gt={confusion_idx[0]} → pred={confusion_idx[1]}",
+                                f"gt={labels[0]} → pred={labels[1]}",
                                 dict(),
                             )
                         if cluster not in classwise_dict[confusion_idx][1]:
@@ -1081,6 +1443,8 @@ class Inspector:
         regroup_dict(classwise_dict, cls_classwise_dict)
         regroup_dict(classwise_dict, cll_classwise_dict)
 
+        high_conf = self.extract_high_confidence(classwise_dict)
+
         return Section(
             id=section_id,
             title=title,
@@ -1089,18 +1453,19 @@ class Inspector:
                 Content(
                     type=ContentType.PLOT,
                     header="Ranking",
-                    description=(
-                        "The following plot shows the distribution of classification"
-                        " errors."
-                    ),
+                    description=f"""The following plot shows the distribution of classification errors.""",
                     content=dict(plot=fig),
                 ),
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description=(
-                        "The following is a montage of the classification errors."
-                    ),
+                    header="High Confidence Detections",
+                    description=f"""Confusions with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=classwise_dict,
                 ),
             ],
@@ -1124,7 +1489,7 @@ class Inspector:
         section_id = "DuplicateError"
         title = "Duplicate Errors"
         description = f"""
-            List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction.
+            List of all the detections with confidence above the <span class="code">conf_threshold={self.overall_summary["conf_threshold"]}</span> but lower than the confidence of another true positive prediction. White boxes indicate ground truths, green boxes indicate best predictions, and cyan boxes indicate duplicate predictions.
             """
         if self.summaries[kwargs.get("evaluator_id", 0)]["DuplicateError"] == 0:
             return empty_section(
@@ -1138,7 +1503,7 @@ class Inspector:
 
         get_crop_options(DuplicateError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, high_conf = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -1147,12 +1512,14 @@ class Inspector:
             contents=[
                 Content(
                     type=ContentType.IMAGES,
-                    header="Visualizations",
-                    description=(
-                        "The following is a montage of the duplicate errors. White"
-                        " boxes indicate ground truths, green boxes indicate best"
-                        " predictions, and cyan boxes indicate duplicate predictions."
-                    ),
+                    header="High Confidence Detections",
+                    description=f"""Duplicate errors with <span class='code'>confidence > 0.85</span>.""",
+                    content=high_conf,
+                    data=dict(high_badge=False),
+                ),
+                Content(
+                    type=ContentType.IMAGES,
+                    header="Other Detections",
                     content=classwise_dict,
                 ),
             ],
@@ -1190,7 +1557,7 @@ class Inspector:
 
         get_crop_options(MissedError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
         box = self.boxplot(classwise_dict)
 
         sections = {
@@ -1218,7 +1585,9 @@ class Inspector:
             "others": ("Others", "List of all other missed detections."),
         }
 
-        groups: Dict[str, List[Error]] = self.missed_groups()[kwargs["evaluator_id"]]
+        groups: Dict[str, List[Error]] = self.missed_groups()[
+            kwargs.get("evaluator_id", 0)
+        ]
 
         figs: Dict[str, Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]] = {
             k: {} for k in groups
@@ -1228,16 +1597,18 @@ class Inspector:
 
         for group, errors in groups.items():
             for error in errors:
-                fig: dict = self.crops.get((kwargs["evaluator_id"], error))
+                fig: dict = self.crops.get((kwargs.get("evaluator_id", 0), error))
                 if fig is None:
                     logging.warn(f"Could not find crop for {error}")
                     continue
                 fig = fig.copy()
                 if error.gt_label not in figs[group]:
-                    figs[group][error.gt_label] = (
-                        f"Missed: Class {error.gt_label}",
-                        {},
+                    label_str = "Missed: {label}".format(
+                        label=self.categories.get(
+                            error.gt_label, f"Class {error.gt_label}"
+                        )
                     )
+                    figs[group][error.gt_label] = (label_str, {})
 
                 cluster = fig.get("cluster")
                 if -1 not in cluster and cluster in subclusters:
@@ -1246,11 +1617,29 @@ class Inspector:
 
                 cluster = cluster[0]
 
-                fig["caption"] += f" | Sub {fig.get('cluster')[1]}"
                 if cluster not in figs[group][error.gt_label][1]:
                     figs[group][error.gt_label][1][cluster] = [[]]
 
                 figs[group][error.gt_label][1][cluster][0].append(fig)
+
+        for _, group_figs in figs.items():
+            for class_idx, (info, clusters) in group_figs.items():
+                for cluster in clusters.values():
+                    cluster[0] = sorted(
+                        cluster[0],
+                        key=lambda x: (len(x["similar"]), len(x["uniques"])),
+                        reverse=True,
+                    )
+                group_figs[class_idx] = (
+                    info,
+                    dict(
+                        sorted(
+                            clusters.items(),
+                            key=lambda x: x[0],
+                            reverse=True,
+                        )
+                    ),
+                )
 
         return Section(
             id=section_id,
@@ -1286,7 +1675,6 @@ class Inspector:
         min_size: int = 32,
         var_threshold: float = 100,
     ) -> List[Dict[str, list]]:
-        KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
 
         errorlist_dicts = (
             self.errorlist_dicts
@@ -1296,47 +1684,9 @@ class Inspector:
         errorlist: List[Dict[str, List[MissedError]]] = [
             d["MissedError"] for d in errorlist_dicts
         ]
-        groups = [
-            {
-                "crowded": [],
-                "low_feat": [],
-                "occluded": [],
-                "truncated": [],
-                "bad_label": [],  # subjective
-                "others": [],
-            }
-            for _ in range(len(errorlist))
-        ]
-        for i, model_errors in enumerate(errorlist):
-            for image_path, errors in model_errors.items():
-                image_tensor = read_image(image_path)
-                for error in errors:
-                    count = 0
-                    if error.crowd_ids().shape[0] > 0:
-                        groups[i]["crowded"].append(error)
-                        count += 1
-                    bbox = error.gt_bbox.long()
-                    image_crop: torch.Tensor = crop(
-                        image_tensor, bbox[1], bbox[0], bbox[3], bbox[2]
-                    )
-                    image_crop = Grayscale()(image_crop).unsqueeze(0).float()
-                    if (
-                        torch.min(bbox[2:] - bbox[:2]) < min_size
-                        or conv2d(image_crop, KERNEL).var() < var_threshold
-                    ):
-                        groups[i]["low_feat"].append(error)
-                        count += 1
-
-                    if (
-                        bbox.min() <= min_size // 2
-                        or bbox[2] >= image_tensor.shape[2] - min_size // 2
-                        or bbox[3] >= image_tensor.shape[1] - min_size // 2
-                    ):
-                        groups[i]["truncated"].append(error)
-                        count += 1
-
-                    if count == 0:
-                        groups[i]["others"].append(error)
+        groups = missed_groups(
+            errorlist=errorlist, min_size=min_size, var_threshold=var_threshold
+        )
 
         return groups
 
@@ -1372,7 +1722,7 @@ class Inspector:
 
         get_crop_options(NonError, kwargs)
 
-        classwise_dict = self.error_classwise_dict(**kwargs)
+        classwise_dict, _ = self.error_classwise_dict(**kwargs)
 
         return Section(
             id=section_id,
@@ -1421,7 +1771,7 @@ class Inspector:
         order["overview"] = order.get("overview", math.inf)
         order["TP"] = order.get("TP", -1)
 
-        results = dict()
+        results: Dict[str, Section] = dict()
 
         func_mapping = {
             "BKG": self.background_error,
@@ -1437,15 +1787,16 @@ class Inspector:
 
         evaluator_id = kwargs.get("evaluator_id", 0)
 
-        weights_by_code = self.recalculate_summaries([evaluator_id], weights=weights)
-        weights_by_code.update(order)
+        self.recalculate_summaries([evaluator_id], weights=weights)
 
         results["overview"] = self.summary([evaluator_id])
+        infoboxes = self.get_suggestions(results)
+        results["overview"].contents.append(infoboxes)
 
         sections = dict(
             sorted(
                 results.items(),
-                key=lambda x: weights_by_code.get(x[0], -2),
+                key=lambda x: order.get(x[0], -2),
                 reverse=True,
             )
         )
@@ -1463,7 +1814,7 @@ class Inspector:
         return sections, section_names
 
     @logger()
-    def compare_background_errors(self) -> Section:
+    def compare_background_errors(self, **kwargs) -> Section:
         """Generate a section comparing the background errors between models.
 
         Returns
@@ -1472,15 +1823,14 @@ class Inspector:
             The section containing the visualizations
         """
 
-        mask = [label[0] != -1 for label in self.projector.labels]
+        get_crop_options(BackgroundError, kwargs)
+        kwargs["extract_high"] = False
 
         figs = [
             self.error_classwise_dict(
-                BackgroundError,
-                color=ErrorColor.BKG,
-                axis=1,
                 evaluator_id=idx,
-            )
+                **kwargs,
+            )[0]
             for idx in range(len(self.evaluators))
         ]
 
@@ -1576,8 +1926,6 @@ class Inspector:
                     )
                 gt_errors[gt_label][gt_id][1][i] = errors
 
-        gt_ids = gt_data.gt_ids.tolist()
-
         logging.info("Collated errors")
 
         ## generate crops
@@ -1592,7 +1940,7 @@ class Inspector:
                     figs[gt_id] = [[] for _ in evaluators]
                 image_tensor = read_image(image_path)
                 image_name = image_path.split("/")[-1]
-                cluster = tuple(gt_clusters[gt_ids.index(gt_id)].tolist())
+                cluster = tuple(gt_clusters[gt_id].tolist())
                 for i, model_errors in zip(ids, error_list):
                     for error in model_errors:
                         crop_key = (i, error)
@@ -1614,7 +1962,6 @@ class Inspector:
                         self.crops[crop_key] = fig
                         figs[gt_id][i].append(fig)
 
-                    # TODO: this sorting is repeated in Evaluation().get_pred_status(). Use that instead
                     figs[gt_id][i] = [
                         sorted(
                             figs[gt_id][i],
@@ -1661,9 +2008,8 @@ class Inspector:
         ]
         for i, section_gt_ids in enumerate(gt_ids_by_section):
             for gt_id in section_gt_ids:
-                gt_ref = gt_ids.index(gt_id)
-                class_idx = gt_data.gt_labels[gt_ref].item()
-                cluster = tuple(gt_clusters[gt_ref].tolist())
+                class_idx = gt_data.gt_labels[gt_id].item()
+                cluster = tuple(gt_clusters[gt_id].tolist())
                 gt_figs = figs.get(gt_id)
                 if gt_figs is None:
                     continue
@@ -1691,7 +2037,7 @@ class Inspector:
                         type=ContentType.IMAGES,
                         header=f"Errors in Class {class_idx}",
                         content=section_content["contents"][class_idx],
-                        data=dict(grouped=True, compact=True),
+                        data=dict(badged=False),
                     )
                     for class_idx in section_content["contents"]
                 ],

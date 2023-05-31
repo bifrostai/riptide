@@ -31,13 +31,40 @@ ERROR_WEIGHTS = {
 
 ERROR_ORDERS = {
     "precision": {
+        "FN": 1,
+        "FP": 2,
+        "BKG": 10,
         "confusions": 10,
+        "CLS": 10,
+        "CLL": 5,
+        "LOC": 2,
+        "DUP": 2,
+        "MIS": 1,
+        "TP": -1,
     },
     "recall": {
+        "FN": 5,
+        "FP": 1,
+        "BKG": 10,
         "confusions": 1.001,
+        "CLS": 1.001,
+        "CLL": 1.001,
+        "LOC": 1.001,
+        "DUP": 1,
+        "MIS": 10,
+        "TP": -1,
     },
     "f1": {
+        "FN": 5,
+        "FP": 2,
+        "BKG": 10,
         "confusions": 10,
+        "CLS": 10,
+        "CLL": 5,
+        "LOC": 2,
+        "DUP": 2,
+        "MIS": 12,
+        "TP": -1,
     },
 }
 

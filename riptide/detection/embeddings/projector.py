@@ -22,7 +22,7 @@ class CropProjector:
         images: List[torch.Tensor],
         encoder_mode: str,
         normalize_embeddings: bool,
-        labels: List[Any] = None,
+        labels: list = None,
         device: torch.device = torch.device("cpu"),
     ) -> None:
         if labels is not None:
@@ -139,7 +139,7 @@ class CropProjector:
         Parameters
         ----------
         eps : float, optional
-            DBSCAN eps parameter, by default 0.4
+            DBSCAN eps parameter, by default 0.3
         min_samples : int, optional
             DBSCAN min_samples parameter, by default 2
         mask : List[bool], optional
@@ -152,10 +152,11 @@ class CropProjector:
         torch.Tensor
             Cluster labels
         """
-
         return torch.tensor(self.get_clusterer(**kwargs).labels_)
 
-    def subcluster(self, *, sub_lambda: float = 0.8, **kwargs) -> torch.Tensor:
+    def subcluster(
+        self, *, sub_lambda: float = 0.8, n_noise: int = 2, **kwargs
+    ) -> torch.Tensor:
         """Subdivide clusters into subclusters"""
         clusterer = self.get_clusterer(**kwargs)
         embeddings = self.get_embeddings()
@@ -166,12 +167,14 @@ class CropProjector:
         subclusters = torch.full((embeddings.shape[0],), -1, dtype=torch.long)
         sub_eps = sub_lambda * clusterer.cluster_selection_epsilon
 
-        for cluster in range(clusterer.labels_.max() + 1):
-            cluster_mask = clusterer.labels_ == cluster
-            cluster_embeddings = embeddings[cluster_mask]
+        noise = torch.rand((n_noise, embeddings.shape[1]), device=embeddings.device)
+
+        for cluster in range(labels.max() + 1):
+            cluster_mask = labels == cluster
+            cluster_embeddings = torch.cat([embeddings[cluster_mask], noise])
             subclusterer = HDBSCAN(
                 min_cluster_size=2, min_samples=1, cluster_selection_epsilon=sub_eps
             ).fit(cluster_embeddings)
-            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_)
+            subclusters[cluster_mask] = torch.tensor(subclusterer.labels_[:-n_noise])
 
         return torch.stack([labels, subclusters], dim=1)

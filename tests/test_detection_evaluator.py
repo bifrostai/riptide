@@ -270,6 +270,7 @@ def test_confusion():
     pred_scores = torch.Tensor([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
     pred_labels = torch.Tensor([1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0])
     gt_labels = torch.Tensor([1.0, 1.0, 1.0])
+
     evaluation = ObjectDetectionEvaluation(
         image_path="",
         pred_bboxes=pred_bboxes,
@@ -282,11 +283,13 @@ def test_confusion():
     tp = issue.get_true_positives()
     fn = issue.get_false_negatives()
     fp = issue.get_false_positives()
+    un = issue.get_unused()
 
     print(evaluation)
     assert tp == 2
     assert fp == 6
     assert fn == 1
+    assert un == 0
     assert tp + fp == len(pred_labels)
     assert tp + fn == len(gt_labels)
 
@@ -314,6 +317,7 @@ def test_confusion_with_unused_predictions():
     pred_scores = torch.Tensor([0.5, 0.1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
     pred_labels = torch.Tensor([1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0])
     gt_labels = torch.Tensor([1.0, 1.0, 1.0])
+
     evaluation = ObjectDetectionEvaluation(
         image_path="",
         pred_bboxes=pred_bboxes,
@@ -326,12 +330,14 @@ def test_confusion_with_unused_predictions():
     tp = issue.get_true_positives()
     fn = issue.get_false_negatives()
     fp = issue.get_false_positives()
+    un = issue.get_unused()
 
     print(evaluation)
     assert tp == 1
     assert fp == 6
     assert fn == 2
-    assert tp + fp == len(pred_labels) - 1
+    assert un == 1
+    assert tp + fp + un == len(pred_labels)
     assert tp + fn == len(gt_labels)
 
 
