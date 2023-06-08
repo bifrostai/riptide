@@ -102,6 +102,9 @@ class Status:
 
 
 class Evaluation:
+    """Base class for evaluations.
+    Represents the predictions and ground truths for a single image.
+    """
 
     pred_errors: List[Error] = []
     gt_errors: List[Error] = []
@@ -224,7 +227,7 @@ class Evaluation:
 
         Returns
         -------
-        Dict[Any, Union[Confusion, Error]]
+        Dict[Any, List[Status]]
             A dictionary with the ground truth IDs as keys and the status as values.
         """
         statuses = self.get_pred_status()

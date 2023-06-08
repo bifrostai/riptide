@@ -31,9 +31,9 @@ def crop_preview(
     ----------
     image_tensor : torch.Tensor
         Image tensor
-    bbox : torch.Tensor
+    bboxes : torch.Tensor
         Bounding box(es) in xyxy format
-    color : str
+    colors : str
         Color of bounding box
 
     Returns
@@ -65,7 +65,7 @@ def convex_hull(
     ----------
     bboxes : torch.Tensor
         Bounding boxes
-    format : str, optional. One of "xyxy" or "xywh"
+    format : {"xyxy", "xywh"}, optional
         Format of bounding boxes, by default "xyxy"
 
     Returns

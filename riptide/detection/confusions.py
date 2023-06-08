@@ -3,10 +3,16 @@ from typing import List, Union
 
 
 class Confusion(Enum):
+    """Confusion types for predictions and ground truths."""
+
     FALSE_NEGATIVE = 0
+    """A target that was not detected."""
     TRUE_POSITIVE = 1
+    """A target that was correctly detected."""
     FALSE_POSITIVE = 2
+    """A target that was incorrectly detected."""
     UNUSED = 3
+    """A prediction with low confidence that was not used in the evaluation."""
 
     @property
     def code(self):

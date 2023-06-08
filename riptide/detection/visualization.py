@@ -69,6 +69,7 @@ def missed_groups(
     errorlist: List[Dict[str, List[MissedError]]],
     min_size: int = 32,
     var_threshold: float = 100,
+    iou_threshold: float = 0.4,
 ):
     KERNEL = torch.tensor([[[0, 1, 0], [1, -4, 1], [0, 1, 0]]]).float().unsqueeze(0)
 
@@ -88,7 +89,7 @@ def missed_groups(
             image_tensor = read_image(image_path)
             for error in errors:
                 count = 0
-                if error.crowd_ids().shape[0] > 0:
+                if error.crowd_ids(iou_threshold).shape[0] > 0:
                     groups[i]["crowded"].append(error)
                     count += 1
                 bbox = error.gt_bbox.long()
@@ -118,6 +119,14 @@ def missed_groups(
 
 
 class Inspector:
+    """Interface for processing and visualizing errors.
+
+    Parameters
+    ----------
+    evaluators : List[ObjectDetectionEvaluator]
+        Evaluator(s) to inspect.
+    """
+
     @logger("Initializing Inspector", "Initialized Inspector")
     def __init__(
         self,
@@ -522,7 +531,7 @@ class Inspector:
     ) -> Dict[str, bytes]:
         """Computes a dictionary of plots for the confidence of given error types.
 
-        Arguments
+        Parameters
         ---------
         error_types : Union[Error, Iterable[Error]]
             Error types to plot confidence for
@@ -620,36 +629,27 @@ class Inspector:
     ) -> Dict[int, Tuple[str, Dict[int, List[List[dict]]]]]:
         """Compute a dictionary of plots for the crops of the errors, classwise.
 
-        Arguments
+        Parameters
         ---------
         error_type : Type[Error]
             Error type to plot crops for
-
         color : Union[str, ErrorColor, List[Union[str, ErrorColor]]]
             Color(s) for the bounding box(es). Can be a single color or a list of colors
-
-        axis : int, default=0
+        axis : int, optional
             Axis to perform computations. 0 for ground truths, 1 for predictions
-
-        evaluator_id : int, default=0
+        evaluator_id : int, optional
             Evaluator id to use
-
-        preview_size : int, default=192
+        preview_size : int, optional
             Size of the preview image
-
-        bbox_attr : str, default=None
+        bbox_attr : str, optional
             Attribute name for the bounding box. If None, attribute is determined by `axis`
-
-        label_attr : str, default=None
+        label_attr : str, optional
             Attribute name for the label. If None, attribute is determined by `axis`
-
-        get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], default=None
+        get_bbox_func : Callable[[Tuple[Error, str]], torch.Tensor], optional
             Function to get the bounding box from the error, by default a function that returns the bounding box specified by `bbox_attr`
-
-        label_str : str, default="Predicted: {label}"
+        label_str : str, optional
             String to use for the label
-
-        add_metadata_func : Callable[[dict], dict], default=None
+        add_metadata_func : Callable[[dict], dict], optional
             Function to add a caption to the metadata, by default a function that returns the metadata as is
 
         Returns
@@ -1751,9 +1751,9 @@ class Inspector:
 
         Parameters
         ----------
-        order : dict, default=`None`
+        order : dict, optional
             A dictionary containing the order in which the sections should be displayed. If not specified, error sections are sorted by decreasing weight
-        weights : Union[dict, ErrorWeights], default=`ErrorWeights.PRECISION`
+        weights : Union[dict, ErrorWeights], optional
             A dictionary containing the weights for each error type, or an ErrorWeights enum
 
         Returns

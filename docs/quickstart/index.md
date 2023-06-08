@@ -1,13 +1,16 @@
-# Riptide
+# Using Riptide
+Riptide is built upon the [TIDE](https://arxiv.org/abs/2008.08115 "TIDE: A General Toolbox for Identifying Object Detection Errors") framework, the modern standard for object detection evaluation. It is designed to help you quickly identify and understand the types of errors your model is making.
+
 
 ## Installation
-```
+```bash
+git clone github.com/bifrost-core/riptide
 poetry install
 ```
 
 ## Getting Started
-For any quantitative evaluation, you need:
-- Ground truths (targets)
+For any quantitative evaluation, you need: <br>
+- Ground truths (targets) <br>
 - Predictions
 
 Riptide allows you to quickly evaluate object detection models using the following API:
@@ -34,11 +37,4 @@ evaluator = ObjectDetectionEvaluator.from_dicts(
 print(evaluator.summarize())
 report = HtmlReport(evaluator).render("path/to/output/folder")
 ```
-[Read More - Evaluation Report](docs/tutorials/understanding_evaluations.md#evaluation-report)
-
-## Documentation
-
-- [Understanding Evaluations](docs/tutorials/understanding_evaluations.md) <br/>
-        - [Inspecting Individual Images](docs/tutorials/understanding_evaluations.md#inspecting-individual-images)
-- [Understanding Error Types](docs/tutorials/error_types.md)
-- [Comparing Models](docs/tutorials/comparing_models.md)
+Read More: [:material-book: Evaluation Report](../guides/evaluation/index.md#evaluation-report)

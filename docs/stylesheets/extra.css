@@ -1,0 +1,241 @@
+:root {
+    --catppuccin-rosewater: rgb(245, 224, 220);
+    --catppuccin-flamingo: rgb(242, 205, 205);
+    --catppuccin-pink: rgb(245, 194, 231);
+    --catppuccin-mauve: rgb(203, 166, 247);
+    --catppuccin-red: rgb(243, 139, 168);
+    --catppuccin-maroon: rgb(235, 160, 172);
+    --catppuccin-peach: rgb(250, 179, 135);
+    --catppuccin-yellow: rgb(249, 226, 175);
+    --catppuccin-green: rgb(166, 227, 161);
+    --catppuccin-teal: rgb(148, 226, 213);
+    --catppuccin-sky: rgb(137, 220, 235);
+    --catppuccin-sapphire: rgb(116, 199, 236);
+    --catppuccin-blue: rgb(137, 180, 250);
+    --catppuccin-lavender: rgb(180, 190, 254);
+    --catppuccin-text: rgb(205, 214, 244);
+    --catppuccin-text-light: rgb(215, 224, 254);
+    --catppuccin-text-lightest: rgb(255, 255, 255);
+    --catppuccin-subtext1: rgb(186, 194, 222);
+    --catppuccin-subtext0: rgb(166, 173, 200);
+    --catppuccin-overlay2: rgb(147, 153, 178);
+    --catppuccin-overlay1: rgb(127, 132, 156);
+    --catppuccin-overlay0: rgb(108, 112, 134);
+    --catppuccin-surface2: rgb(88, 91, 112);
+    --catppuccin-surface1: rgb(69, 71, 90);
+    --catppuccin-surface0: rgb(49, 50, 68);
+    --catppuccin-base: rgb(30, 30, 46);
+    --catppuccin-mantle: rgb(24, 24, 37);
+    --catppuccin-crust: rgb(17, 17, 27);
+    --bifrost-blue: rgb(64, 81, 181);
+    --bifrost-purple: rgb(198, 154, 255);
+    --bifrost-purple-light: rgb(183, 148, 255);
+    --bifrost-blue-light: rgb(155, 184, 255);
+    --bifrost-blue-dark: rgb(50, 57, 88);
+
+    --alchemy-dark-translucent: rgba(0, 0, 0, 0.2);
+
+    --riptide-blue: rgb(0, 179, 255);
+    --riptide-blue-light: rgb(0, 255, 217);
+    --riptide-error-tp: lime;
+    --riptide-error-fp: red;
+    --riptide-error-fn: red;
+    --riptide-error-bkg: magenta;
+    --riptide-error-cls: crimson;
+    --riptide-error-cll: orangered;
+    --riptide-error-loc: gold;
+    --riptide-error-dup: cyan;
+    --riptide-error-mis: yellowgreen;
+
+}
+
+[data-md-color-scheme="default"][data-md-color-primary=indigo] {
+    --md-primary-fg-color: var(--catppuccin-base);
+    --md-default-fg-color: var(--catppuccin-base);
+    --md-accent-fg-color: var(--bifrost-blue-light);
+}
+
+[data-md-color-scheme="slate"][data-md-color-primary=indigo] {
+    --md-default-bg-color: var(--catppuccin-base);
+    --md-default-fg-color: var(--catppuccin-text-lightest);
+    --md-primary-fg-color: var(--bifrost-blue-light);
+    --md-primary-bg-color: var(--catppuccin-text-lightest);
+    --md-accent-fg-color: var(--bifrost-blue-light);
+    --md-accent-bg-color: var(--catppuccin-text-lightest);
+    --md-code-fg-color: var(--catppuccin-text-lightest);
+    --md-code-bg-color: var(--catppuccin-surface0);
+}
+
+body {
+    letter-spacing: 0.03rem;
+}
+
+.md-source:hover {
+    opacity: 1;
+    color: var(--catppuccin-text-lightest);
+}
+
+.md-source__icon svg {
+    height: inherit;
+}
+
+.md-source__repository {
+    font-size: 0.8rem;
+}
+
+.md-typeset table:not([class]) {
+    font-size: 0.8rem;
+}
+
+.md-ellipsis {
+    font-size: 1.1rem;
+}
+.md-header,
+.md-tabs {
+    padding: 0.2rem 0;
+}
+
+[data-md-color-scheme="slate"]
+.md-header, .md-header__shadow
+.md-tabs,
+.md-footer {
+    background: var(--alchemy-dark-translucent);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+}
+
+[data-md-color-scheme="slate"]
+.md-tabs {
+    background: var(--alchemy-dark-translucent);
+}
+
+.md-footer {
+    background-color: var(--catppuccin-base);
+}
+
+.md-footer-meta {
+    background-color: var(--catppuccin-base);
+}
+
+.md-tabs__link {
+    font-size: 0.75rem;
+}
+
+.md-nav__item,
+.md-nav__title {
+    font-size: 0.75rem;
+}
+
+.md-nav__title {
+    color: var(--md-default-fg-color);
+}
+
+.md-nav--lifted>.md-nav__list>.md-nav__item>[for] {
+    color: var(--md-default-fg-color);
+}
+
+.md-nav__item--section>.md-nav__link[for] {
+    color: var(--md-default-fg-color);
+}
+
+.md-typeset .riptide, .gradient {
+    /* font-weight: 700; */
+    background: linear-gradient(45deg, var(--riptide-blue-light), var(--riptide-blue) 90%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.md-typeset h1 {
+    background: linear-gradient(5deg, var(--bifrost-blue-light), var(--bifrost-blue) 150%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2.5rem;
+}
+
+.md-typeset h1.subtitled {
+    margin: 0;
+}
+
+.md-typeset h2 {
+    font-weight: 500;
+}
+
+.md-typeset .twemoji {
+    vertical-align: middle;
+}
+
+/* Disable table hover color */
+.md-typeset table:not([class]) tbody tr:hover {
+    background-color: var(--md-default-bg-color);
+}
+
+img {
+    border-radius: 0.6rem;
+}
+
+img[src*="avatar"] {
+    vertical-align: middle;
+    border-radius: 50%;
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+}
+
+.img-center {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.md-typeset {
+    font-size: 0.85rem;
+}
+
+.md-typeset .admonition,
+.md-typeset details.abstract {
+    font-size: 0.75rem;
+    padding: 0 1rem 0.5rem 1rem;
+}
+
+.md-typeset .admonition-title {
+    margin: 0 -1rem 0.5rem;
+}
+
+
+#explore {
+    padding: 0;
+    height: 400px;
+}
+
+#explore-variance {
+    padding: 0;
+    height: 300px;
+}
+
+.explore-slider-container {
+    padding: 0.5em;
+    margin-bottom: 1em;
+}
+
+.explore-slider {
+    margin-left: 2em;
+}
+
+.explore-slider-tooltip {
+    font-size: 0.8em;
+    margin-left: 0.5em;
+    padding: 0 0.5em;
+    background: var(--md-code-bg-color);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+svg {
+    display: block;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100%;
+    height: 100%;
+}

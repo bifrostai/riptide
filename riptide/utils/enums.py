@@ -1,3 +1,13 @@
+"""Module for error weights and orders.
+
+Attributes
+----------
+ERROR_WEIGHTS : dict
+    A dictionary of error weights for each error type and metric.
+ERROR_ORDERS : dict
+    A dictionary of error orders for each error type and metric.
+"""
+
 from enum import Enum
 
 ERROR_WEIGHTS = {
@@ -70,6 +80,18 @@ ERROR_ORDERS = {
 
 
 class ErrorWeights(str, Enum):
+    """Enum for error weights by metric.
+
+    Attributes
+    ----------
+    PRECISION : "precision"
+        Precision metric.
+    RECALL : "recall"
+        Recall metric.
+    F1 : "f1"
+        F1 metric.
+    """
+
     PRECISION = "precision"
     RECALL = "recall"
     F1 = "f1"

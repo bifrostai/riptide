@@ -67,6 +67,36 @@ def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
 
 
 class Error:
+    """Base class for object detection errors
+
+    Parameters
+    ----------
+    evaluation : evaluation.Evaluation
+        The evaluation object that created this error
+    pred_idx : int
+        The index of the prediction
+    gt_idx : int
+        The index of the ground truth
+    pred_label : int
+        The predicted label
+    gt_label : int
+        The ground truth label
+    pred_bbox : torch.Tensor
+        The predicted bounding box
+    gt_bbox : torch.Tensor
+        The ground truth bounding box
+    confidence : float
+        The confidence of the prediction
+
+    Attributes
+    ----------
+    confusion : confusions.Confusion
+        The confusion type of the error
+    code : {'UN', 'CLS', 'LOC', 'CLL', 'DUP', 'BKG', 'MIS', 'TP'}
+        The error code
+
+    """
+
     confusion = Confusion.UNUSED
     code = "UN"
 
@@ -120,8 +150,18 @@ class Error:
 
 
 class ClassificationError(Error):
+    """Classification error
+
+    Parameters
+    ----------
+    conf_threshold : float
+        The confidence threshold for the prediction, by default 0.5
+    """
+
     confusion = Confusion.FALSE_POSITIVE
+    """The confusion type of the error"""
     code = "CLS"
+    """The error code"""
 
     def __init__(
         self,
@@ -151,8 +191,20 @@ class ClassificationError(Error):
 
 
 class LocalizationError(Error):
+    """Localization error
+
+    Parameters
+    ----------
+    iou_threshold : float
+        The IoU threshold for the prediction, by default 0.5
+    conf_threshold : float
+        The confidence threshold for the prediction, by default 0.5
+    """
+
     confusion = Confusion.FALSE_POSITIVE
+    """The confusion type of the error"""
     code = "LOC"
+    """The error code"""
 
     def __init__(
         self,
@@ -198,8 +250,20 @@ class LocalizationError(Error):
 
 
 class ClassificationAndLocalizationError(Error):
+    """Classification and localization error
+
+    Parameters
+    ----------
+    iou_threshold : float
+        The IoU threshold for the prediction, by default 0.5
+    conf_threshold : float
+        The confidence threshold for the prediction, by default 0.5
+    """
+
     confusion = Confusion.FALSE_POSITIVE
+    """The confusion type of the error"""
     code = "CLL"
+    """The error code"""
 
     def __init__(
         self,
@@ -245,8 +309,20 @@ class ClassificationAndLocalizationError(Error):
 
 
 class DuplicateError(Error):
+    """Duplicate error
+
+    Parameters
+    ----------
+    iou_threshold : float
+        The IoU threshold for the prediction, by default 0.5
+    conf_threshold : float
+        The confidence threshold for the prediction, by default 0.5
+    """
+
     confusion = Confusion.FALSE_POSITIVE
+    """The confusion type of the error"""
     code = "DUP"
+    """The error code"""
 
     def __init__(
         self,
@@ -327,8 +403,18 @@ class DuplicateError(Error):
 
 
 class BackgroundError(Error):
+    """Background error
+
+    Parameters
+    ----------
+    conf_threshold : float
+        The confidence threshold for the prediction, by default 0.5
+    """
+
     confusion = Confusion.FALSE_POSITIVE
+    """The confusion type of the error"""
     code = "BKG"
+    """The error code"""
 
     def __init__(
         self,
@@ -355,8 +441,12 @@ class BackgroundError(Error):
 
 
 class MissedError(Error):
+    """Missed error"""
+
     confusion = Confusion.FALSE_NEGATIVE
+    """The confusion type of the error"""
     code = "MIS"
+    """The error code"""
 
     def __init__(
         self,
@@ -380,8 +470,20 @@ class MissedError(Error):
 
 
 class NonError(Error):
+    """True Positive
+
+    Parameters
+    ----------
+    iou_threshold : float
+        The IoU threshold for the prediction, by default 0.5
+    conf_threshold : float
+        The confidence threshold for the prediction, by default 0.5
+    """
+
     confusion = Confusion.TRUE_POSITIVE
+    """The confusion type of the error"""
     code = "TP"
+    """The error code"""
 
     def __init__(
         self,
@@ -429,7 +531,19 @@ class NonError(Error):
 
 
 class Errors:
-    """Errors assigned to predictions or ground truths."""
+    """Errors assigned to predictions or ground truths.
+
+    Attributes
+    ----------
+    num_preds : int
+        The number of predictions
+    num_gts : int
+        The number of ground truths
+    pred_errors : List[Union[Error, None]]
+        The errors assigned to each prediction
+    gt_errors : List[Union[Error, None]]
+        The errors assigned to each ground truth
+    """
 
     def __init__(self, num_preds: int, num_gts: int) -> None:
         self.num_preds = num_preds

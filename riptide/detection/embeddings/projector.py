@@ -15,6 +15,24 @@ from riptide.utils.logging import logger
 
 
 class CropProjector:
+    """Projector for object crops.
+
+    Parameters
+    ----------
+    name : str
+        Name of the projector.
+    images : List[torch.Tensor]
+        List of images.
+    encoder_mode : {"preconv", "layer1", "layer2", "layer3", "layer4"}
+        Encoder mode.
+    normalize_embeddings : bool
+        Whether to normalize the embeddings.
+    labels : list, optional
+        List of labels, by default None
+    device : torch.device, optional
+        Device to use, by default torch.device("cpu")
+    """
+
     @logger("Initializing CropProjector", "Initialized CropProjector")
     def __init__(
         self,
@@ -133,7 +151,13 @@ class CropProjector:
 
         return self._clusterer
 
-    def cluster(self, **kwargs) -> torch.Tensor:
+    def cluster(
+        self,
+        eps: float = 0.3, 
+        min_samples: int = 2, 
+        mask: list[bool] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
         """Cluster embeddings. Provide a mask to perform clustering on a subset of embeddings.
 
         Parameters
@@ -152,7 +176,11 @@ class CropProjector:
         torch.Tensor
             Cluster labels
         """
-        return torch.tensor(self.get_clusterer(**kwargs).labels_)
+        return torch.tensor(
+            self.get_clusterer(
+                eps=eps, min_cluster_size=min_samples, mask=mask, **kwargs,
+            ).labels_
+        )
 
     def subcluster(
         self, *, sub_lambda: float = 0.8, n_noise: int = 2, **kwargs
