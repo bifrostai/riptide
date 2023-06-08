@@ -11,22 +11,12 @@ from riptide.utils.colors import ErrorColor
 class FlowVisualizer:
     """Visualize the change in status of ground truths between models
 
-    Arguments
+    Parameters
     ---------
     evaluators: List[Evaluator]
         List of evaluators to compare
     img_dir: str
         Path to directory containing images
-
-    Subclasses
-    ----------
-    FlowType(Enum)
-        Enum for visualization types
-
-    Methods
-    -------
-    visualize(title_text: str, ids: Tuple[int, int], display_type: FlowType = FlowType.SANKEY)
-        Visualize the status flow between two models
     """
 
     statuses = ["CLS", "LOC", "CLL", "DUP", "MIS", "TP", "FN"]

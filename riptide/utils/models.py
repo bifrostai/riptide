@@ -9,7 +9,19 @@ from riptide.detection.errors import Error
 
 
 class GTData(BaseModel):
-    """Data class for GT data"""
+    """Data class for GT data
+
+    Attributes
+    ----------
+        crops : List[torch.Tensor]
+            List of crops of the ground truth objects
+        gt_labels : torch.Tensor
+            List of labels of the ground truth objects
+        gt_errors : Dict[int, List[Error]]
+            Dictionary mapping ground truth ids to a list of errors
+        images : List[str]
+            List of image paths
+    """
 
     crops: List[torch.Tensor]
     gt_labels: torch.Tensor
@@ -21,7 +33,13 @@ class GTData(BaseModel):
 
     @classmethod
     def combine(cls, *gt_data: GTData) -> GTData:
-        """Combine multiple GTData objects into one"""
+        """Combine multiple GTData objects into one
+
+        Parameters
+        ----------
+        *gt_data : Tuple[GTData]
+            GTData objects to combine
+        """
         # assert that the length of all gt_data is the same
         assert (
             len(set([len(gt) for gt in gt_data])) == 1

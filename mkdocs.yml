@@ -1,0 +1,115 @@
+site_name: Riptide | Bifrost
+site_url: https://bifrost-core.github.io/riptide/
+site_description: Riptide Documentation
+site_author: Bifrost
+copyright: Copyright &copy; 2019-2023 <a href="https://bifrost.ai">Bifrost</a>
+theme:
+  name: material
+  custom_dir: docs/overrides
+  logo: assets/logo.png
+  favicon: assets/bifrost.ico
+  icon:
+    repo: material/open-in-new
+  font:
+    text: Titillium Web
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-5
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.expand
+    - navigation.footer
+    - content.code.copy
+nav:
+  - Quickstart:
+    - quickstart/index.md
+    - Guides:
+      - Error Types: guides/error_types.md
+      - Understanding Evaluations:
+        - guides/evaluation/index.md
+        - Perceptual Similarity: guides/evaluation/similarity.md
+      - Comparing Models: guides/comparing_models.md
+  - Versions:
+    - versions/changelog.md
+    - versions/roadmap.md
+  - API:
+    - Object Detection: api/object_detection.md
+    - Errors: api/errors.md
+    - Confusions: api/confusions.md
+    - Inspector: api/inspector.md
+    - Projector: api/embeddings/projector.md
+    - Flow: api/flow.md
+    - Utils:
+      - api/utils.md
+      - Loaders: api/io/loaders.md
+
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.arithmatex:
+        generic: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_toc_entry: false
+            docstring_style: numpy
+            members_order: source
+            show_signature: false
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+extra:
+  generator: false
+  social:
+    - icon: material/home
+      link: 'https://bifrost.ai'
+    - icon: material/gitlab
+      link: 'https://gitlab.com/bifrost-core'
+    - icon: material/github
+      link: 'https://github.com/bifrostai'
+    - icon: material/linkedin
+      link: 'https://www.linkedin.com/company/bifrost-ai'
+    - icon: material/twitter
+      link: 'https://twitter.com/bifrost_ai'
+extra_css:
+  - 'stylesheets/extra.css'
+  - 'stylesheets/examples.css'
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+watch:
+  - riptide/

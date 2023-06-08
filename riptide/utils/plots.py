@@ -258,7 +258,7 @@ def annotate_heatmap(
         Value in data units according to which the colors from textcolors are
         applied.  If None (the default) uses the middle of the colormap as
         separation.  Optional.
-    **kwargs
+    **textkw
         All other arguments are forwarded to each call to `text` used to create
         the text labels.
     """

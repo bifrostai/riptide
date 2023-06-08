@@ -1,0 +1,212 @@
+:root {
+    --image-size: 100px;
+}
+
+.example {
+    padding: 1em;
+    border-radius: 1em;
+    font-family: 'Lato', sans-serif;
+    font-size: 0.8em;
+    font-weight: 400;
+    margin: 0 auto;
+    background-color: #222222;
+    color: #FFEECC;
+    max-width: 80%;
+}
+
+.example h2:first-child {
+    margin-top: 0;
+}
+
+
+.tooltip::after {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    content: '🛈';
+    color: #7b949b;
+}
+
+.tooltip:hover::after {
+    color: #FFFFFF;
+}
+
+.tooltiptext {
+    --tooltip-width: 120px;
+    --tooltip-opacity: 0.95;
+    min-width: calc(var(--tooltip-width));
+    background-color: rgba(85, 85, 85, var(--tooltip-opacity));
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 0.5em;
+    position: absolute;
+    z-index: 1;
+    bottom: 150%;
+    left: 50%;
+    margin-left: calc(-0.5 * var(--tooltip-width));
+}
+
+.tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #555 transparent transparent transparent;
+}
+
+/* :has() only manually supported on firefox */
+*:has(> .tooltiptext) {
+    position: relative
+}
+
+*:not(:hover) .tooltiptext {
+    visibility: hidden;
+}
+
+.summary-container {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0.4vw;
+}
+
+.summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+    gap: 0.4vw;
+}
+
+.summary-item {
+    background-color: #2C3333;
+    border-radius: 0.4em;
+    padding: 1vh 1vh;
+}
+
+.summary-metric-title {
+    position: relative;
+}
+
+.summary-metric-value {
+    font-weight: 700;
+}
+
+.summary-bar {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+}
+
+.summary-bar-value {
+    padding-right: 0.5em;
+}
+
+.summary-bar-item {
+    --bar-width: 1;
+    --bar-weight: 1;
+    --bar-color: #00ffd9;
+
+    flex-grow: var(--bar-width);
+    background-color: var(--bar-color);
+    transition: all 0.3s ease-in-out;
+}
+
+.summary-bar-item > .label {
+    vertical-align: middle;
+    padding-left: 0.2em;
+    font-size: small;
+    color: #111111;
+}
+
+.summary-bar-item .tooltiptext {
+    --tooltip-width: 60px;
+    --tooltip-opacity: 0.8;
+    font-size: small;
+}
+
+.summary-bar-item.first {
+    border-radius: 8px 0 0 8px;
+}
+
+.summary-bar-item.last {
+    border-radius: 0 8px 8px 0;
+}
+
+.summary-item:hover .summary-bar-item {
+    flex-grow: calc(var(--bar-weight) * var(--bar-width));
+}
+
+.example .break {
+    flex-basis: 100%;
+}
+
+.badge {
+    --badge-color: #2c2c2c;
+    --badge-outline: #2c2c2c;
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 2.5vh;
+    min-height: 2.5vh;
+    border-radius: 0.6rem;
+    background-color: var(--badge-color);
+    outline: solid 0.3em var(--badge-outline);
+    outline-offset: -0.05em;
+    font-size: 1.5vh;
+    color: #FFEECC;
+    text-align: center;
+    line-height: 2.5vh;
+    z-index: 3;
+}
+
+.infobox {
+    --info-gradient-left: #395B64;
+    --info-gradient-right: #395B64;
+    background: var(--info-gradient-right);
+    background: -moz-linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    background: -webkit-linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    background: linear-gradient(45deg, var(--info-gradient-left) 10%, var(--info-gradient-right) 90%);
+    border-radius: 0.4em;
+}
+
+.class-image-container {
+    display: inline-flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+}
+
+.class-image-container.row {
+    align-content: flex-start;
+}
+
+.class-image-container.bg {
+    padding: 0.5em 0.2em;
+    background-color: #395B64;
+    border-radius: 0.6em;
+    justify-content: space-between;
+}
+
+.class-image-wrapper {
+    width: var(--image-size);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.class-image {
+    width: var(--image-size);
+    height: var(--image-size);
+    border-radius: 1em;
+    padding: 0.4vh;
+    z-index: 2;
+}
+
+.data-tooltip {
+    text-align: center;
+    word-wrap: break-word;
+    z-index: 2;
+}

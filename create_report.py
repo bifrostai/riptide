@@ -1,7 +1,7 @@
 import argparse
 
+from riptide import HtmlReport
 from riptide.detection.evaluation import ObjectDetectionEvaluator
-from riptide.reports import HtmlReport
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

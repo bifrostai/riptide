@@ -1,1 +1,1 @@
-from .reports import HtmlReport
+from .report.reports import HtmlReport

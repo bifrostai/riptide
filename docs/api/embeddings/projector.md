@@ -1,0 +1,1 @@
+::: riptide.detection.embeddings.projector
