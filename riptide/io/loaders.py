@@ -111,6 +111,7 @@ class COCOLoader:
             j = json.load(f)
             target_annotations = pd.DataFrame(j["annotations"])
             target_images = pd.DataFrame(j["images"])
+            target_images.rename(columns={"id": "image_id"}, inplace=True)
             categories = pd.DataFrame(j["categories"])
             categories.index = categories["id"]
             categories = categories.drop(columns=["id"]).to_dict(orient="index")
@@ -119,15 +120,14 @@ class COCOLoader:
             j = json.load(f)
             prediction_annotations = pd.DataFrame(j["annotations"])
             prediction_images = pd.DataFrame(j["images"])
+            prediction_images.rename(columns={"id": "image_id"}, inplace=True)
 
-        target_annotations["file_name"] = target_annotations["image_id"].apply(
-            lambda x: target_images[target_images["id"] == x]["file_name"].values[0]
+        target_annotations = target_annotations.merge(
+            target_images, on="image_id", how="left"
         )
 
-        prediction_annotations["file_name"] = prediction_annotations["image_id"].apply(
-            lambda x: prediction_images[prediction_images["id"] == x][
-                "file_name"
-            ].values[0]
+        prediction_annotations = prediction_annotations.merge(
+            prediction_images, on="image_id", how="left"
         )
 
         results_dict = {}
