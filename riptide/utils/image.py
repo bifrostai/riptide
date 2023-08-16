@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import torch
 from matplotlib.figure import Figure
 from PIL import Image
+from torchvision.io import ImageReadMode
 from torchvision.io import read_image as read_image_torch
 from torchvision.transforms.functional import crop, resize
 from torchvision.utils import draw_bounding_boxes
@@ -196,7 +197,7 @@ def read_image(
         Image
     """
     try:
-        image = read_image_torch(image_path)
+        image = read_image_torch(image_path, ImageReadMode.RGB)
     except:
         image = blank_image(width, height)
     return image
