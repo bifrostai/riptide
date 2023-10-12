@@ -1,5 +1,6 @@
 import base64
 import io
+import os
 from typing import Any, List, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -196,8 +197,9 @@ def read_image(
     Image.Image
         Image
     """
-    try:
-        image = read_image_torch(image_path, ImageReadMode.RGB)
-    except:
-        image = blank_image(width, height)
+    if not os.path.exists(image_path):
+        raise Exception(f"Image path {image_path} does not exist.")
+
+    image = read_image_torch(image_path, ImageReadMode.RGB)
+
     return image
