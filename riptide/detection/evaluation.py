@@ -28,6 +28,7 @@ from riptide.utils.colors import ErrorColor
 from riptide.utils.image import read_image
 from riptide.utils.logging import logger
 from riptide.utils.models import GTData
+from riptide.utils.obb import obb_iou
 
 ERROR_TYPES: List[Error] = [
     BackgroundError,
@@ -276,6 +277,7 @@ class ObjectDetectionEvaluation(Evaluation):
         bg_iou_threshold: float = 0.1,
         fg_iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
+        obb: bool = False,
     ) -> None:
         super().__init__(
             image_path,
@@ -290,7 +292,10 @@ class ObjectDetectionEvaluation(Evaluation):
         self.pred_bboxes = pred_bboxes
         self.gt_bboxes = gt_bboxes
 
-        self.ious = box_iou(pred_bboxes, gt_bboxes)
+        if not obb:
+            self.ious = box_iou(pred_bboxes, gt_bboxes)
+        else:
+            self.ious = obb_iou(pred_bboxes, gt_bboxes)
 
         self._pred_errors = None
         self._gt_errors = None
@@ -944,6 +949,7 @@ class Evaluator:
         image_dir: str,
         conf_threshold: float = 0.5,
         name: str = "Model",
+        obb: bool = False,
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -955,7 +961,7 @@ class Evaluator:
             predictions_file=predictions_file,
             image_dir=image_dir,
         )
-        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name, obb=obb)
 
     @classmethod
     def from_dict(
@@ -1269,6 +1275,13 @@ class ObjectDetectionEvaluator(Evaluator):
             error for error_list in errors for error in error_list if is_type(error)
         ]
 
+        if bboxes[0].size(1) == 8: # OBB
+            stacked = torch.cat(bboxes, dim=0)
+            corners = stacked.view(-1, 4, 2)
+            min_xy = torch.min(corners, dim=1).values
+            max_xy = torch.max(corners, dim=1).values
+            bboxes = [torch.cat([min_xy[i], max_xy[i]]).unsqueeze(0) for i in range(len(min_xy))]
+
         combined_bboxes = torch.concat(bboxes, dim=0).long()
         combined_bboxes[:, 2:] = (
             combined_bboxes[:, 2:] - combined_bboxes[:, :2] + 2 * pad
@@ -1311,10 +1324,15 @@ class ObjectDetectionEvaluator(Evaluator):
             image = read_image(evaluation.image_path)
             bboxes = evaluation.gt_bboxes.long().clone()
             gt_labels.append(evaluation.gt_labels)
+            if bboxes.size(1) == 8: # OBB
+                corners = bboxes.view(-1, 4, 2)
+                min_xy = torch.min(corners, dim=1).values
+                max_xy = torch.max(corners, dim=1).values
+                bboxes = torch.cat([min_xy, max_xy], dim=1)
             bboxes[:, 2:] = (
-                evaluation.gt_bboxes[:, 2:] - evaluation.gt_bboxes[:, :2] + 2 * pad
+                bboxes[:, 2:] - bboxes[:, :2] + 2 * pad
             )
-            bboxes[:, :2] = evaluation.gt_bboxes[:, :2] - pad
+            bboxes[:, :2] = bboxes[:, :2] - pad
             for bbox in bboxes:
                 crops.append(crop(image, bbox[1], bbox[0], bbox[3], bbox[2]))
                 images.append(evaluation.image_path)

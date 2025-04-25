@@ -6,9 +6,10 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import torch
 from matplotlib.figure import Figure
-from PIL import Image
+from PIL import Image, ImageDraw
+from shapely.geometry import Polygon
 from torchvision.io import read_image as read_image_torch
-from torchvision.transforms.functional import crop, resize
+from torchvision.transforms.functional import crop, resize, to_pil_image, to_tensor
 from torchvision.utils import draw_bounding_boxes
 
 PREVIEW_PADDING = 48
@@ -42,18 +43,35 @@ def crop_preview(
         Cropped image tensor
     """
     bboxes = bboxes.long()
+    if bboxes.size(1) == 8: # OBB
+        corners = bboxes.view(-1, 4, 2)
+        min_xy = torch.min(corners, dim=1).values
+        max_xy = torch.max(corners, dim=1).values
+        xyxy = torch.cat([min_xy, max_xy], dim=1)
+    else:
+        xyxy = bboxes
 
-    crop_box = get_padded_bbox_crop(bboxes, padding=preview_padding)
+    crop_box = get_padded_bbox_crop(xyxy, padding=preview_padding)
     x1, y1, x2, y2 = crop_box.tolist()
     cropped = crop(image_tensor, y1, x1, y2 - y1, x2 - x1)
 
     if colors is not None:
-        bboxes = bboxes - crop_box[:2].repeat(2)
-        bboxes = torch.div(bboxes * preview_size, x2 - x1, rounding_mode="floor")
-        cropped = resize(cropped, (preview_size, preview_size))
-        cropped = draw_bounding_boxes(cropped, bboxes, colors=colors, width=2)
+        boxes_in_crop = xyxy - crop_box[:2].repeat(2)
+        scaled_boxes = torch.div(boxes_in_crop * preview_size, x2 - x1, rounding_mode="floor")
+        resized_crop = resize(cropped, [preview_size, preview_size])
+        if bboxes.size(1) == 8: # OBB
+            pil_img = to_pil_image(resized_crop).copy()
+            scaled_obb = torch.div((corners - crop_box[:2]) * preview_size, x2 - x1, rounding_mode="floor")
+            draw = ImageDraw.Draw(pil_img)
+            for poly, color in zip(scaled_obb.int(), colors):
+                pts = poly.flatten().tolist()
+                draw.polygon(pts, outline=color, width=2)
+            preview = to_tensor(pil_img)
+            # preview = draw_bounding_boxes(resized_crop, scaled_boxes, colors=colors, width=2)
+        else:
+            preview = draw_bounding_boxes(resized_crop, scaled_boxes, colors=colors, width=2)
 
-    return cropped
+    return preview
 
 
 def convex_hull(
@@ -74,6 +92,11 @@ def convex_hull(
         Convex hull and indices of bounding boxes that make up the convex hull
     """
     bboxes = bboxes.long().clone()
+    if bboxes.size(1) == 8: # OBB
+        corners = bboxes.view(-1, 4, 2)
+        min_xy = torch.min(corners, dim=1).values
+        max_xy = torch.max(corners, dim=1).values
+        bboxes = torch.cat([min_xy, max_xy], dim=1)
     if format == "xywh":
         bboxes[:, 2:] = bboxes[:, :2] + bboxes[:, 2:]
     t_max: torch.Tensor = torch.max(bboxes, dim=0)
@@ -139,9 +162,18 @@ def get_bbox_stats(bbox: torch.Tensor) -> Tuple[int, int, int]:
     Tuple[int, int, int]
         Width, height, and area of bounding box
     """
-    area = round(((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).item(), 2)
-    width = int((bbox[2] - bbox[0]).item())
-    height = int((bbox[3] - bbox[1]).item())
+    if bbox.size(0) == 8: # OBB
+        ys = bbox[1::2]
+        height = (max(ys) - min(ys)).item()
+        xs = bbox[0::2]
+        width = (max(xs) - min(xs)).item()
+        coords = [(bbox[idx].item(), bbox[idx+1].item()) for idx in range(0, 8 , 2)]
+        poly = Polygon(coords)
+        area = poly.area
+    else:
+        area = round(((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).item(), 2)
+        width = int((bbox[2] - bbox[0]).item())
+        height = int((bbox[3] - bbox[1]).item())
     return width, height, area
 
 

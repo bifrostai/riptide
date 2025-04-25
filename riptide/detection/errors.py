@@ -4,6 +4,7 @@ import torch
 from torchvision.ops.boxes import box_iou
 
 from riptide.detection.confusions import Confusion
+from riptide.utils.obb import obb_iou
 
 ################################################################################################
 # Error types as defined in TIDE (https://arxiv.org/pdf/2008.08115.pdf).
@@ -63,7 +64,10 @@ def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
         pred_bbox = pred_bbox.unsqueeze(0)
     if len(gt_bbox.size()) == 1:
         gt_bbox = gt_bbox.unsqueeze(0)
-    return box_iou(pred_bbox, gt_bbox).item()
+    if pred_bbox.size(1) == 4:
+        return box_iou(pred_bbox, gt_bbox).item()
+    else:
+        return obb_iou(pred_bbox, gt_bbox).item()
 
 
 class Error:
@@ -372,9 +376,14 @@ class MissedError(Error):
 
     def crowd_ids(self, threshold=0.4) -> torch.Tensor:
         """Get the indices of neighbouring ground truths that overlap with the ground truth associated with this error."""
-        crowd_iou = box_iou(
-            self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
-        ).squeeze(1)
+        if self._evaluation.gt_bboxes.size(1) == 8: # OBB
+            crowd_iou = obb_iou(
+                self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
+            ).squeeze(1)
+        else:
+            crowd_iou = box_iou(
+                self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
+            ).squeeze(1)
         crowd_iou[self.gt_idx] = 0
         return torch.nonzero(crowd_iou > threshold).squeeze(1)
 

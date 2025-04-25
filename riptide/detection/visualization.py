@@ -92,6 +92,14 @@ def missed_groups(
                     groups[i]["crowded"].append(error)
                     count += 1
                 bbox = error.gt_bbox.long()
+                if bbox.size(0) == 8: # OBB
+                    xs = bbox[0::2]
+                    ys = bbox[1::2]
+                    min_x = torch.min(xs)
+                    max_x = torch.max(xs)
+                    min_y = torch.min(ys)
+                    max_y = torch.max(ys)
+                    bbox = torch.tensor([min_x, min_y, max_x, max_y])
                 image_crop: torch.Tensor = crop(
                     image_tensor, bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]
                 )

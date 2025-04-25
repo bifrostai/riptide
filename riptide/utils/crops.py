@@ -18,6 +18,7 @@ from riptide.detection.errors import (
 )
 from riptide.utils.colors import ErrorColor
 from riptide.utils.image import crop_preview, encode_base64, get_bbox_stats
+from riptide.utils.obb import obb_iou
 
 
 def get_bbox_by_attr(error: Error, bbox_attr: str) -> torch.Tensor:
@@ -269,14 +270,22 @@ def generate_fig(
         encoded_crop = None
 
     confidence = round(error.confidence, 2) if error.confidence is not None else None
-    iou = (
-        round(
-            box_iou(error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)).item(),
-            3,
+    if error.pred_bbox is None or error.gt_bbox is None:
+        iou = None
+    elif error.pred_bbox.size(0) == 8: # OBB
+        iou = (
+            round(
+                obb_iou(error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)).item(),
+                3,
+            )
         )
-        if error.pred_bbox is not None and error.gt_bbox is not None
-        else None
-    )
+    else:
+        iou = (
+            round(
+                box_iou(error.pred_bbox.unsqueeze(0), error.gt_bbox.unsqueeze(0)).item(),
+                3,
+            )
+        )
 
     unique_key, tail = get_unique_key(cluster, error)
 
