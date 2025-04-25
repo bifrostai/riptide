@@ -97,7 +97,7 @@ def boxplot(
                 pos,
                 part_area,
                 color=[
-                    gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(part_area))
+                    gradient(PALETTE_BLUE, PALETTE_GREEN, a / max(max(part_area),1))
                     for a in part_area
                 ],
                 edgecolors="none",

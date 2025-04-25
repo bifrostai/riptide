@@ -376,9 +376,14 @@ class MissedError(Error):
 
     def crowd_ids(self, threshold=0.4) -> torch.Tensor:
         """Get the indices of neighbouring ground truths that overlap with the ground truth associated with this error."""
-        crowd_iou = box_iou(
-            self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
-        ).squeeze(1)
+        if self._evaluation.gt_bboxes.size(1) == 8: # OBB
+            crowd_iou = obb_iou(
+                self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
+            ).squeeze(1)
+        else:
+            crowd_iou = box_iou(
+                self._evaluation.gt_bboxes, self.gt_bbox.unsqueeze(0)
+            ).squeeze(1)
         crowd_iou[self.gt_idx] = 0
         return torch.nonzero(crowd_iou > threshold).squeeze(1)
 
