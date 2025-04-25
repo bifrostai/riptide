@@ -28,6 +28,7 @@ from riptide.utils.colors import ErrorColor
 from riptide.utils.image import read_image
 from riptide.utils.logging import logger
 from riptide.utils.models import GTData
+from riptide.utils.obb import obb_iou
 
 ERROR_TYPES: List[Error] = [
     BackgroundError,
@@ -276,6 +277,7 @@ class ObjectDetectionEvaluation(Evaluation):
         bg_iou_threshold: float = 0.1,
         fg_iou_threshold: float = 0.5,
         conf_threshold: float = 0.5,
+        obb: bool = False,
     ) -> None:
         super().__init__(
             image_path,
@@ -290,7 +292,10 @@ class ObjectDetectionEvaluation(Evaluation):
         self.pred_bboxes = pred_bboxes
         self.gt_bboxes = gt_bboxes
 
-        self.ious = box_iou(pred_bboxes, gt_bboxes)
+        if not obb:
+            self.ious = box_iou(pred_bboxes, gt_bboxes)
+        else:
+            self.ious = obb_iou(pred_bboxes, gt_bboxes)
 
         self._pred_errors = None
         self._gt_errors = None
@@ -944,6 +949,7 @@ class Evaluator:
         image_dir: str,
         conf_threshold: float = 0.5,
         name: str = "Model",
+        obb: bool = False,
     ) -> Evaluator:
         if cls == ObjectDetectionEvaluator:
             evaluation_cls = ObjectDetectionEvaluation
@@ -955,7 +961,7 @@ class Evaluator:
             predictions_file=predictions_file,
             image_dir=image_dir,
         )
-        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name)
+        return loader.load(evaluation_cls, evaluator_cls, conf_threshold, name=name, obb=obb)
 
     @classmethod
     def from_dict(

@@ -105,6 +105,7 @@ class COCOLoader:
         evaluation_cls: Type,
         evaluator_cls: Type,
         conf_threshold: float = 0.5,
+        obb: bool = False,
         **kwargs
     ):
         with open(self.annotations_file, "r") as f:
@@ -162,16 +163,24 @@ class COCOLoader:
             coco_ids = torch.tensor(pred_gt_dict["targets"]["ids"])
             gt_ids_map.append(coco_ids)
             gt_bboxes = torch.tensor(pred_gt_dict["targets"]["boxes"])
-            if len(gt_bboxes) == 0:
-                gt_bboxes = torch.empty((0, 4))
-            gt_bboxes[:, 2:] = gt_bboxes[:, :2] + gt_bboxes[:, 2:]
+            if not obb:
+                if len(gt_bboxes) == 0:
+                    gt_bboxes = torch.empty((0, 4))
+                gt_bboxes[:, 2:] = gt_bboxes[:, :2] + gt_bboxes[:, 2:]
+            else:
+                if len(gt_bboxes) == 0:
+                    gt_bboxes = torch.empty((0, 8))
 
             gt_labels = torch.tensor(pred_gt_dict["targets"]["labels"])
 
             pred_bboxes = torch.tensor(pred_gt_dict["predictions"]["boxes"])
-            if len(pred_bboxes) == 0:
-                pred_bboxes = torch.empty((0, 4))
-            pred_bboxes[:, 2:] = pred_bboxes[:, :2] + pred_bboxes[:, 2:]
+            if not obb:
+                if len(pred_bboxes) == 0:
+                    pred_bboxes = torch.empty((0, 4))
+                pred_bboxes[:, 2:] = pred_bboxes[:, :2] + pred_bboxes[:, 2:]
+            else:
+                if len(pred_bboxes) == 0:
+                    pred_bboxes = torch.empty((0, 8))
 
             pred_scores = torch.tensor(pred_gt_dict["predictions"]["scores"])
             pred_labels = torch.tensor(pred_gt_dict["predictions"]["labels"])
@@ -184,6 +193,7 @@ class COCOLoader:
                 gt_labels=gt_labels,
                 gt_offset=start,
                 conf_threshold=conf_threshold,
+                obb=obb,
             )
             evaluations.append(evaluation)
             start += len(gt_labels)

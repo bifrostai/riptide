@@ -4,6 +4,7 @@ import torch
 from torchvision.ops.boxes import box_iou
 
 from riptide.detection.confusions import Confusion
+from riptide.utils.obb import obb_iou
 
 ################################################################################################
 # Error types as defined in TIDE (https://arxiv.org/pdf/2008.08115.pdf).
@@ -63,7 +64,10 @@ def jaccard_overlap(pred_bbox: torch.Tensor, gt_bbox: torch.Tensor) -> float:
         pred_bbox = pred_bbox.unsqueeze(0)
     if len(gt_bbox.size()) == 1:
         gt_bbox = gt_bbox.unsqueeze(0)
-    return box_iou(pred_bbox, gt_bbox).item()
+    if pred_bbox.size(1) == 4:
+        return box_iou(pred_bbox, gt_bbox).item()
+    else:
+        return obb_iou(pred_bbox, gt_bbox).item()
 
 
 class Error:
