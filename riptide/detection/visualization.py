@@ -92,7 +92,7 @@ def missed_groups(
                     groups[i]["crowded"].append(error)
                     count += 1
                 bbox = error.gt_bbox.long()
-                if bbox.size(0) == 8: # OBB
+                if bbox.size(0) == 8:  # OBB
                     xs = bbox[0::2]
                     ys = bbox[1::2]
                     min_x = torch.min(xs)
@@ -267,10 +267,12 @@ class Inspector:
                 fn *= fn_weight
 
                 weighted_errors = {
-                    error_name: summary.get(error_name, 0)
-                    * weights.get(error_name, fp_weight)
-                    if error_name != "MissedError"
-                    else summary.get(error_name, 0) * weights.get(error_name, fn_weight)
+                    error_name: (
+                        summary.get(error_name, 0) * weights.get(error_name, fp_weight)
+                        if error_name != "MissedError"
+                        else summary.get(error_name, 0)
+                        * weights.get(error_name, fn_weight)
+                    )
                     for error_name in ALL_ERRORS
                 }
 
@@ -321,7 +323,7 @@ class Inspector:
 
         code_mapping = {
             "TP": "True Positives",
-            "FN": "False Negatives",
+            "FN": "Other False Negatives (Localization + Classification + Both)",
             "FP": "False Positives",
             "BKG": "Background",
             "CLS": "Classification",
@@ -453,7 +455,7 @@ class Inspector:
                     code_mapping[code],
                     diffs.get(code),
                 )
-                for code in ["TP", "MIS", "FN"]
+                for code in ["TP", "FN", "MIS"]
             ]
 
             pred_bar = [
@@ -463,7 +465,7 @@ class Inspector:
                     code_mapping[code],
                     diffs.get(code),
                 )
-                for code in ["TP", "BKG", "CLS", "CLL", "LOC", "DUP", "FP"]
+                for code in ["TP", "BKG", "CLS", "CLL", "LOC", "DUP"]
             ]
             content[1][i] = (
                 evaluator.name,
@@ -557,9 +559,11 @@ class Inspector:
         }
 
         confidence_hists = {
-            error_name: self._confidence_hist(confidence_list, error_name)
-            if confidence_list
-            else None
+            error_name: (
+                self._confidence_hist(confidence_list, error_name)
+                if confidence_list
+                else None
+            )
             for error_name, confidence_list in confidence_lists.items()
         }
 
@@ -986,9 +990,9 @@ class Inspector:
         if not_empty("MIS"):
             mis_contents: Dict[int, List[Tuple[int, str]]] = {}
             for content in results.get("MIS").contents[1:]:
-                class_errors: Dict[
-                    int, Tuple[str, Dict[int, List[List[dict]]]]
-                ] = content.content
+                class_errors: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = (
+                    content.content
+                )
                 for class_idx, (class_info, clusters_dict) in class_errors.items():
                     if class_idx not in mis_contents:
                         mis_contents[class_idx] = []
@@ -1419,7 +1423,11 @@ class Inspector:
 
         get_crop_options(ClassificationAndLocalizationError, kwargs)
 
-        cll_classwise_dict, _ = self.error_classwise_dict(**kwargs)
+        res = self.error_classwise_dict(**kwargs)
+        if isinstance(res, dict):
+            cll_classwise_dict = res
+        else:
+            cll_classwise_dict, _ = res
         fig = self.error_classwise_ranking(
             [ClassificationError, ClassificationAndLocalizationError]
         )
@@ -2025,9 +2033,9 @@ class Inspector:
                 if class_idx not in section_contents[i]["contents"]:
                     section_contents[i]["contents"][class_idx] = {}
 
-                contents: Dict[
-                    int, Tuple[str, Dict[int, List[List[dict]]]]
-                ] = section_contents[i]["contents"][class_idx]
+                contents: Dict[int, Tuple[str, Dict[int, List[List[dict]]]]] = (
+                    section_contents[i]["contents"][class_idx]
+                )
 
                 if cluster not in contents:
                     contents[cluster] = (f"Cluster {cluster[0]}", {})

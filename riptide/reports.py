@@ -1,5 +1,7 @@
+from io import BytesIO
 import logging
 import os
+import requests
 from typing import Dict, List
 
 from jinja2 import Environment, FileSystemLoader
@@ -71,7 +73,7 @@ class HtmlReport:
 
     def render(
         self,
-        output_dir: str,
+        output_dir: str | None = None,
         fname: str = "report.html",
         template: str = "evaluation.html",
         *,
@@ -108,11 +110,29 @@ class HtmlReport:
             missed_size_var=missed_size_var,
             missed_aspect_var=missed_aspect_var,
         )
-        os.makedirs(output_dir, exist_ok=True)
-        fout = os.path.join(output_dir, fname)
-        with open(fout, "w") as f:
-            f.writelines(output)
-        logging.info(f"Rendered output to {fout}")
+
+        if output_dir is None:
+            file_stream = BytesIO(output.encode("utf-8"))
+            files = {"file": (fname, file_stream, "text/plain")}
+            instance_url = os.environ.get("BIFROST_INSTANCE_URL")
+            upload_key = os.environ.get("RIPTIDE_UPLOAD_KEY")
+            url = f"https://riptide.{instance_url}/api/upload/{upload_key}"
+            response = requests.post(
+                url,
+                files=files,
+            )
+            if response.status_code != 200:
+                raise Exception(
+                    f"Failed to upload report to {url}: {response.status_code} {response.text}"
+                )
+            logging.info(f"Uploaded report to {response.json().get('url')}")
+
+        else:
+            os.makedirs(output_dir, exist_ok=True)
+            fout = os.path.join(output_dir, fname)
+            with open(fout, "w") as f:
+                f.writelines(output)
+            logging.info(f"Rendered output to {fout}")
 
     def compare(
         self,

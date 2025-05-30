@@ -20,9 +20,9 @@ ERROR_COLORS = {
         "rgb": (255, 215, 0),
     },
     "CLL": {
-        "name": "orangered",
-        "hex": "#FF4500",
-        "rgb": (255, 69, 0),
+        "name": "coral",
+        "hex": "#FF7F50",
+        "rgb": (255, 127, 80),
     },
     "DUP": {
         "name": "cyan",
@@ -30,9 +30,9 @@ ERROR_COLORS = {
         "rgb": (0, 255, 255),
     },
     "MIS": {
-        "name": "yellowgreen",
-        "hex": "#9ACD32",
-        "rgb": (154, 205, 50),
+        "name": "red",
+        "hex": "#FF0000",
+        "rgb": (255, 0, 0),
     },
     "TP": {
         "name": "lime",
@@ -45,14 +45,14 @@ ERROR_COLORS = {
         "rgb": (0, 0, 255),
     },
     "FN": {
-        "name": "red",
-        "hex": "#FF0000",
-        "rgb": (255, 0, 0),
+        "name": "orangered",
+        "hex": "#FF4500",
+        "rgb": (255, 69, 0),
     },
     "FP": {
-        "name": "red",
-        "hex": "#FF0000",
-        "rgb": (255, 0, 0),
+        "name": "darkmagenta",
+        "hex": "#8B008B",
+        "rgb": (139, 0, 139),
     },
     "default": {
         "name": "white",
