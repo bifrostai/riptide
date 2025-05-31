@@ -20,7 +20,7 @@ Evaluation tooling for object detection models.
     pip install hdbscan
     ```
 
-3. Finally set the Bifrost environment variables in `.env`:
+3. Finally set the Bifrost environment variables in `.env` (rename `sample.env` -> `.env`):
     ```
     BIFROST_INSTANCE_URL = "xxx.app.bifrost.ai"
     RIPTIDE_UPLOAD_KEY = "abcdwxyz"
