@@ -105,8 +105,8 @@ class CropProjector:
     def get_clusterer(
         self,
         *,
-        eps: float = 0.3,
-        min_cluster_size: int = 2,
+        eps: float = 0.25,
+        min_cluster_size: int = 5,
         mask: List[bool] = None,
         **kwargs,
     ) -> HDBSCAN:

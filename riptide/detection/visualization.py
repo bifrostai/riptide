@@ -196,7 +196,7 @@ class Inspector:
         self.projector = CropProjector(
             name=f"Crops",
             images=self.gt_data.crops + bkg_crops + self.gt_data.crops,
-            encoder_mode="preconv",
+            encoder_mode="layer1",
             normalize_embeddings=True,
             labels=actual_labels + bkg_labels + repeat_labels,
             device=torch.device("cpu"),
