@@ -1803,8 +1803,6 @@ class Inspector:
 
         evaluator_id = kwargs.get("evaluator_id", 0)
 
-        self.recalculate_summaries([evaluator_id], weights=weights)
-
         results["overview"] = self.summary([evaluator_id])
         infoboxes = self.get_suggestions(results)
         results["overview"].contents.append(infoboxes)

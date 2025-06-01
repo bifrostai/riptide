@@ -32,7 +32,7 @@ def get_both_bboxes(error: Error, bbox_attr: str):
 
 
 def add_metadata(metadata: dict, error: Error) -> dict:
-    metadata["caption"] += f" | Sub { metadata['cluster'][1] }"
+    # metadata["caption"] += f" | Sub { metadata['cluster'][1] }"
     return metadata
 
 
