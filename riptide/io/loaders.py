@@ -54,13 +54,13 @@ class DictLoader:
     ):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if self.targets_dict_file is None and self.predictions_dict_file is None:
-            results_dict = torch.load(self.dict_file, map_location=device)
+            results_dict = torch.load(self.dict_file, map_location=device, weights_only=False)
             targets_dict = results_dict["targets"]
             predictions_dict = results_dict["predictions"]
         else:
-            targets_dict = torch.load(self.targets_dict_file, map_location=device)
+            targets_dict = torch.load(self.targets_dict_file, map_location=device, weights_only=False)
             predictions_dict = torch.load(
-                self.predictions_dict_file, map_location=device
+                self.predictions_dict_file, map_location=device, weights_only=False,
             )
         evaluations = []
         start = 0
