@@ -14,8 +14,6 @@ dependencies = [
     "pydantic>=2.12.0",
     "scikit-learn>=1.7.2",
     "termcolor>=3.1.0",
-    "torch>=2.7.1",
-    "torchvision==0.22.1",
     "tqdm>=4.67.1",
     "ujson>=5.11.0",
 ]
@@ -23,15 +21,47 @@ dependencies = [
 [tool.setuptools]
 packages = ["riptide"]
 
+# This Torch install pattern comes from
+# https://docs.astral.sh/uv/guides/integration/pytorch/#configuring-accelerators-with-optional-dependencies
+[project.optional-dependencies]
+cpu = [
+    "torch>=2.7.1",
+    "torchvision==0.22.1",
+]
+cu126 = [
+    "torch>=2.7.1",
+    "torchvision==0.22.1",
+]
+cu128 = [
+    "torch>=2.7.0",
+    "torchvision==0.22.1",
+]
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cu126" },
+    { extra = "cu128" },
+  ],
+]
+
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu", marker = "platform_system == 'Darwin'" },
-    { index = "pytorch-cu126", marker = "platform_system != 'Darwin'" },
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
 ]
 torchvision = [
-    { index = "pytorch-cpu", marker = "platform_system == 'Darwin'" },
-    { index = "pytorch-cu126", marker = "platform_system != 'Darwin'" },
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu126"
@@ -39,10 +69,9 @@ url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
-
 
 #[dependency-groups]
 #dev = [
