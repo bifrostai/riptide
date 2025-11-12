@@ -222,6 +222,107 @@ class Evaluation:
 
         return statuses
 
+    def get_gt_status_v2(self) -> Dict[int, Status]:
+        """Returns the statuses for the ground truths with detailed error classification.
+
+        This is an enhanced version of ``get_gt_status()`` that provides more granular
+        error information for false negative ground truths. Instead of returning a generic
+        FN (False Negative) confusion state, this method looks up the specific prediction
+        error type that caused the false negative.
+
+        Differences from ``get_gt_status()``:
+            - **MIS (MissedError)**: No change - GT with no matching predictions
+            - **TP (True Positive)**: No change - GT correctly detected
+            - **FN (False Negative)**: Changed - Now returns the specific error type:
+                - **CLS (ClassificationError)**: GT matched by prediction with correct
+                  localization but wrong class
+                - **LOC (LocalizationError)**: GT matched by prediction with correct
+                  class but poor IoU
+                - **CLL (ClassificationAndLocalizationError)**: GT matched by prediction
+                  with wrong class and poor IoU
+
+        The v2 method populates additional Status fields for FN cases:
+            - ``pred_label``: The predicted class (instead of None)
+            - ``score``: The prediction confidence score (instead of 0)
+            - ``iou``: The IoU with the prediction (instead of 0, ObjectDetection only)
+
+        Returns
+        -------
+        Dict[int, Status]
+            A dictionary with ground truth IDs as keys and Status objects as values.
+            Each Status contains:
+                - ``state``: Error object (MissedError, ClassificationError, etc.)
+                  or Confusion enum
+                - ``gt_label``: Ground truth class label
+                - ``pred_label``: Predicted class label (None for MIS, populated for
+                  CLS/LOC/CLL)
+                - ``score``: Prediction confidence (0 for MIS/TP, populated for
+                  CLS/LOC/CLL)
+                - ``iou``: IoU overlap (0 for MIS, populated for TP/CLS/LOC/CLL)
+
+        Notes
+        -----
+        Performance: O(num_gts × num_preds) in worst case due to prediction error lookup.
+        Use this method when you need to understand why a ground truth was not correctly
+        detected (misclassification vs. localization issues).
+
+        Examples
+        --------
+        >>> statuses = evaluation.get_gt_status_v2()
+        >>> for gt_id, status in statuses.items():
+        ...     if status.code == "CLS":
+        ...         print(f"GT {gt_id}: Misclassified as class {status.pred_label}")
+        ...     elif status.code == "LOC":
+        ...         print(f"GT {gt_id}: Poor localization (IoU={status.iou:.2f})")
+        ...     elif status.code == "MIS":
+        ...         print(f"GT {gt_id}: Completely missed")
+
+        See Also
+        --------
+        get_gt_status : Original method that returns FN for all non-TP/non-MIS cases
+        get_pred_status_v2 : Enhanced prediction status with consistent behavior
+        """
+        statuses: Dict[Any, Status] = dict()
+        for idx, confusion in enumerate(self.confusions.get_gt_confusions()):
+            gt_id = self._get_gt_id(idx)
+            gt_label = self.gt_labels[idx].item()
+            pred_label = None
+            iou = None
+            score = 0
+
+            # First check if there's a MissedError (GT with no prediction matches)
+            error = self.errors.check_gt_error(idx)
+
+            # If no MissedError but GT is FN, search for the prediction error
+            if error is None and confusion is Confusion.FALSE_NEGATIVE:
+                for pred_idx in range(self.num_preds):
+                    pred_error = self.errors.check_prediction_error(pred_idx)
+                    if (
+                        pred_error is not None
+                        and hasattr(pred_error, "gt_idx")
+                        and pred_error.gt_idx == idx
+                    ):
+                        error = pred_error
+                        pred_label = pred_error.pred_label
+                        score = self.pred_scores[pred_idx].item()
+                        if isinstance(self, ObjectDetectionEvaluation):
+                            iou = self.ious[pred_idx, idx].item()
+                        break
+
+            # Fall back to confusion if still no error found
+            if error is None:
+                error = confusion
+
+            statuses[gt_id] = Status(
+                state=error,
+                gt_label=gt_label,
+                pred_label=pred_label,
+                score=score,
+                iou=iou or 0,
+            )
+
+        return statuses
+
     def get_status(self) -> Dict[Any, List[Status]]:
         """Returns the statuses for the predictions and ground truths.
 
@@ -517,9 +618,9 @@ class ObjectDetectionEvaluation(Evaluation):
             ):
                 col_including_unused = self.ious[:, idx_of_best_gt_match].clone()
                 col_including_unused[self.unused_pred_idxs] = float("-Inf")
-                col_including_unused[
-                    self.pred_labels != label_of_best_gt_match
-                ] = float("-Inf")
+                col_including_unused[self.pred_labels != label_of_best_gt_match] = (
+                    float("-Inf")
+                )
                 idx_of_best_pred_match = col_including_unused.argmax()
                 best_pred_label = self.pred_labels[idx_of_best_pred_match]
                 best_pred_bbox = self.pred_bboxes[idx_of_best_pred_match]
