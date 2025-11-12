@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["riptide"]
+packages.find = {where = ["."], include = ["riptide*"]}
 
 # This Torch install pattern comes from
 # https://docs.astral.sh/uv/guides/integration/pytorch/#configuring-accelerators-with-optional-dependencies
